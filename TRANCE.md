@@ -851,18 +851,30 @@ Do **not** set `xpinstall.signatures.required: false`. AMO builds are signed; ke
 ```bash
 cd /Users/ryan/Downloads/Code/Trance-dev
 
-# Pin the toolchain
-nvm install && nvm use            # reads .nvmrc → Node 22
+# Native deps (macOS)
+brew install python@3.11 gnu-tar
+nvm install                       # reads .nvmrc → Node 22
 rustup toolchain install 1.94.1   # .rust-toolchain
-# Python 3.11 required — install via pyenv/mise; 3.14 is NOT supported by mach
 
+source scripts/trance-env.sh      # pins python/node/rust for THIS shell
 npm install
 npm run init                      # download + import + bootstrap  (LONG: 30–90 min)
 npm run build                     # full build (LONG: 1–4 h on M-series, first time)
 npm start                         # launch
 ```
 
+**`source scripts/trance-env.sh` before every build session.** Two traps it exists to cover:
+
+- macOS `python3` must be **3.11**. mach does not support 3.14, and Homebrew's `python@3.11`
+  is not linked as `python3` — the script prepends its `libexec/bin`.
+- rustup only auto-reads `rust-toolchain` / `rust-toolchain.toml`. Zen's pin is
+  `.rust-toolchain` (dotted), which rustup **ignores**, so `rustc` silently stays on whatever
+  is default. The script reads the file and exports `RUSTUP_TOOLCHAIN`.
+- `gtar` (GNU tar) is required — surfer cannot unpack the Firefox tarball with macOS bsdtar,
+  and the failure only appears several minutes into `npm run download`.
+
 Expect `engine/` to reach ~40 GB with an objdir. Keep 60 GB free.
+Note the repo's own `.git` is ~3 GB once Zen's full history is fetched.
 
 ### 10.2 Day-to-day loop
 
