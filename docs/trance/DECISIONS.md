@@ -79,3 +79,33 @@ installed by default, and the first-run panel explains that Trance's built-ins r
 
 **Consequences:** Users can still install Zen mods and thereby recreate the exact conflicts
 Trance exists to solve. Acceptable — it is their browser. Document the risk, do not block it.
+
+---
+
+## ADR-005 — Host on the existing public fork `xslvrrr/Trance`
+
+**Date:** 2026-08-24 · **Status:** accepted
+
+**Context:** The original intent was a private repo. Two things made that expensive:
+
+- GitHub cannot convert a fork to private, and `xslvrrr/Trance` was already a public fork of
+  `zen-browser/desktop` — the source this working copy came from.
+- Pushing Zen's full 6,951-commit history (5.6 GB) to a *fresh* repo over HTTPS fails: GitHub
+  returns HTTP 500 on packs above roughly a thousand commits, so it needs ~30 sequential chunked
+  pushes. SSH would avoid this, but there is no key on the machine and the `gh` token lacks
+  `admin:public_key`.
+
+A fork already shares GitHub's object store with its parent, so pushing there uploads only the
+new commits.
+
+**Decision:** `origin` = `https://github.com/xslvrrr/Trance.git`, default branch `main`.
+Accept public visibility during pre-branding development.
+
+**Consequences:**
+- Pushes are effectively instant for as long as Trance's own diff stays small.
+- The repo is public while it still carries Zen branding. Acceptable for now, but **Phase 1
+  branding is on the critical path** for anything resembling a release or promotion — see §7.4.
+- Being a GitHub fork, the PR UI defaults its base to `zen-browser/desktop`. Check the base
+  branch on every PR.
+- `xslvrrr/trance-browser` (private, ~1.5k commits of partial history) is now an unused
+  leftover. Delete it when convenient — it holds nothing unique.

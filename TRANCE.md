@@ -95,12 +95,20 @@ It is deliberately not a "theme pack". It is a browser.
 | Zen release version | `1.21.15b` (latest release as of 2026-08-19) |
 | Zen twilight version | `1.22t` |
 | Firefox base | `154.0` |
-| Upstream fetch depth | `--depth=200` (deepen with `git fetch upstream --deepen=500` if needed) |
-| `origin` remote | **Not yet configured** — see Phase 0 tasks |
+| History | Full — 6,951 commits, `.git` ≈ 5.6 GB |
+| `origin` remote | `https://github.com/xslvrrr/Trance.git` — **public**, default branch `main` |
 
 > ⚠️ The local clone had no `.git`. It was a plain source drop. Git history was reconstructed by
-> fetching `upstream/dev` and pointing `main` at the matching commit. This is correct and verified,
-> but note that **`origin` does not exist yet** — nothing is pushed anywhere.
+> fetching `upstream/dev` and pointing `main` at the matching commit — verified byte-identical.
+>
+> ⚠️ `origin` is a **GitHub fork** of `zen-browser/desktop` (see ADR-005). Two consequences:
+> the PR UI defaults its base branch to Zen's repo — always check it; and the repo is public
+> while it still carries Zen branding, so **Phase 1 is on the critical path** before any release
+> or promotion (§7.4).
+>
+> Pushing to a *non-fork* repo is painful: GitHub HTTPS returns HTTP 500 on packs above roughly
+> a thousand commits, so a fresh remote needs ~30 chunked pushes. The fork shares GitHub's object
+> store, so pushes are instant.
 
 ### 2.2 Toolchain — what this machine has vs what Zen pins
 
@@ -1025,12 +1033,18 @@ acceptance criteria pass.
 
 **Deliverables**
 - [x] Git repository initialised, `main` at `upstream/dev` HEAD `ed0a6fd`, verified clean tree
-- [x] `upstream` remote configured
+- [x] `upstream` remote configured; full history fetched (6,951 commits)
 - [x] `TRANCE.md`, `CLAUDE.md`, `docs/trance/` scaffolding
-- [ ] `origin` remote created and pushed (needs a decision: GitHub org/repo name, public/private)
-- [ ] Toolchain pinned locally (Node 22, Python 3.11, Rust 1.94.1)
-- [ ] `npm install && npm run init && npm run build` → a launching stock-Zen build
-- [ ] `docs/trance/UPSTREAM-TOUCHPOINTS.md`, `DECISIONS.md`, `CREDITS.md`, `THIRD-PARTY.md` created
+- [x] `docs/trance/UPSTREAM-TOUCHPOINTS.md`, `DECISIONS.md`, `CREDITS.md`, `THIRD-PARTY.md` created
+- [x] `origin` = `xslvrrr/Trance`, `main` pushed, default branch set (ADR-005)
+- [x] Toolchain pinned — `scripts/trance-env.sh` (Python 3.11.16, Node 22.23.2, Rust 1.94.1, gnu-tar)
+- [x] `npm install`
+- [x] `npm run download` — Firefox 154 source, 7.3 GB in `engine/`
+- [x] `npm run import` — 251 patches applied cleanly
+- [x] `npm run bootstrap` — mach reports "ready to build"; pulled MacOSX26.5.sdk
+- [ ] `npm run build` → a launching stock-Zen build
+- [ ] `npm start` verified
+- [ ] Delete the leftover private `xslvrrr/trance-browser` repo
 
 **Acceptance:** `npm start` launches an unmodified Zen build from this tree.
 
