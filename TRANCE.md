@@ -1029,7 +1029,7 @@ acceptance criteria pass.
 
 ---
 
-### Phase 0 — Fork initialisation ⏳ *in progress*
+### Phase 0 — Fork initialisation ✅ *complete (2026-08-24)*
 
 **Deliverables**
 - [x] Git repository initialised, `main` at `upstream/dev` HEAD `ed0a6fd`, verified clean tree
@@ -1042,11 +1042,30 @@ acceptance criteria pass.
 - [x] `npm run download` — Firefox 154 source, 7.3 GB in `engine/`
 - [x] `npm run import` — 251 patches applied cleanly
 - [x] `npm run bootstrap` — mach reports "ready to build"; pulled MacOSX26.5.sdk
-- [ ] `npm run build` → a launching stock-Zen build
-- [ ] `npm start` verified
+- [x] `npm run build` — green in 79 min 50 s, warnings only, produced `dist/Nightly.app`
+- [x] `npm start` verified — parent + content + GPU processes launch, `Mozilla Zen 1.0.0`
 - [ ] Delete the leftover private `xslvrrr/trance-browser` repo
 
-**Acceptance:** `npm start` launches an unmodified Zen build from this tree.
+**Acceptance:** ✅ `npm start` launches an unmodified Zen build from this tree.
+
+**Notes from the first build**
+
+- Wall clock: ~80 min on M-series for a full build. `engine/` ≈ 7.3 GB, objdir ≈ 13.1 GB,
+  `~/.mozbuild` ≈ 3.2 GB, `.git` ≈ 5.6 GB. Budget ~30 GB for the whole checkout.
+- mach detects an AI agent and **suppresses progress output**, printing only warnings and errors.
+  Objdir size and `find … -name '*.o' | wc -l` are the progress signals.
+- Never pipe a long build through `tail`/`tr` — the pipeline buffers everything to the end, so a
+  killed wrapper loses the entire log. Redirect to a file, and launch via `nohup` so the build
+  survives if the wrapper dies:
+  ```bash
+  source scripts/trance-env.sh
+  nohup npm run build > /tmp/trance-build.log 2>&1 &
+  ```
+- The dev build runs from `~/Library/Application Support/zen/Profiles/*.Default (unofficial)`,
+  which is **separate** from an installed Zen's `(release)` / `(twilight)` profiles. Phase 1's
+  `appId` change moves it out of the `zen/` directory entirely.
+- Expect `main/search-config-v2 Invalid content signature` in the console on first run — Zen's
+  service dumps are signed for the official build. Harmless for local development.
 
 ---
 
@@ -1365,4 +1384,5 @@ Decide these with the user; record answers in `docs/trance/DECISIONS.md`.
 
 ---
 
-*Last updated: 2026-08-24 — Phase 0, fork initialised at `ed0a6fd`.*
+*Last updated: 2026-08-24 — Phase 0 complete. Fork at `ed0a6fd`, build green, browser launches.
+Next: Phase 1 (Trance identity).*
