@@ -1,0 +1,115 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the chrome furniture — icons, menus, panels, the new-tab button and
+# the address bar.
+#
+# Merges Better New Tab Button (2), Context Menu Icons (4), Hide Extension Name
+# (8), New Icons (11), Nova UI (12), Zen Context Menu (20) and Zen Custom URL
+# Bar (21). Between them those seven ship four icon sets and roughly fifty
+# preferences, and two of them (4 and 20) actively undo each other on the same
+# selectors. Here there is one icon set with two packs, one owner per element,
+# and the six prefs below (TRANCE.md §3.8, §8.1).
+#
+# Note there is no float pref type: ffprefs quotes any value containing a `.`,
+# which would make it a string pref. Sizes are integer pixels and percentages.
+#
+# Refs: TRANCE.md §3.1, §3.8, §8.1, §13 Phase 5; docs/trance/mods/{
+# context-menu-icons,zen-context-menu,new-icons,nova-ui,better-new-tab-button,
+# hide-extension-name,zen-custom-urlbar}.md
+
+# === Mark: Master switch ===
+
+- name: trance.chrome.enabled
+  value: true
+
+# === Mark: Icons ===
+
+# One icon set, shipped as real files under
+# chrome://browser/content/trance-icons/<pack>/ — not inlined as data URIs,
+# which is how four mods managed to parse the same padlock four times and cache
+# it zero times (TRANCE.md §3.8).
+- name: trance.chrome.icons.enabled
+  value: true
+
+# fluent — Fluent UI, the default
+# zen    — a set drawn to match Zen's own line weight
+#
+# Exactly one pack's stylesheet is loaded at a time. Switching this unloads one
+# file and loads the other, so the pack you are not using costs nothing.
+#
+# The packs are not identical: ZenUI has 31 glyphs Fluent does not and Fluent
+# has 22 ZenUI does not. Where a pack has no glyph for an element, that element
+# keeps the browser's own icon rather than borrowing from the other pack — two
+# drawing styles in one menu is worse than one missing custom icon.
+- name: trance.chrome.icons.pack
+  value: "fluent"
+
+# Pixels. Mirrored into --trance-menu-icon-size.
+- name: trance.chrome.icons.size
+  value: 16
+
+# macOS draws page and tab context menus itself
+# (widget.macos.native-context-menus, which defaults to true), and no stylesheet
+# can put an icon into an AppKit menu. Turning that off gets the icons and gives
+# up the platform menu — its accessibility behaviour, its feel, its scrolling.
+#
+# Trance neither forces that trade nor hides it. Off by default; when on,
+# TranceChrome claims the platform pref and restores the user's value on
+# disable, the same way TranceSurfaces treats zen.theme.acrylic-elements
+# (ADR-011, ADR-020). Icons reach every menu the browser draws itself either
+# way: panels, the app menu, Zen's folder and space menus, the bookmarks menu.
+- name: trance.chrome.icons.macos-emulated-menus
+  value: false
+
+# === Mark: Menus and panels ===
+
+# Nova UI (12), reduced to its stated purpose. Applies Trance's existing
+# spacing, radius, elevation and border tokens to menus, panels and subviews —
+# the elements Phase 3 deliberately left alone so that Phase 5 could own them
+# without two phases styling one thing (docs/trance/mods/nebula.md §2).
+#
+# One pref for all of it on purpose: it is one decision applied consistently,
+# and six switches would let a user rebuild the inconsistency by hand.
+- name: trance.chrome.panels.enabled
+  value: true
+
+# The one behaviour kept out of Zen Context Menu's (20) thirty-five: menus
+# follow the space's colour like every other Trance surface. Tint only — no
+# fourth blur pass (TRANCE.md §3.3).
+- name: trance.chrome.menus.tint
+  value: true
+
+# === Mark: New tab button ===
+
+# Better New Tab Button (2) B1: no label, centred plus. The collapsed rail
+# already draws it this way, so today the expanded sidebar is the odd one out.
+#
+# Its B2 (rotate on press) has no pref of its own. It is motion, motion is
+# owned by trance.motion.level, and at level 0 the duration token is 0ms so the
+# button simply does not turn. Its B3 (per-component radius sliders) is dropped:
+# Trance has one radius scale and the entire anti-conflict design rests on there
+# being one owner per value (TRANCE.md §6.2).
+- name: trance.chrome.newtab.compact
+  value: true
+
+# === Mark: Address bar ===
+
+# Hide Extension Name (8), in full. An add-on's name otherwise takes a third of
+# the address bar whenever one of its pages is open.
+- name: trance.chrome.urlbar.hide-extension-name
+  value: true
+
+# Zen Custom URL Bar (21) B1: the page recedes while the address bar is open, so
+# the bar reads as the modal layer it is. This is `filter`, not
+# `backdrop-filter` — it does not touch the blur budget, and it only runs while
+# the bar is open.
+- name: trance.chrome.urlbar.focus-dim
+  value: true
+
+# Percentage dimmed. Mirrored into --trance-urlbar-dim as a brightness
+# multiplier, so 30 becomes brightness(0.7). Clamped to 90 so the page never
+# disappears entirely.
+- name: trance.chrome.urlbar.focus-dim.strength
+  value: 30

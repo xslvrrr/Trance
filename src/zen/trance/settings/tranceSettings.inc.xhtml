@@ -1,0 +1,482 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: about:preferences#trance
+#
+# One page, grouped by the roadmap phases: Appearance · Sidebar & Tabs · Chrome ·
+# Motion & Feedback · Library · Advanced. Every `trance.*` pref appears here. If
+# a pref is not on this page, it should not exist (TRANCE.md §6.6).
+#
+# Labels are literal text rather than `data-l10n-id`. Zen's own preference
+# strings live in its downloaded language packs, not in this tree, so there is
+# no Trance .ftl to add ids to yet. Localisation is a Phase 12 concern; shipping
+# untranslated-but-present beats shipping an empty pane.
+#
+# Refs: TRANCE.md §6.6, §13 Phase 2, §13 Phase 3
+
+<script type="text/javascript" src="chrome://browser/content/preferences/trance-settings.js"/>
+<script type="text/javascript" src="chrome://browser/content/preferences/trance-mod-guard.js"/>
+<link rel="stylesheet" href="chrome://browser/content/trance-styles/trance-settings.css"/>
+
+<html:template id="template-paneTrance">
+
+<hbox id="tranceGeneralCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Trance</html:h1>
+</hbox>
+
+<groupbox id="tranceGeneralGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Trance features</html:h2></label>
+  <description class="description-deemphasized">
+    Turning Trance off leaves stock Zen behaviour: no Trance stylesheet is loaded,
+    no observer is registered and no timer is armed. It takes effect immediately —
+    no restart.
+  </description>
+
+  <checkbox id="tranceEnabled"
+            label="Enable Trance"
+            preference="trance.enabled"/>
+</groupbox>
+
+<hbox id="tranceAppearanceCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Appearance</html:h1>
+</hbox>
+
+<groupbox id="tranceSurfacesGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Surfaces</html:h2></label>
+  <description class="description-deemphasized">
+    Frosting works by letting the chrome get out of the way: Trance lowers the
+    opacity of the browser's own background so the window's native translucency
+    shows through, then blurs whatever the browser itself painted behind it.
+    Blur is expensive — each blurred region costs a full-screen filter pass every
+    frame — so Trance allows at most three and switches them off when the window
+    is not visible.
+  </description>
+
+  <checkbox id="tranceSurfaceEnabled"
+            label="Frosted surfaces"
+            preference="trance.surface.enabled"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceSurfacePresetLabel" control="tranceSurfacePreset">Style</label>
+      <menulist id="tranceSurfacePreset" preference="trance.surface.preset">
+        <menupopup>
+          <menuitem value="nebula" label="Nebula — frosted glass"/>
+          <menuitem value="compact" label="Compact — tighter overlays"/>
+          <menuitem value="flat" label="Flat — translucent, no blur"/>
+          <menuitem value="custom" label="Custom"/>
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceSurfaceBlurLabel" control="tranceSurfaceBlur">Blur radius</label>
+      <html:input id="tranceSurfaceBlur"
+                  type="range"
+                  min="0" max="60" step="1"
+                  preference="trance.surface.blur.radius"/>
+      <label id="tranceSurfaceBlurValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceSurfaceOpacityLabel" control="tranceSurfaceOpacity">Chrome opacity</label>
+      <html:input id="tranceSurfaceOpacity"
+                  type="range"
+                  min="0" max="100" step="1"
+                  preference="trance.surface.opacity"/>
+      <label id="tranceSurfaceOpacityValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceSurfaceSaturationLabel" control="tranceSurfaceSaturation">Surface saturation</label>
+      <html:input id="tranceSurfaceSaturation"
+                  type="range"
+                  min="0" max="300" step="5"
+                  preference="trance.surface.saturation"/>
+      <label id="tranceSurfaceSaturationValue" class="trance-range-value"/>
+    </hbox>
+
+    <checkbox id="tranceSurfaceSidebar"
+              label="Frost the sidebar, its edges and the space around the page"
+              preference="trance.surface.region.sidebar"/>
+    <checkbox id="tranceSurfaceToolbar"
+              label="Frost the toolbar"
+              preference="trance.surface.region.toolbar"/>
+    <checkbox id="tranceSurfaceOverlay"
+              label="Frost the expanded address bar"
+              preference="trance.surface.region.overlay"/>
+    <checkbox id="tranceSurfaceSuspend"
+              label="Drop blur in unfocused and hidden windows (recommended)"
+              preference="trance.surface.suspend-when-unfocused"/>
+  </vbox>
+</groupbox>
+
+<groupbox id="tranceContentSurfaceGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Page background</html:h2></label>
+  <description class="description-deemphasized">
+    Frosts the pane a page is drawn onto, so the workspace gradient shows behind
+    it. Separate from the rest because it is the only setting here that reaches
+    past the browser's own chrome. Trance never restyles a page, so a site that
+    paints its own background still covers this — what it changes is new tabs,
+    <html:code>about:</html:code> pages, rounded corners, and any site the Zen
+    Internet add-on has already made transparent.
+  </description>
+
+  <checkbox id="tranceSurfaceContent"
+            label="Frost the page background"
+            preference="trance.surface.region.content"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceContentOpacityLabel" control="tranceContentOpacity">Page backdrop opacity</label>
+      <html:input id="tranceContentOpacity"
+                  type="range"
+                  min="0" max="100" step="1"
+                  preference="trance.surface.content.opacity"/>
+      <label id="tranceContentOpacityValue" class="trance-range-value"/>
+    </hbox>
+  </vbox>
+</groupbox>
+
+<hbox id="tranceTabsCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Sidebar &amp; tabs</html:h1>
+</hbox>
+
+<groupbox id="tranceTabStripGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Tab strip</html:h2></label>
+  <description class="description-deemphasized">
+    One owner for pinned tabs, folders, the collapsed sidebar and the unloaded-tab
+    state. Trance holds a single subscription for the whole tab strip, where the
+    mods it replaces held one each.
+  </description>
+
+  <checkbox id="tranceTabStripEnabled"
+            label="Trance tab strip"
+            preference="trance.tabstrip.enabled"/>
+
+  <vbox class="indent">
+    <checkbox id="tranceTabStripConnectors"
+              label="Draw folder tree lines"
+              preference="trance.tabstrip.connectors"/>
+    <checkbox id="tranceTabStripFolderColors"
+              label="Colour-code folders (adds “Folder colour” to a folder's context menu)"
+              preference="trance.tabstrip.folders.colors"/>
+    <checkbox id="tranceTabStripFolderArc"
+              label="Section-style folder headers"
+              preference="trance.tabstrip.folders.arc-style"/>
+    <checkbox id="tranceTabStripPinsSticky"
+              label="Keep pinned tabs visible while scrolling"
+              preference="trance.tabstrip.pins.sticky"/>
+    <checkbox id="tranceTabStripLazyPins"
+              label="Load pinned tabs only when you use them"
+              preference="browser.sessionstore.restore_pinned_tabs_on_demand"/>
+  </vbox>
+</groupbox>
+
+<groupbox id="tranceUnloadedGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Unloaded tabs</html:h2></label>
+  <description class="description-deemphasized">
+    A tab that has not been loaded — or that has been discarded to save memory —
+    is dimmed and drained of colour, so it is distinguishable at a glance even in
+    the collapsed sidebar where no label is visible.
+  </description>
+
+  <checkbox id="tranceUnloadedEnabled"
+            label="Dim unloaded tabs"
+            preference="trance.tabstrip.unloaded.enabled"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceUnloadedOpacityLabel" control="tranceUnloadedOpacity">Opacity</label>
+      <html:input id="tranceUnloadedOpacity"
+                  type="range"
+                  min="10" max="100" step="1"
+                  preference="trance.tabstrip.unloaded.opacity"/>
+      <label id="tranceUnloadedOpacityValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceUnloadedSaturationLabel" control="tranceUnloadedSaturation">Colour</label>
+      <html:input id="tranceUnloadedSaturation"
+                  type="range"
+                  min="0" max="100" step="5"
+                  preference="trance.tabstrip.unloaded.saturation"/>
+      <label id="tranceUnloadedSaturationValue" class="trance-range-value"/>
+    </hbox>
+  </vbox>
+</groupbox>
+
+<groupbox id="tranceRailGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Collapsed sidebar</html:h2></label>
+  <description class="description-deemphasized">
+    Sizing for the icon-only rail. These apply only while the sidebar is
+    collapsed; the expanded sidebar is untouched. The two spacing sliders add to
+    the browser's own rail padding rather than replacing it, so zero leaves the
+    stock layout — including the clearance for the macOS window buttons —
+    exactly as it was.
+  </description>
+
+  <checkbox id="tranceRailEnabled"
+            label="Customise the collapsed sidebar"
+            preference="trance.tabstrip.rail.enabled"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceRailWidthLabel" control="tranceRailWidth">Sidebar width</label>
+      <html:input id="tranceRailWidth"
+                  type="range"
+                  min="36" max="96" step="1"
+                  preference="trance.tabstrip.rail.width"/>
+      <label id="tranceRailWidthValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceRailTabSizeLabel" control="tranceRailTabSize">Tab size</label>
+      <html:input id="tranceRailTabSize"
+                  type="range"
+                  min="24" max="72" step="1"
+                  preference="trance.tabstrip.rail.tab-size"/>
+      <label id="tranceRailTabSizeValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceRailIconSizeLabel" control="tranceRailIconSize">Favicon size</label>
+      <html:input id="tranceRailIconSize"
+                  type="range"
+                  min="12" max="32" step="1"
+                  preference="trance.tabstrip.rail.icon-size"/>
+      <label id="tranceRailIconSizeValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceRailMarginTopLabel" control="tranceRailMarginTop">Extra space above</label>
+      <html:input id="tranceRailMarginTop"
+                  type="range"
+                  min="0" max="80" step="1"
+                  preference="trance.tabstrip.rail.margin-top"/>
+      <label id="tranceRailMarginTopValue" class="trance-range-value"/>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceRailMarginBottomLabel" control="tranceRailMarginBottom">Extra space below</label>
+      <html:input id="tranceRailMarginBottom"
+                  type="range"
+                  min="0" max="80" step="1"
+                  preference="trance.tabstrip.rail.margin-bottom"/>
+      <label id="tranceRailMarginBottomValue" class="trance-range-value"/>
+    </hbox>
+
+    <checkbox id="tranceRailStackTopButtons"
+              label="Stack the sidebar's top buttons"
+              preference="trance.tabstrip.rail.stack-top-buttons"/>
+  </vbox>
+</groupbox>
+
+<hbox id="tranceChromeCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Chrome</html:h1>
+</hbox>
+
+<groupbox id="tranceIconsGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Icons</html:h2></label>
+  <description class="description-deemphasized">
+    One icon set for the whole browser, shipped as real files rather than
+    inlined into stylesheets. Exactly one pack is loaded at a time, so the one
+    you are not using costs nothing.
+  </description>
+
+  <checkbox id="tranceChromeIcons"
+            label="Use the Trance icon set"
+            preference="trance.chrome.icons.enabled"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceIconPackLabel" control="tranceIconPack">Icon set</label>
+      <menulist id="tranceIconPack" preference="trance.chrome.icons.pack">
+        <menupopup>
+          <menuitem value="fluent" label="Fluent"/>
+          <menuitem value="zen" label="Zen"/>
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <hbox align="center">
+      <label id="tranceIconSizeLabel" control="tranceIconSize">Icon size</label>
+      <html:input id="tranceIconSize"
+                  type="range"
+                  min="12" max="24" step="1"
+                  preference="trance.chrome.icons.size"/>
+      <label id="tranceIconSizeValue" class="trance-range-value"/>
+    </hbox>
+
+    <checkbox id="tranceIconsEmulatedMenus"
+              label="Also put icons in page and tab context menus (replaces the macOS menu)"
+              preference="trance.chrome.icons.macos-emulated-menus"/>
+    <description class="description-deemphasized indent">
+      macOS draws page and tab context menus itself, and nothing can add an icon
+      to a system-drawn menu. Turning this on replaces them with menus the
+      browser draws, which can carry icons but gives up the platform menu's feel
+      and accessibility behaviour. Every menu the browser already draws itself —
+      panels, the app menu, folder and space menus — gets icons either way.
+    </description>
+  </vbox>
+</groupbox>
+
+<groupbox id="tranceChromePanelsGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Menus, panels and the address bar</html:h2></label>
+  <description class="description-deemphasized">
+    The spacing, corner and edge treatment Trance uses everywhere else, applied
+    to menus and panels — plus two small fixes to things that get in the way
+    daily.
+  </description>
+
+  <checkbox id="tranceChromePanels"
+            label="Apply Trance's spacing and edges to menus and panels"
+            preference="trance.chrome.panels.enabled"/>
+  <checkbox id="tranceChromeMenus"
+            label="Tint menus with the space's colour"
+            preference="trance.chrome.menus.tint"/>
+  <checkbox id="tranceChromeNewTab"
+            label="Show the new-tab button as a plus, without its label"
+            preference="trance.chrome.newtab.compact"/>
+  <checkbox id="tranceChromeHideExtName"
+            label="Hide add-on names in the address bar"
+            preference="trance.chrome.urlbar.hide-extension-name"/>
+  <checkbox id="tranceChromeUrlbarDim"
+            label="Dim the page while the address bar is open"
+            preference="trance.chrome.urlbar.focus-dim"/>
+
+  <vbox class="indent">
+    <hbox align="center">
+      <label id="tranceUrlbarDimLabel" control="tranceUrlbarDim">Dim strength</label>
+      <html:input id="tranceUrlbarDim"
+                  type="range"
+                  min="0" max="90" step="5"
+                  preference="trance.chrome.urlbar.focus-dim.strength"/>
+      <label id="tranceUrlbarDimValue" class="trance-range-value"/>
+    </hbox>
+  </vbox>
+</groupbox>
+
+<hbox id="tranceMotionCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Motion &amp; feedback</html:h1>
+</hbox>
+
+<groupbox id="tranceMotionGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Motion</html:h2></label>
+  <description class="description-deemphasized">
+    If your system asks for reduced motion, Trance honours it — this setting can
+    only lower the level, never raise it above what the system requests.
+  </description>
+
+  <hbox align="center">
+    <label id="tranceMotionLevelLabel" control="tranceMotionLevel">Animation</label>
+    <menulist id="tranceMotionLevel" preference="trance.motion.level">
+      <menupopup>
+        <menuitem value="2" label="Full"/>
+        <menuitem value="1" label="Reduced"/>
+        <menuitem value="0" label="None"/>
+      </menupopup>
+    </menulist>
+  </hbox>
+</groupbox>
+
+<groupbox id="tranceFeedbackGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Feedback</html:h2></label>
+  <description class="description-deemphasized">
+    The loading bar shows how far a page has actually loaded, rather than
+    animating while it waits — so it runs only while something is loading, and
+    stops the moment it finishes.
+  </description>
+
+  <checkbox id="tranceFeedbackEnabled"
+            label="Trance feedback"
+            preference="trance.feedback.enabled"/>
+
+  <vbox class="indent">
+    <checkbox id="tranceFeedbackLoading"
+              label="Show a loading bar while pages load"
+              preference="trance.feedback.loading.enabled"/>
+
+    <vbox class="indent">
+      <hbox align="center">
+        <label id="tranceLoadingPositionLabel" control="tranceLoadingPosition">Position</label>
+        <menulist id="tranceLoadingPosition" preference="trance.feedback.loading.position">
+          <menupopup>
+            <menuitem value="top" label="Top of the page"/>
+            <menuitem value="bottom" label="Bottom of the page"/>
+          </menupopup>
+        </menulist>
+      </hbox>
+
+      <hbox align="center">
+        <label id="tranceLoadingThicknessLabel" control="tranceLoadingThickness">Thickness</label>
+        <html:input id="tranceLoadingThickness"
+                    type="range"
+                    min="1" max="12" step="1"
+                    preference="trance.feedback.loading.thickness"/>
+        <label id="tranceLoadingThicknessValue" class="trance-range-value"/>
+      </hbox>
+    </vbox>
+
+    <checkbox id="tranceFeedbackBubbles"
+              label="Burst a tab into bubbles when it closes"
+              preference="trance.feedback.bubbles.enabled"/>
+
+    <vbox class="indent">
+      <hbox align="center">
+        <label id="tranceBubbleCountLabel" control="tranceBubbleCount">Bubbles per burst</label>
+        <html:input id="tranceBubbleCount"
+                    type="range"
+                    min="3" max="16" step="1"
+                    preference="trance.feedback.bubbles.count"/>
+        <label id="tranceBubbleCountValue" class="trance-range-value"/>
+      </hbox>
+    </vbox>
+
+    <checkbox id="tranceStyledStatusPanel"
+              label="Float the link-target bar away from the window corner"
+              preference="zen.theme.styled-status-panel"/>
+    <description class="description-deemphasized indent">
+      This is Zen's own setting, surfaced here rather than duplicated. Trance
+      builds nothing for it: what the Floating Status Bar mod does, Zen already
+      does, and a second owner for one element is the problem this browser
+      exists to remove.
+    </description>
+  </vbox>
+</groupbox>
+
+<hbox id="tranceAdvancedCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Advanced</html:h1>
+</hbox>
+
+<groupbox id="tranceAdvancedGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Diagnostics</html:h2></label>
+  <description class="description-deemphasized">
+    Logging is off by default and costs nothing when off. With it on, the browser
+    console reports scheduler suspend/resume, observer rebuilds and feature
+    enable/disable, and Trance keeps the counters used to check its performance
+    budgets.
+  </description>
+
+  <checkbox id="tranceDebug"
+            label="Log Trance activity to the browser console"
+            preference="trance.debug"/>
+</groupbox>
+
+<groupbox id="tranceModGuardGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
+  <label><html:h2>Mods</html:h2></label>
+  <description class="description-deemphasized">
+    Trance ships the Sine mod manager so anything outside its own feature set
+    stays reachable. Twenty-three mods are already reimplemented natively, and
+    installing those means two owners for one surface. With this on, Sine's
+    marketplace and installed list say which Trance feature owns the behaviour
+    instead of leaving you to find out from the artefacts.
+  </description>
+
+  <checkbox id="tranceModGuard"
+            label="Warn about mods that Trance already replaces"
+            preference="trance.modguard.enabled"/>
+</groupbox>
+
+</html:template>

@@ -21,3 +21,6 @@
 #include ../../../zen/boosts/jar.inc.mn
 #include ../../../zen/live-folders/jar.inc.mn
 #include ../../../zen/space-routing/jar.inc.mn
+# >>> TRANCE
+#include ../../../zen/trance/jar.inc.mn
+# <<< TRANCE

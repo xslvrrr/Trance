@@ -28,6 +28,14 @@
     "chrome://browser/content/zen-components/ZenEmojiPicker.mjs",
     "chrome://browser/content/zen-components/ZenLiveFoldersUI.mjs",
     "chrome://browser/content/zen-components/ZenDownloadAnimation.mjs",
+    // >>> TRANCE
+    // The only Trance entry point. TranceCore imports the rest of the
+    // foundation layer and every feature module itself, and only when
+    // `trance.enabled` is true — so a disabled Trance parses nothing beyond
+    // this one file. It must come last: Trance extends Zen's features and
+    // needs them constructed. See TRANCE.md §3.7, §6.
+    "chrome://browser/content/trance-components/TranceCore.mjs",
+    // <<< TRANCE
   ];
 
   for (let script of scripts) {

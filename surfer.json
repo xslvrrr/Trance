@@ -1,8 +1,8 @@
 {
-  "name": "Zen Browser",
-  "vendor": "Zen OSS Team",
-  "appId": "zen",
-  "binaryName": "zen",
+  "name": "Trance",
+  "vendor": "Trance",
+  "appId": "trance",
+  "binaryName": "trance",
   "version": {
     "product": "firefox",
     "version": "154.0",
@@ -14,15 +14,15 @@
   },
   "addons": {},
   "brands": {
-    "release": {
-      "backgroundColor": "#282A33",
-      "brandShorterName": "Zen",
-      "brandShortName": "Zen",
-      "brandFullName": "Zen Browser",
+    "trance": {
+      "backgroundColor": "#0D0F14",
+      "brandShorterName": "Trance",
+      "brandShortName": "Trance",
+      "brandFullName": "Trance",
       "release": {
-        "displayVersion": "1.21.15b",
+        "displayVersion": "0.1.0",
         "github": {
-          "repo": "zen-browser/desktop"
+          "repo": "xslvrrr/Trance"
         },
         "archives": {
           "windows": "windows.mar",
@@ -33,18 +33,6 @@
           "linux-aarch64": "linux-aarch64.mar"
         }
       }
-    },
-    "twilight": {
-      "backgroundColor": "#282A33",
-      "brandShorterName": "Zen",
-      "brandShortName": "Twilight",
-      "brandFullName": "Zen Twilight",
-      "release": {
-        "displayVersion": "1.22t",
-        "github": {
-          "repo": "zen-browser/desktop"
-        }
-      }
     }
   },
   "license": {
@@ -53,5 +41,5 @@
     ],
     "licenseType": "MPL-2.0"
   },
-  "updateHostname": "updates.zen-browser.app"
+  "updateHostname": "updates.trance.invalid"
 }

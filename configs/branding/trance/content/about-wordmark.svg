@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!-- Trance wordmark, about: dialog. Placeholder: plain type, no custom letterforms yet. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 56" width="260" height="56">
+  <text x="0" y="43"
+        font-family="SF Pro Display, -apple-system, system-ui, Segoe UI, Inter, Helvetica Neue, sans-serif"
+        font-size="46" font-weight="600" letter-spacing="-1.5" fill="#fff">Trance</text>
+</svg>

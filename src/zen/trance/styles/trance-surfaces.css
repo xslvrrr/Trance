@@ -1,0 +1,196 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the surface layer — the ONLY file permitted to contain
+ * `backdrop-filter`, enforced by the `trance/no-backdrop-filter` stylelint rule.
+ *
+ * Behaviour inspired by "Nebula" (JustADumbPrsn), "Transparent Zen" (sameerasw),
+ * "Zen Compact Transparent Mode" (rasyidrafi) and "Nova UI" (qumeqa).
+ * Implemented independently for Trance; no code copied.
+ *
+ * ── What frosting actually is ──────────────────────────────────────────────
+ *
+ * Not a translucent colour laid over the chrome. That was the first attempt and
+ * it produced a black box: a 62%-opaque near-black over an already-dark
+ * workspace gradient is just a darker gradient, and the `backdrop-filter`
+ * underneath had nothing to reveal because the tint sat on top of it.
+ *
+ * Frosting is the chrome getting *out of the way*:
+ *
+ *   1. Zen's own background layers — `#zen-browser-background` behind the whole
+ *      browser area and `#zen-toolbar-background` inside the sidebar's titlebar
+ *      — drop to `--trance-surface-alpha`. That is what lets the window's
+ *      native translucency through. Zen already ships it: on macOS
+ *      `zen.widget.macos.window-vibrancy` puts an `NSVisualEffectView` behind
+ *      the window and `#main-window` is `background: transparent`; Windows uses
+ *      Mica; Linux uses `zen.widget.linux.transparency`.
+ *   2. `backdrop-filter` then blurs whatever *Gecko* painted behind the region.
+ *      That is what makes compact mode's floating sidebar read as glass over
+ *      the page, and what softens the gradient's grain everywhere else.
+ *   3. A very small sheen (`--trance-surface-bg`, ~8% white with an accent
+ *      trace) is the only colour this layer paints.
+ *
+ * Step 1 is also why the sidebar frost now reaches the places it used to miss.
+ * `#zen-browser-background` is `position: absolute; inset: 0` on `#browser`, so
+ * it spans the sidebar, the `#zen-sidebar-splitter` hairline beside it, the
+ * gutter around the content pane, and — when the sidebar is collapsed — the
+ * full window width under the overflowing `#nav-bar`. One element, one
+ * declaration, no per-region patching.
+ *
+ * ── The blur budget ────────────────────────────────────────────────────────
+ *
+ * Three `backdrop-filter` surfaces. One per region. Never nested.
+ *
+ *   sidebar  → #navigator-toolbox
+ *   toolbar  → #zen-appcontent-navbar-wrapper   (multi-toolbar layout only —
+ *              in single-toolbar layout the nav bar lives inside the toolbox,
+ *              so blurring both would nest, which is the one case that is
+ *              strictly worse than either alone: the parent surface has to be
+ *              resolved before the child can sample it)
+ *   overlay  → #urlbar[breakout-extend]
+ *
+ * The `content` region is a fourth *region* but deliberately not a fourth blur
+ * surface: it is translucency only. A blurred content pane is the most
+ * expensive surface a browser can have — full window area, and a backdrop that
+ * changes on every scrolled frame — and the window's own translucency already
+ * supplies the frost behind it. The budget therefore stays at three (ADR-019).
+ *
+ * Blur is suppressed entirely when:
+ *   - the window is unfocused, minimised or fully occluded
+ *     (TranceSurfaces removes `trance-surface-visible`), or
+ *   - the preset is `flat`, or
+ *   - the platform asks for reduced transparency.
+ *
+ * Translucency, by contrast, applies in every one of those cases — it costs
+ * nothing, and losing it would make the chrome flash between two appearances
+ * every time the window lost focus.
+ *
+ * Adding a fifth region, or a fourth blur surface, requires removing one or an
+ * entry in DECISIONS.md (TRANCE.md §12.3 rule 1).
+ *
+ * Refs: TRANCE.md §3.3, §8.1, §12.1, §13 Phase 3; docs/trance/mods/nebula.md
+ */
+
+/* ── Translucency ───────────────────────────────────────────────────────────
+ *
+ * `opacity` on Zen's two background elements. Both are Trance-free otherwise:
+ * `.zen-browser-generic-background` puts its own `opacity` on the `::before`
+ * and `::after` that crossfade the old and new gradient, never on the element,
+ * so this composes with the crossfade instead of fighting it.
+ *
+ * These elements are already composited layers with `contain: content`, so
+ * animating nothing and setting one static opacity adds no layer and no frame
+ * work — unlike the four mods this replaces, which each stacked another
+ * blurred surface to achieve the same look.
+ */
+
+:root[trance="true"][trance-surface-sidebar="true"] {
+  & #zen-browser-background,
+  & #zen-toolbar-background {
+    opacity: var(--trance-surface-alpha);
+  }
+}
+
+/* ── Sheen ──────────────────────────────────────────────────────────────────
+ *
+ * Zen sets `background: var(--zen-navigator-toolbox-background, transparent)
+ * !important` on the toolbox and never defines that variable — it exists purely
+ * as an extension point (see the "issue #426" comment in zen-browser-ui.css).
+ * Trance fills it in rather than fighting the `!important`, which is why this
+ * whole file needs no `!important` of its own (TRANCE.md §6.2 rule 1).
+ */
+
+:root[trance="true"] {
+  &[trance-surface-sidebar="true"] #navigator-toolbox {
+    --zen-navigator-toolbox-background: var(--trance-surface-bg);
+  }
+
+  /* Multi-toolbar layout only. In single-toolbar layout this element is a thin
+   * window-drag strip a few pixels high (zen-tabs.css), not the toolbar — a
+   * sheen there is a visible band, not a surface. */
+  &[trance-surface-toolbar="true"]:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper {
+    background-color: var(--trance-surface-bg);
+  }
+
+  &[trance-surface-overlay="true"] #urlbar[breakout-extend] {
+    border-radius: var(--trance-radius-lg);
+    box-shadow: var(--trance-elev-2);
+  }
+}
+
+/* ── Content pane ───────────────────────────────────────────────────────────
+ *
+ * The page's own backdrop — "the actual tab background" — opt-in and off by
+ * default, because unlike every other region this one can put a workspace
+ * gradient behind body text.
+ *
+ * Scope, stated honestly: Trance styles chrome, never content (TRANCE.md §9.3).
+ * What this changes is the pane the page is painted *onto*, which Zen fills
+ * with an opaque `light-dark(white, rgb(32,32,32))`. A site that paints its own
+ * opaque background still covers it — nothing short of restyling content could
+ * change that, and Zen Internet already owns that job. What it does reach is
+ * every surface the page leaves alone: new tabs, `about:` pages, the rounded
+ * corners and the moment before first paint, plus any site Zen Internet has
+ * made transparent.
+ *
+ * `:not([transparent="true"])` keeps Zen Internet the single owner of the sites
+ * it has already handled. `:not([zen-pseudo-hidden="true"])` is Zen's own
+ * "hidden but rendered" flag; excluding it costs nothing and brings this
+ * selector to the same specificity as the rule in zen-browser-container.css it
+ * has to beat, which — Trance's sheets being author sheets loaded last — is
+ * enough without `!important`.
+ *
+ * No `backdrop-filter` here. See the blur budget note above.
+ */
+
+/* trance-specificity: matches the two IDs in zen-browser-container.css's own
+ * `browser[type="content"]` rule, which is the declaration this replaces. A
+ * shorter selector loses to it, and the alternative is !important. */
+:root[trance="true"][trance-surface-content="true"]
+  #tabbrowser-tabbox
+  #tabbrowser-tabpanels
+  .browserSidebarContainer
+  browser[type="content"]:not([transparent="true"]):not([zen-pseudo-hidden="true"]) {
+  background: var(--trance-content-bg);
+}
+
+/* ── Blur ───────────────────────────────────────────────────────────────────
+ *
+ * One declaration block per region, each gated on its own attribute plus the
+ * shared visibility attribute. `flat` opts out of blur entirely; that preset is
+ * translucency without a single Gaussian pass, and on macOS the window server's
+ * own vibrancy already supplies most of the effect.
+ */
+
+@media (prefers-reduced-transparency: no-preference) {
+  :root[trance="true"][trance-surface-visible="true"]:not([trance-surface="flat"]) {
+    &[trance-surface-sidebar="true"] #navigator-toolbox {
+      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+
+    /* Multi-toolbar layout only. In single-toolbar layout this element is not
+     * the one carrying the toolbar, and blurring it would nest inside the
+     * toolbox surface above. */
+    &[trance-surface-toolbar="true"]:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper {
+      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+
+    &[trance-surface-overlay="true"] #urlbar[breakout-extend] {
+      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+  }
+}
+
+/* ── Edges ──────────────────────────────────────────────────────────────────
+ *
+ * A hairline and an inset top highlight are what make a translucent surface
+ * read as a physical pane rather than as a rendering mistake. Both come from
+ * tokens, so the `flat` preset gets a firmer hairline and no highlight without
+ * a second rule existing anywhere.
+ */
+
+:root[trance="true"][trance-surface-overlay="true"] #urlbar[breakout-extend] {
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+}

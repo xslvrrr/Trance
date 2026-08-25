@@ -1,0 +1,121 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the conflict banner drawn onto Sine/Cosine mod cards.
+ *
+ * Loaded by trance-mod-guard.js only once a card actually needs a banner, so
+ * a profile without Sine — or with no replaced mod in view — pays nothing.
+ *
+ * Like trance-settings.css this lives in the preferences document, which has
+ * no Trance token layer, so colours come from Firefox's in-content design
+ * tokens with a literal fallback.
+ *
+ * Refs: TRANCE.md §6.5, §6.6
+ */
+
+.trance-mod-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border-inline-start: 3px solid var(--trance-mod-warning-accent);
+  background-color: var(--trance-mod-warning-background);
+  font-size: 0.9em;
+}
+
+/* Colours are Firefox's own in-content design tokens, not literals and not
+ * Trance tokens: TranceTokens only loads into browser windows, and this sheet
+ * is only ever parsed inside about:preferences. */
+
+.trance-mod-warning[data-trance-status="native"] {
+  --trance-mod-warning-accent: var(--color-red-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-red-50) 12%,
+    transparent
+  );
+}
+
+.trance-mod-warning[data-trance-status="partial"] {
+  --trance-mod-warning-accent: var(--color-orange-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-orange-50) 12%,
+    transparent
+  );
+}
+
+.trance-mod-warning[data-trance-status="dropped"] {
+  --trance-mod-warning-accent: var(--color-gray-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-gray-50) 12%,
+    transparent
+  );
+}
+
+.trance-mod-warning[data-trance-status="planned"] {
+  --trance-mod-warning-accent: var(--color-blue-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-blue-50) 10%,
+    transparent
+  );
+}
+
+.trance-mod-warning-title {
+  font-weight: 600;
+}
+
+.trance-mod-warning-body {
+  opacity: 0.85;
+  line-height: 1.4;
+}
+
+.trance-mod-warning-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 2px;
+}
+
+.trance-mod-warning-button {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: inherit;
+}
+
+.trance-mod-warning-pref {
+  font-family: monospace;
+  font-size: 0.9em;
+  opacity: 0.7;
+  user-select: all;
+}
+
+/* Marketplace cards sit in a 192px-minimum grid inside a 400px scroller, so a
+ * full banner there would push the Install button out of view. The card gets
+ * the headline and a clamped reason; the full text is on the installed entry,
+ * which has the room for it. */
+
+.sineInstallationItem .trance-mod-warning {
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: 0.82em;
+}
+
+.sineInstallationItem .trance-mod-warning-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.sineInstallationItem .trance-mod-warning-pref {
+  display: none;
+}

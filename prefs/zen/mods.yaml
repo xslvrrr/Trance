@@ -14,11 +14,19 @@
 
 # === Mark: Site Injection ===
 
+# >>> TRANCE
+# Zen grants zen-browser.app a privileged injection surface (the mods
+# marketplace actor). Trance has no website of its own and must not hand that
+# surface to a domain it does not control. The pref cannot simply be removed:
+# ZenActorsManager reads it with getStringPref() and no fallback, and the value
+# has to parse as a match pattern. So official builds get a reserved-TLD
+# pattern that can never resolve, and dev builds keep Zen's localhost hatch.
 - name: zen.injections.match-urls
-  value: "https://zen-browser.app/*"
+  value: "https://trance.invalid/*"
   locked: true
   condition: "defined(MOZILLA_OFFICIAL)"
 
 - name: zen.injections.match-urls
   value: "http://localhost/*"
   condition: "!defined(MOZILLA_OFFICIAL)"
+# <<< TRANCE

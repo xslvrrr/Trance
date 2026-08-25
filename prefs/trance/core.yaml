@@ -1,0 +1,41 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: foundation layer prefs.
+#
+# Refs: TRANCE.md §6, §13 Phase 2
+
+# === Mark: Master switch ===
+
+# When false, TranceCore loads no stylesheet, registers no observer, starts no
+# scheduler and instantiates no feature. It keeps exactly one pref observer so
+# the switch can be flipped back without a restart. See TRANCE.md §6.5.
+- name: trance.enabled
+  value: true
+
+# === Mark: Motion ===
+
+# 0 = none (no transitions, no keyframes)
+# 1 = reduced (opacity/colour only, no transforms, shortened durations)
+# 2 = full
+#
+# `prefers-reduced-motion: reduce` clamps the effective level to 1 regardless of
+# this value; TranceMotion never raises it above what the platform asks for.
+- name: trance.motion.level
+  value: 2
+
+# === Mark: Debugging ===
+
+# Gates TranceLog output and the TranceObserverHub / TranceScheduler counters
+# used to verify the TRANCE.md §12.1 budgets.
+- name: trance.debug
+  value: false
+
+# === Mark: Mod guard ===
+
+# Annotates Sine/Cosine's marketplace and installed-mods panes with which Trance
+# feature already owns a mod's behaviour. Off means no observer, no stylesheet
+# and no DOM in about:preferences. See src/zen/trance/settings/trance-mod-guard.js.
+- name: trance.modguard.enabled
+  value: true

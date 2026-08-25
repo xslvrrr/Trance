@@ -1,0 +1,79 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: motion and feedback.
+#
+# The cluster is four mods (6, 7, 14, 16). Two of them are here; the other two
+# were closed by their investigations:
+#
+#   - Floating Status Bar (7) → verdict ZEN. Zen's own
+#     `zen.theme.styled-status-panel` already floats the status panel and is on
+#     by default on macOS. It is surfaced on the Trance settings page rather
+#     than mirrored into a `trance.*` pref, because mirroring Zen state would
+#     create the two-owners problem this project exists to remove
+#     (docs/trance/mods/floating-status-bar.md).
+#   - Render.js (14) → verdict DEFER. Each of its five behaviours duplicates an
+#     owner Trance has already assigned, and "ambient motion" cannot be
+#     specified, built or accepted. TRANCE.md §16 Q8 is answered
+#     (docs/trance/mods/render-js.md).
+#
+# Note there is no float pref type: ffprefs quotes any value containing a `.`,
+# which would make it a string pref. Sizes are integer pixels.
+#
+# Refs: TRANCE.md §3.4, §3.5, §3.6, §8.1, §13 Phase 6;
+# docs/trance/mods/{deta-loading-bar,tab-closing-bubble,floating-status-bar,
+# render-js}.md
+
+# === Mark: Master switch ===
+
+- name: trance.feedback.enabled
+  value: true
+
+# === Mark: Loading bar ===
+
+# Deta Loading Bar (6), rebuilt on real progress.
+#
+# The original pulses on a 1.2s `infinite alternate` animation because a
+# stylesheet cannot ask how far a page has loaded, and it animates `width`,
+# which means a reflow of the content pane on every frame at display rate.
+# Trance listens to nsIWebProgressListener and scales the bar with `transform`,
+# so there is no loop, no reflow, and nothing running while nothing is loading.
+- name: trance.feedback.loading.enabled
+  value: true
+
+# Pixels. Mirrored into --trance-loading-thickness. The mod's default is 6,
+# which was sized for a pulsing blob; a real progress bar reads at 3.
+- name: trance.feedback.loading.thickness
+  value: 3
+
+# top | bottom. The mod defaults to top; Zen's own status panel lives at the
+# bottom left, so bottom shares that edge.
+- name: trance.feedback.loading.position
+  value: "top"
+
+# The mod's other eleven prefs are gone. Colour follows --trance-accent, which
+# already tracks the space gradient, so the three colour prefs and the
+# gradient/solid switch have nothing left to decide. The per-frame `filter:
+# blur()` is dropped outright — it was the most expensive part of the mod and
+# the least visible. The box-shadow-as-raw-CSS-string pref is dropped because a
+# pref whose value is unvalidated CSS is a way to break the chrome from
+# about:config; the shadow comes from --trance-elev-1.
+
+# === Mark: Tab-close burst ===
+
+# Tab Closing Bubble Animation (16), clean-room.
+#
+# The one behaviour in this cluster that genuinely cannot be CSS: the bubbles
+# correspond to nothing in the DOM and must be placed from the closing tab's
+# measured bounds. Trance creates them on `TabClose` — the event Firefox already
+# fires, where the original watches the tab strip for removals — animates them
+# through TranceMotion so `will-change` lasts exactly as long as the animation,
+# and removes them on `finished` rather than after a timer.
+- name: trance.feedback.bubbles.enabled
+  value: true
+
+# Clamped to 3..16 in both the module and the token binding. Uncapped, this is
+# a way to schedule arbitrary work from about:config.
+- name: trance.feedback.bubbles.count
+  value: 8

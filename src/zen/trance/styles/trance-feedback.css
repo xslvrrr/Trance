@@ -1,0 +1,104 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: motion and feedback — the loading bar and the tab-close burst.
+ *
+ * Behaviour inspired by "Zen Deta Loading Bar" by rasyidrafi
+ * (https://github.com/rasyidrafi/zen-deta-loading-bar, MIT) and "Tab Closing
+ * Bubble Animation" by Zylaah (https://github.com/Zylaah/bubble-pop-deleting,
+ * unlicensed — clean-room by requirement, TRANCE.md §7.3).
+ *
+ * ── What is not here ──────────────────────────────────────────────────────
+ *
+ * No `@keyframes`, no `animation`, no timer, and nothing that runs when the
+ * browser is idle. The loading bar is a `transform: scaleX()` whose value is a
+ * custom property written by the progress listener; between two progress events
+ * a `transition` interpolates, and a transition is finite by construction. The
+ * burst is Web Animations, driven from TranceMotion, which scopes `will-change`
+ * to each animation's lifetime.
+ *
+ * The MIT original animates `width` on an `infinite alternate` loop, which is a
+ * reflow of the content pane on every frame at display rate, with a
+ * `filter: blur()` on top of it, over a `.browserStack` permanently promoted by
+ * `translateZ(0)`. Four of TRANCE.md §3's eight failure modes in ninety lines —
+ * and all four are consequences of not being able to ask the browser how far the
+ * page has loaded (docs/trance/mods/deta-loading-bar.md §4).
+ *
+ * Refs: TRANCE.md §3.4, §3.5, §3.6, §13 Phase 6
+ */
+
+:root[trance="true"][trance-feedback="true"] {
+  /* ── Loading bar ─────────────────────────────────────────────────────────
+   *
+   * Absolutely positioned inside `#zen-tabbox-wrapper`, which Zen already makes
+   * `position: relative`, so this adds no positioning context of its own and
+   * changes no one's layout. Out of flow, so the XUL box does not measure it.
+   */
+
+  & #trance-loading-bar {
+    position: absolute;
+    inset-inline: 0;
+    height: var(--trance-loading-thickness);
+    border-radius: var(--trance-radius-pill);
+    background: linear-gradient(
+      to right,
+      var(--trance-accent-muted),
+      var(--trance-accent)
+    );
+    box-shadow: var(--trance-elev-1);
+    pointer-events: none;
+    z-index: 1;
+
+    /* The bar is one element scaled horizontally rather than one element
+     * resized: `scaleX` composites, `width` reflows. That single choice is the
+     * difference between a bar that costs a composite per progress event and
+     * one that costs a layout pass per frame. */
+    transform: scaleX(var(--trance-loading-progress, 0));
+    transform-origin: left center;
+    opacity: 0;
+
+    transition:
+      transform var(--trance-dur-base) var(--trance-ease-standard),
+      opacity var(--trance-dur-fast) var(--trance-ease-standard);
+  }
+
+  &[trance-feedback-loading="top"] #trance-loading-bar {
+    inset-block-start: 0;
+  }
+
+  &[trance-feedback-loading="bottom"] #trance-loading-bar {
+    inset-block-end: 0;
+  }
+
+  /* `[active]` is set between STATE_START and STATE_STOP. On stop the bar is
+   * driven to 100% first and only then fades, so a load is seen to finish
+   * rather than to disappear. */
+  & #trance-loading-bar[active] {
+    opacity: 1;
+  }
+
+  /* ── Tab-close burst ─────────────────────────────────────────────────────
+   *
+   * The layer is inert and covers the sidebar; the bubbles are positioned
+   * against it from one measurement of the closing tab.
+   */
+
+  & #trance-burst-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: clip;
+    z-index: 2;
+  }
+
+  & .trance-burst-bubble {
+    position: absolute;
+    width: var(--trance-bubble-size);
+    height: var(--trance-bubble-size);
+    border-radius: var(--trance-radius-pill);
+    background-color: var(--trance-accent-muted);
+    pointer-events: none;
+  }
+}

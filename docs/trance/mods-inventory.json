@@ -1,5 +1,5 @@
 {
-  "$comment": "Machine-readable source of truth for the mods Trance reimplements. See TRANCE.md section 8. Verified 2026-08-24 against sineorg/store marketplace.json and zen-browser.github.io/theme-store/themes.json.",
+  "$comment": "Machine-readable source of truth for the mods Trance reimplements. See TRANCE.md section 8. Verified 2026-08-24 against sineorg/store marketplace.json and zen-browser.github.io/theme-store/themes.json. Phase 3 (surfaces) landed 2026-08-24; Phase 4 (sidebar-tabs) 2026-08-25; Phases 5 (chrome-furniture + icons) and 6 (motion-feedback) 2026-08-25. Two verdicts were changed by their investigations: mod 7 NATIVE->ZEN, mod 14 NATIVE->DEFER. See investigationDoc fields.",
   "generatedAt": "2026-08-24",
   "verdictLegend": {
     "NATIVE": "Clean-room reimplementation. No code copied.",
@@ -23,7 +23,10 @@
       "verdict": "ADAPT",
       "phase": 4,
       "cluster": "sidebar-tabs",
-      "notes": "Overlaps stock Zen folders/live-folders. Extend ZenFolders, do not shadow it."
+      "notes": "Near-total overlap with stock Zen folders: grouping, subfolders, icon picker and collapsed-with-active-tab are all zen-folder's. Firefox already owns tab-group colour, palette and persistence (TabGroupState). Trance adds a colour submenu on Zen's #zenFolderActions and a section-style header. MIT permits adapting; nothing needed adapting.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/advanced-tab-groups.md",
+      "implemented": "phase-4"
     },
     {
       "n": 2,
@@ -36,7 +39,10 @@
       "verdict": "NATIVE",
       "phase": 5,
       "cluster": "chrome-furniture",
-      "notes": "Not present in either marketplace index; installed out-of-band."
+      "notes": "Unlabelled centred plus, and a press rotation owned by trance.motion.level rather than by a pref of its own. Its per-component radius sliders were dropped: Trance has one radius scale and the anti-conflict design rests on one owner per value.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/better-new-tab-button.md",
+      "implemented": "phase-5"
     },
     {
       "n": 3,
@@ -62,7 +68,10 @@
       "verdict": "ADAPT",
       "phase": 5,
       "cluster": "icons",
-      "notes": "Merge with Zen Context Menu (#20) icon set. One canonical SVG directory."
+      "notes": "The icon cluster's source. MIT, so both packs are copied verbatim and the ~270-selector mapping is adapted by scripts/trance-icons.py with every !important stripped. Its item-hiding, fold-menu script and bookmark-bar extras were dropped.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/context-menu-icons.md",
+      "implemented": "phase-5"
     },
     {
       "n": 5,
@@ -74,7 +83,11 @@
       "license": "NONE",
       "verdict": "NATIVE",
       "phase": 4,
-      "cluster": "sidebar-tabs"
+      "cluster": "sidebar-tabs",
+      "notes": "Landed as the collapsed rail in TranceTabStrip. Defaults are the user's own mod.ccs.* values. Zen's rail sizing is !important on :root; Trance redeclares the consuming variables on #navigator-toolbox instead (ADR-015).",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/customize-collapsed-sidebar.md",
+      "implemented": "phase-4"
     },
     {
       "n": 6,
@@ -87,7 +100,10 @@
       "verdict": "ADAPT",
       "phase": 6,
       "cluster": "motion-feedback",
-      "notes": "Known offender: polling + infinite shimmer animation. Must move to TranceScheduler."
+      "notes": "Rebuilt on nsIWebProgressListener rather than adapted. The MIT original shows four of the eight failure modes at once: infinite animation, animating width (a layout property) at display rate, a per-frame filter: blur(), and a permanently promoted .browserStack. Fourteen prefs became three.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/deta-loading-bar.md",
+      "implemented": "phase-6"
     },
     {
       "n": 7,
@@ -97,10 +113,13 @@
       "storeId": "906c6915-5677-48ff-9bfc-096a02a72379",
       "source": "https://github.com/AmirhBeigi/zen-floating-statusbar",
       "license": "NONE",
-      "verdict": "NATIVE",
+      "verdict": "ZEN",
       "phase": 6,
       "cluster": "motion-feedback",
-      "notes": "Zen has zen.theme.styled-status-panel; check overlap before building."
+      "notes": "Verdict changed from NATIVE to ZEN by investigation: zen.theme.styled-status-panel already floats the status panel and is on by default on macOS. No Trance code; the Zen pref is surfaced on the Trance settings page.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/floating-status-bar.md",
+      "implemented": "phase-6"
     },
     {
       "n": 8,
@@ -113,7 +132,10 @@
       "verdict": "ADAPT",
       "phase": 5,
       "cluster": "chrome-furniture",
-      "notes": "Zen already has zen.theme.hide-unified-extensions-button; likely a few CSS rules."
+      "notes": "Three lines of CSS. Trance writes the same rule without the !important a userChrome sheet needs. MIT recorded anyway.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/hide-extension-name.md",
+      "implemented": "phase-5"
     },
     {
       "n": 9,
@@ -141,7 +163,10 @@
       "cluster": "surfaces",
       "nonNegotiable": true,
       "cleanRoomRequired": true,
-      "notes": "GPL-3.0 — absolutely no code copying. User requires it in full. Ships as the default surface preset."
+      "notes": "GPL-3.0 — absolutely no code copying. User requires it in full. Ships as the default surface preset.",
+      "investigated": "2026-08-24",
+      "investigationDoc": "docs/trance/mods/nebula.md",
+      "implemented": "phase-3"
     },
     {
       "n": 11,
@@ -154,7 +179,11 @@
       "license": "NONE",
       "verdict": "NATIVE",
       "phase": 5,
-      "cluster": "icons"
+      "cluster": "icons",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/new-icons.md",
+      "implemented": "phase-5",
+      "notes": "Contributes a coverage requirement — the icon set must reach the toolbar, panels and the site-information panel — and no assets. Unlicensed, so nothing was taken; the glyphs come from Context Menu Icons' MIT packs."
     },
     {
       "n": 12,
@@ -167,7 +196,10 @@
       "verdict": "NATIVE",
       "phase": 5,
       "cluster": "chrome-furniture",
-      "notes": "Also contributes to the surfaces cluster (phase 3) and icons cluster."
+      "notes": "Phase 3 landed the flat preset's geometry; Phase 5 landed the panel and menu spacing, radius, edges and scrollbars, all from tokens that already existed. Its mute-button visualiser (an infinite animation), custom font and essentials flattening were dropped.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/nova-ui.md",
+      "implemented": "phase-5"
     },
     {
       "n": 13,
@@ -190,10 +222,11 @@
       "storeId": "RenderJS",
       "source": "https://github.com/SehajveerSingh2005/render.js",
       "license": "NONE",
-      "verdict": "NATIVE",
-      "phase": 6,
+      "verdict": "DEFER",
       "cluster": "motion-feedback",
-      "notes": "Scope unclear — drives a frame loop. Needs an investigation doc before it earns a slot."
+      "notes": "Verdict changed from NATIVE to DEFER by investigation, answering TRANCE.md §16 Q8. Each of its five behaviours duplicates an owner Trance has already assigned — Zen's space animation, Phase 7's calendar, Phase 5's new-tab button, the tab strip — and 'ambient motion' cannot be specified, built or accepted.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/render-js.md"
     },
     {
       "n": 15,
@@ -206,7 +239,10 @@
       "verdict": "ADAPT",
       "phase": 4,
       "cluster": "sidebar-tabs",
-      "notes": "Patches ZenPinnedTabManager. Extend upstream instead of monkey-patching."
+      "notes": "Two of eighteen behaviours survived investigation: sticky pinned tabs (CSS) and lazy pinned tabs (browser.sessionstore.restore_pinned_tabs_on_demand, surfaced not reimplemented). Grid layout dropped per user, confirming grid-count=1 in their profile. Does not patch ZenPinnedTabManager.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/superpins.md",
+      "implemented": "phase-4"
     },
     {
       "n": 16,
@@ -218,7 +254,11 @@
       "license": "NONE",
       "verdict": "NATIVE",
       "phase": 6,
-      "cluster": "motion-feedback"
+      "cluster": "motion-feedback",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/tab-closing-bubble.md",
+      "implemented": "phase-6",
+      "notes": "The one Phase 6 behaviour that genuinely cannot be CSS. Clean-room: TabClose rather than a MutationObserver, Web Animations through TranceMotion rather than keyframes plus a timer, one getBoundingClientRect per burst rather than one per bubble."
     },
     {
       "n": 17,
@@ -232,7 +272,10 @@
       "verdict": "NATIVE",
       "phase": 3,
       "cluster": "surfaces",
-      "notes": "Same author as the Zen Internet extension. Chrome transparency only — Zen Internet owns content-area transparency."
+      "notes": "Same author as the Zen Internet extension. Chrome transparency only — Zen Internet owns content-area transparency.",
+      "investigated": "2026-08-24",
+      "investigationDoc": "docs/trance/mods/transparent-zen.md",
+      "implemented": "phase-3"
     },
     {
       "n": 18,
@@ -244,7 +287,11 @@
       "license": "NONE",
       "verdict": "NATIVE",
       "phase": 4,
-      "cluster": "sidebar-tabs"
+      "cluster": "sidebar-tabs",
+      "notes": "Sole owner of the unloaded-tab appearance, absorbing SuperPins' competing strike-through and dimming knobs. Attribute-driven; no observer.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/unloaded-tabs.md",
+      "implemented": "phase-4"
     },
     {
       "n": 19,
@@ -257,7 +304,10 @@
       "verdict": "ADAPT",
       "phase": 3,
       "cluster": "surfaces",
-      "notes": "Becomes the 'compact' surface preset, not a second blur stack."
+      "notes": "Becomes the 'compact' surface preset, not a second blur stack.",
+      "investigated": "2026-08-24",
+      "investigationDoc": "docs/trance/mods/zen-compact-transparent-mode.md",
+      "implemented": "phase-3"
     },
     {
       "n": 20,
@@ -269,7 +319,11 @@
       "license": "MIT",
       "verdict": "ADAPT",
       "phase": 5,
-      "cluster": "icons"
+      "cluster": "icons",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/zen-context-menu.md",
+      "implemented": "phase-5",
+      "notes": "Thirty-two hide-toggles dropped under §8.2; the workspace-colour menu tint kept. Its requirement that macOS native context menus be turned off became an opt-in pref that is off by default, because that trade is real (ADR-020)."
     },
     {
       "n": 21,
@@ -282,7 +336,10 @@
       "verdict": "ADAPT",
       "phase": 5,
       "cluster": "chrome-furniture",
-      "notes": "Zen has its own urlbar module at src/zen/urlbar/ and prefs/zen/zen-urlbar.yaml."
+      "notes": "Eight prefs became two. Only the page-recede effect survived: the colour and radius work belongs to TranceSurfaces' overlay region, and the page-scaling default was already off in the mod itself.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/zen-custom-urlbar.md",
+      "implemented": "phase-5"
     },
     {
       "n": 22,
@@ -295,7 +352,11 @@
       "verdict": "NATIVE",
       "phase": 4,
       "cluster": "sidebar-tabs",
-      "cleanRoomRequired": true
+      "cleanRoomRequired": true,
+      "notes": "Clean-room, no source read. Trunk and elbows in CSS alone by styling .zen-tab-group-start, an anchor Zen puts in every folder container and never styles. The original ships a .uc.js.",
+      "investigated": "2026-08-25",
+      "investigationDoc": "docs/trance/mods/zen-folder-tree-connectors.md",
+      "implemented": "phase-4"
     },
     {
       "n": 23,
@@ -313,22 +374,91 @@
     }
   ],
   "extensions": [
-    { "name": "uBlock Origin", "slug": "ublock-origin", "guid": "uBlock0@raymondhill.net", "license": "GPL-3.0" },
-    { "name": "SponsorBlock", "slug": "sponsorblock", "guid": "sponsorBlocker@ajay.app", "license": "GPL-3.0" },
-    { "name": "Privacy Badger", "slug": "privacy-badger17", "guid": "jid1-MnnxcxisBPnSXQ@jetpack", "license": "GPL-3.0" },
-    { "name": "Dark Reader", "slug": "darkreader", "guid": "addon@darkreader.org", "license": "MIT" },
-    { "name": "ClearURLs", "slug": "clearurls", "guid": "{74145f27-f039-47ce-a470-a662b129930a}", "license": "LGPL-3.0" },
-    { "name": "Return YouTube Dislike", "slug": "return-youtube-dislikes", "guid": "{762f9885-5a13-4abd-9c77-433dcd38b8fd}", "license": "GPL-3.0" },
-    { "name": "Zen Internet", "slug": "zen-internet", "guid": "{91aa3897-2634-4a8a-9092-279db23a7689}", "license": "MIT", "source": "https://github.com/sameerasw/my-internet" }
+    {
+      "name": "uBlock Origin",
+      "slug": "ublock-origin",
+      "guid": "uBlock0@raymondhill.net",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "SponsorBlock",
+      "slug": "sponsorblock",
+      "guid": "sponsorBlocker@ajay.app",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "Privacy Badger",
+      "slug": "privacy-badger17",
+      "guid": "jid1-MnnxcxisBPnSXQ@jetpack",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "Dark Reader",
+      "slug": "darkreader",
+      "guid": "addon@darkreader.org",
+      "license": "MIT"
+    },
+    {
+      "name": "ClearURLs",
+      "slug": "clearurls",
+      "guid": "{74145f27-f039-47ce-a470-a662b129930a}",
+      "license": "LGPL-3.0"
+    },
+    {
+      "name": "Return YouTube Dislike",
+      "slug": "return-youtube-dislikes",
+      "guid": "{762f9885-5a13-4abd-9c77-433dcd38b8fd}",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "Zen Internet",
+      "slug": "zen-internet",
+      "guid": "{91aa3897-2634-4a8a-9092-279db23a7689}",
+      "license": "MIT",
+      "source": "https://github.com/sameerasw/my-internet"
+    }
   ],
   "clusters": {
-    "surfaces": [10, 12, 17, 19],
-    "sidebar-tabs": [1, 5, 15, 18, 22],
-    "icons": [4, 11, 12, 20],
-    "chrome-furniture": [2, 8, 12, 21],
-    "motion-feedback": [6, 7, 14, 16],
-    "apps": [9, 23],
-    "theming": [3],
-    "standalone": [13]
+    "surfaces": [
+      10,
+      12,
+      17,
+      19
+    ],
+    "sidebar-tabs": [
+      1,
+      5,
+      15,
+      18,
+      22
+    ],
+    "icons": [
+      4,
+      11,
+      12,
+      20
+    ],
+    "chrome-furniture": [
+      2,
+      8,
+      12,
+      21
+    ],
+    "motion-feedback": [
+      6,
+      7,
+      14,
+      16
+    ],
+    "apps": [
+      9,
+      23
+    ],
+    "theming": [
+      3
+    ],
+    "standalone": [
+      13
+    ]
   }
 }

@@ -1,0 +1,117 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the tab strip — one owner for pinned tabs, folders, the collapsed
+# rail and the unloaded-tab state.
+#
+# Merges SuperPins (15), Advanced Tab Groups (1), Zen Folder Tree Connectors
+# (22), Customize Collapsed Sidebar (5) and Unloaded Tabs (18). Today those are
+# five stylesheets and three scripts arguing over `#tabbrowser-tabs`; here they
+# are one feature with one observer subscription (TRANCE.md §8.1).
+#
+# Note there is no float pref type: ffprefs quotes any value containing a `.`,
+# which would make it a string pref. Sizes are integer pixels and percentages.
+#
+# Refs: TRANCE.md §3.2, §8.1, §13 Phase 4; docs/trance/mods/{superpins,
+# advanced-tab-groups,zen-folder-tree-connectors,customize-collapsed-sidebar,
+# unloaded-tabs}.md
+
+# === Mark: Master switch ===
+
+- name: trance.tabstrip.enabled
+  value: true
+
+# === Mark: Folder tree connectors ===
+
+# Replaces Zen Folder Tree Connectors (22), which needed a script; Trance draws
+# both the trunk and the elbows in CSS by styling `.zen-tab-group-start`, an
+# anchor Zen already puts in every folder container and never styles.
+- name: trance.tabstrip.connectors
+  value: true
+
+# === Mark: Folders ===
+
+# Advanced Tab Groups' (1) per-group colour. Firefox already owns the palette,
+# the inline custom properties and the session persistence
+# (TabGroupState.sys.mjs); Zen simply never exposes them for folders. Trance
+# appends a colour submenu to Zen's own #zenFolderActions popup.
+- name: trance.tabstrip.folders.colors
+  value: true
+
+# Advanced Tab Groups' "arc-style": a folder reads as a titled section with a
+# coloured rule rather than as a pill. Off by default — the user's profile
+# leaves `browser.tabs.groups.arc-style` unset.
+- name: trance.tabstrip.folders.arc-style
+  value: false
+
+# === Mark: Pinned tabs ===
+
+# SuperPins (15) B4. The pinned section stays put while the normal tab list
+# scrolls under it. Expanded sidebar only: in the collapsed rail the pinned
+# section is already at the top of a list too short to scroll.
+- name: trance.tabstrip.pins.sticky
+  value: true
+
+# SuperPins' B3 — "load pinned tabs only when using them" — is
+# `browser.sessionstore.restore_pinned_tabs_on_demand`, a platform pref. It is
+# surfaced in about:preferences#trance and deliberately NOT mirrored into a
+# trance.* pref: mirroring platform state creates the two-owners problem this
+# project exists to remove.
+
+# === Mark: Unloaded tabs ===
+
+# Unloaded Tabs (18), and the home of SuperPins' competing strike-through and
+# dimming knobs. One state, one owner, one treatment.
+- name: trance.tabstrip.unloaded.enabled
+  value: true
+
+# Percentage. Mirrored into --trance-tab-unloaded-opacity.
+- name: trance.tabstrip.unloaded.opacity
+  value: 55
+
+# Percentage; 0 is fully greyscale. Mirrored into
+# --trance-tab-unloaded-saturation.
+- name: trance.tabstrip.unloaded.saturation
+  value: 0
+
+# === Mark: Collapsed sidebar rail ===
+
+# Customize Collapsed Sidebar (5). Defaults are the user's own `mod.ccs.*`
+# values, so a fresh Trance profile starts where their tuned Zen profile ended.
+#
+# Zen's collapsed block declares `--tab-min-width` and `--zen-toolbox-padding`
+# with `!important`, but NOT `--zen-toolbox-max-width`, which is the variable
+# #navigator-toolbox actually consumes. TranceTokens writes that one inline, so
+# the rail is resizable without a single `!important` (TRANCE.md §6.2 rule 1).
+
+- name: trance.tabstrip.rail.enabled
+  value: true
+
+# Pixels. Total width of the collapsed rail; Zen's own default is 60.
+- name: trance.tabstrip.rail.width
+  value: 48
+
+# Pixels. Width and height of a tab button inside the rail.
+- name: trance.tabstrip.rail.tab-size
+  value: 36
+
+# Pixels. Favicon size inside the rail.
+- name: trance.tabstrip.rail.icon-size
+  value: 16
+
+# Pixels. Extra space above and below the rail, *added* to what Zen already
+# computes — Zen clears the macOS traffic lights itself with a `padding-top` on
+# `#titlebar`, and already pads the rail's bottom by `--zen-toolbox-padding`.
+# Writing these as absolute paddings replaced both, which cost the rail its
+# bottom padding and pushed the sidebar icons down. Zero is therefore the
+# correct default: it means "leave Zen's layout alone".
+- name: trance.tabstrip.rail.margin-top
+  value: 0
+
+- name: trance.tabstrip.rail.margin-bottom
+  value: 0
+
+# A 48px rail cannot hold a row of buttons; stack them instead.
+- name: trance.tabstrip.rail.stack-top-buttons
+  value: true

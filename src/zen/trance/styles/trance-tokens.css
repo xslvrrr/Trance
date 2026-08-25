@@ -1,0 +1,249 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the design-token layer.
+ *
+ * This is the ONLY file in `src/zen/trance/**` allowed to write to `:root`, and
+ * the only one allowed to contain literal colours, durations or easings. Every
+ * other Trance stylesheet consumes these and never redefines them.
+ *
+ * That single rule is what removes the cascade nondeterminism the mod stack
+ * suffered from: when four mods each re-declare `--zen-*` on `:root` and lean
+ * on `!important` to win, the winner changes between sessions and between state
+ * transitions, which is where the ghost borders and half-applied states came
+ * from (TRANCE.md §3.1).
+ *
+ * Names are the contract. Extend, do not rename.
+ *
+ * Refs: TRANCE.md §3.1, §6.2
+ */
+
+:root[trance="true"] {
+  /* ---- Surfaces ---------------------------------------------------------- */
+  /* Consumed only by trance-surfaces.css. `--trance-surface-blur`,
+   * `--trance-surface-alpha`, `--trance-surface-saturate` and
+   * `--trance-content-alpha` are also written at runtime by TranceTokens from
+   * the matching `trance.surface.*` prefs. */
+  --trance-surface-blur: 24px;
+  --trance-surface-saturate: 130%;
+
+  /* How much of Zen's own chrome background survives.
+   *
+   * This is the token the whole surface layer turns on, and it is an
+   * `opacity`, not an alpha channel. Frosting is not a colour laid over the
+   * chrome — it is the chrome getting out of the way so that what is behind
+   * the window shows through. Painting a translucent dark tint on top instead
+   * is what produced a black box rather than glass: a 62%-opaque near-black
+   * over an already-dark backdrop is just a darker backdrop.
+   *
+   * 100% is stock Zen. Lower values expose the window's native translucency —
+   * macOS vibrancy (`zen.widget.macos.window-vibrancy`), Windows Mica, or a
+   * transparent GTK window — which is where the blur that matters comes from.
+   * `backdrop-filter` below then blurs whatever Gecko itself painted behind
+   * the region, which is what makes compact mode's overlay read as glass. */
+  --trance-surface-alpha: 62%;
+
+  /* The sheen laid over a frosted region, and the only colour the surface
+   * layer paints. Deliberately tiny: a frosted pane is mostly what is behind
+   * it, and every percent here is a percent of the backdrop lost. The accent
+   * trace is Nebula's "ambient" quality expressed as a token rather than as an
+   * infinite animation (TRANCE.md §3.4, docs/trance/mods/nebula.md B2). */
+  --trance-surface-sheen: color-mix(in srgb, #ffffff 7%, transparent);
+  --trance-surface-tint: color-mix(in oklch, var(--trance-accent) 10%, transparent);
+  --trance-surface-bg: color-mix(in srgb, var(--trance-surface-sheen), var(--trance-surface-tint));
+  --trance-surface-border: color-mix(in oklch, currentColor 12%, transparent);
+  --trance-surface-highlight: color-mix(in oklch, currentColor 6%, transparent);
+
+  /* The web content pane's own background, for the `content` region. Separate
+   * from the chrome alpha because the trade-off is different in kind: a
+   * translucent chrome costs nothing but a translucent *page* puts the
+   * workspace gradient behind body text. Off by default for that reason.
+   *
+   * The base matches Zen's own opaque value in zen-browser-container.css, so at
+   * 100% this region is a no-op rather than a colour change. */
+  --trance-content-alpha: 85%;
+  --trance-content-base: light-dark(#ffffff, #202020);
+  --trance-content-bg: color-mix(in srgb, var(--trance-content-base) var(--trance-content-alpha), transparent);
+
+  /* ---- Geometry ---------------------------------------------------------- */
+  --trance-radius-sm: 6px;
+  --trance-radius-md: 10px;
+  --trance-radius-lg: 16px;
+  --trance-radius-pill: 999px;
+
+  --trance-gap-xs: 2px;
+  --trance-gap-sm: 4px;
+  --trance-gap-md: 8px;
+  --trance-gap-lg: 12px;
+
+  --trance-border-width: 1px;
+
+  /* ---- Motion ------------------------------------------------------------ */
+  /* Consumed by trance-motion.css and TranceMotion.mjs. No Trance stylesheet
+   * may declare a literal duration or easing. */
+  --trance-dur-instant: 80ms;
+  --trance-dur-fast: 140ms;
+  --trance-dur-base: 220ms;
+  --trance-dur-slow: 380ms;
+  --trance-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --trance-ease-emphasis: cubic-bezier(0.3, 0, 0, 1.2);
+
+  /* Which keyframe set a gesture resolves to, per motion level. Call sites use
+   * the token so no feature has to check the level itself. Keyframes are
+   * defined in trance-motion.css. */
+  --trance-anim-rise-in: trance-rise-in;
+  --trance-anim-fade-in: trance-fade-in;
+  --trance-anim-fade-out: trance-fade-out;
+
+  /* ---- Elevation --------------------------------------------------------- */
+  /* Resolved to shadows here so no feature writes an ad-hoc box-shadow. */
+  --trance-elev-0: none;
+  --trance-elev-1: 0 1px 2px rgb(0 0 0 / 10%);
+  --trance-elev-2: 0 4px 16px rgb(0 0 0 / 14%);
+
+  /* ---- Accent ------------------------------------------------------------ */
+  /* Derived from Zen's gradient engine, never hardcoded. Zen writes
+   * `--zen-primary-color` from the active theme. */
+  --trance-accent: var(--zen-primary-color, AccentColor);
+  --trance-accent-muted: color-mix(in oklch, var(--trance-accent) 35%, transparent);
+
+  /* ---- Motion and feedback (Phase 6) ------------------------------------- */
+  /* Consumed only by trance-feedback.css.
+   *
+   * `--trance-loading-progress` is written on the bar element itself by
+   * TranceFeedback, from the progress listener — it is per-element state, not a
+   * token, and the declaration here is only the value the bar starts at. */
+  --trance-loading-thickness: 3px;
+  --trance-loading-progress: 0;
+
+  /* The tab-close burst. Travel distance is computed from the closing tab's
+   * measured size rather than declared here: a burst that ignores the size of
+   * the thing that burst reads as unrelated to it. */
+  --trance-bubble-size: 6px;
+  --trance-bubble-count: 8;
+
+  /* ---- Chrome furniture (Phase 5) ---------------------------------------- */
+  /* Consumed only by trance-chrome.css and the two generated icon sheets.
+   * Seven mods used to own pieces of the toolbar, the menus and the address
+   * bar; these are the values they were each reinventing. */
+
+  /* `--trance-menu-icon-size` is written at runtime by TranceTokens from
+   * `trance.chrome.icons.size`. The opacity is not a pref: an icon that is
+   * quieter than its label is a design decision, and a per-user one would just
+   * be a way to make some menus inconsistent with others. */
+  --trance-menu-icon-size: 16px;
+  --trance-menu-icon-opacity: 80%;
+  --trance-menu-item-height: 28px;
+
+  /* Chrome scrollbars sit on frosted surfaces now, where Firefox's default
+   * track reads as an opaque stripe. Thumb only, no custom-drawn scrollbar. */
+  --trance-scrollbar-thumb: color-mix(in oklch, currentColor 24%, transparent);
+  --trance-scrollbar-track: transparent;
+
+  /* The address-bar focus dim, as a `brightness()` multiplier. Written at
+   * runtime by TranceTokens from `trance.chrome.urlbar.focus-dim.strength`,
+   * which is stored the way a person thinks about it — percent dimmed — and
+   * inverted on the way in. */
+  --trance-urlbar-dim: 0.7;
+
+  /* ---- Tab strip (Phase 4) ----------------------------------------------- */
+  /* Consumed only by trance-tabstrip.css. Five mods used to own pieces of the
+   * tab strip; these are the values they were each reinventing. */
+
+  /* Folder tree connectors. The colour is deliberately `currentColor`-derived
+   * rather than accent-derived: a tree line is structure, not decoration, and
+   * an accent-coloured one competes with the folder colour below. */
+  --trance-connector-color: color-mix(in oklch, currentColor 20%, transparent);
+  --trance-connector-width: 1px;
+  --trance-connector-radius: var(--trance-radius-sm);
+
+  /* Unloaded tabs. Both are written at runtime by TranceTokens from
+   * `trance.tabstrip.unloaded.opacity` / `.saturation`. */
+  --trance-tab-unloaded-opacity: 55%;
+  --trance-tab-unloaded-saturation: 0%;
+
+  /* The collapsed icon rail. All five are written at runtime by TranceTokens
+   * from `trance.tabstrip.rail.*`; the values here are the fallbacks that apply
+   * before the first binding and after the feature is disabled.
+   *
+   * The two margins are *extra* space added to Zen's own rail padding, so zero
+   * means "leave Zen's layout alone". They used to be absolute paddings, which
+   * replaced Zen's bottom padding and double-counted the macOS traffic-light
+   * clearance Zen already applies to `#titlebar`. */
+  --trance-rail-width: 48px;
+  --trance-rail-tab-size: 36px;
+  --trance-rail-icon-size: 16px;
+  --trance-rail-margin-top: 0px;
+  --trance-rail-margin-bottom: 0px;
+
+  /* The sticky pinned-tabs occluder lives with the other tab-strip tokens
+   * rather than with the surfaces, because it is not a frosted surface: it has
+   * to hide tabs scrolling underneath it. Borrowing the surface token here is
+   * what put a dark band under the space name. */
+  --trance-sticky-bg: light-dark(rgb(238 238 240 / 90%), rgb(28 30 36 / 90%));
+
+  /* Folder colour. `--tab-group-color` is Firefox's own inline custom property,
+   * written by MozTabbrowserTabGroup's `color` setter and resolved from the
+   * platform palette in tab.tokens.css — Trance mixes it, it does not define a
+   * second palette (docs/trance/mods/advanced-tab-groups.md §6). */
+  --trance-folder-tint: color-mix(in oklch, var(--tab-group-color) 22%, transparent);
+  --trance-folder-tint-strong: color-mix(in oklch, var(--tab-group-color) 55%, transparent);
+  --trance-folder-stroke: color-mix(in oklch, var(--tab-group-color) 70%, transparent);
+}
+
+/* Motion level 1 (reduced) shortens every duration to the instant token rather
+ * than zeroing it, so state changes stay legible. TranceMotion writes the
+ * attribute — nothing else may — and it clamps to the platform's
+ * `prefers-reduced-motion`, so this block is reachable either from the pref or
+ * from the system setting. */
+:root[trance="true"][trance-motion="1"] {
+  --trance-dur-fast: var(--trance-dur-instant);
+  --trance-dur-base: var(--trance-dur-instant);
+  --trance-dur-slow: var(--trance-dur-instant);
+  --trance-ease-emphasis: var(--trance-ease-standard);
+
+  /* Reduced motion keeps the fade and drops the travel. */
+  --trance-anim-rise-in: trance-fade-in;
+}
+
+/* Level 0: no Trance-owned motion at all. Zeroing the tokens here rather than
+ * in each feature stylesheet is what guarantees a feature cannot forget and
+ * leave the refresh driver awake (TRANCE.md §3.4). */
+:root[trance="true"][trance-motion="0"] {
+  --trance-dur-instant: 0ms;
+  --trance-dur-fast: 0ms;
+  --trance-dur-base: 0ms;
+  --trance-dur-slow: 0ms;
+
+  --trance-anim-rise-in: none;
+  --trance-anim-fade-in: none;
+  --trance-anim-fade-out: none;
+}
+
+/* ---- Surface presets ------------------------------------------------------
+ *
+ * The presets are the four surface mods collapsed into one system: Nebula's
+ * glass, Compact Transparent Mode's tighter overlay geometry, and Transparent
+ * Zen plus Nova UI's flat translucency. They are *variations of one surface
+ * layer*, not additional layers (TRANCE.md §8.1).
+ *
+ * Presets only adjust tokens that are not pref-backed. Blur radius, opacity and
+ * saturation come from `trance.surface.*` prefs, which TranceTokens writes as
+ * inline custom properties — those always win, so a preset cannot fight the
+ * user's sliders.
+ *
+ * `custom` deliberately has no block: it is the defaults plus the sliders.
+ */
+
+:root[trance="true"][trance-surface="compact"] {
+  --trance-radius-lg: 12px;
+  --trance-surface-border: color-mix(in oklch, currentColor 18%, transparent);
+}
+
+:root[trance="true"][trance-surface="flat"] {
+  --trance-radius-lg: 10px;
+  --trance-surface-border: color-mix(in oklch, currentColor 22%, transparent);
+  --trance-surface-highlight: transparent;
+}

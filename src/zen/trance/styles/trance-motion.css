@@ -1,0 +1,63 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: every keyframe Trance owns.
+ *
+ * Two hard rules, both enforced by the Trance stylelint plugin:
+ *
+ *   1. No `infinite`. Gecko throttles animations in content, not in chrome, so
+ *      a single looping chrome animation holds the refresh driver at display
+ *      rate forever — including offscreen and in unfocused windows. That was
+ *      the largest idle-CPU contributor in the mod stack (TRANCE.md §3.4).
+ *      Anything that needs to loop subscribes to TranceScheduler instead,
+ *      which suspends on blur and occlusion.
+ *
+ *   2. No `will-change`. It is added by TranceMotion for the lifetime of an
+ *      animation and removed afterwards, so an idle element never holds a
+ *      compositor layer (TRANCE.md §3.5).
+ *
+ * Durations and easings come from tokens only.
+ *
+ * Refs: TRANCE.md §3.4, §3.5, §6.2
+ */
+
+@keyframes trance-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes trance-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* Rise is the standard "something appeared" gesture: a short upward travel
+ * paired with a fade. It is transform-only so it composites without a repaint,
+ * and it is suppressed entirely at motion level 1 and below. */
+@keyframes trance-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--trance-gap-sm));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The `--trance-anim-*` tokens that select between these keyframes per motion
+ * level live in trance-tokens.css, because that is the only file allowed to
+ * write to `:root`. */

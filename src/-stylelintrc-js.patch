@@ -1,8 +1,19 @@
 diff --git a/.stylelintrc.js b/.stylelintrc.js
-index b484bf6600a7e1b8ad2aed8c8b7fe5e84cc3d023..f89712e2c13dfa0bcb48e55cd3872c67f5c98dad 100644
+index b484bf6600a7e1b8ad2aed8c8b7fe5e84cc3d023..efe814e66247a91534913775727df1127bd2477e 100644
 --- a/.stylelintrc.js
 +++ b/.stylelintrc.js
-@@ -67,7 +67,7 @@ module.exports = {
+@@ -28,6 +28,10 @@ module.exports = {
+   extends: ["stylelint-config-recommended"],
+   plugins: [
+     "./tools/lint/stylelint/stylelint-plugin-mozilla/index.mjs",
++    // >>> TRANCE
++    // Enforces TRANCE.md §6.2. Enabled only for zen/trance/** below.
++    "./zen/trance/lint/stylelint-plugin-trance/index.mjs",
++    // <<< TRANCE
+     "@stylistic/stylelint-plugin",
+     "stylelint-use-logical",
+   ],
+@@ -67,7 +71,7 @@ module.exports = {
      ],
  
      "max-nesting-depth": [
@@ -11,7 +22,7 @@ index b484bf6600a7e1b8ad2aed8c8b7fe5e84cc3d023..f89712e2c13dfa0bcb48e55cd3872c67
        {
          ignore: ["blockless-at-rules"],
        },
-@@ -280,7 +280,7 @@ module.exports = {
+@@ -280,7 +284,7 @@ module.exports = {
      "media-query-no-invalid": null,
      "stylelint-plugin-mozilla/media-query-no-invalid": true,
      "stylelint-plugin-mozilla/no-base-design-tokens": true,
@@ -20,3 +31,29 @@ index b484bf6600a7e1b8ad2aed8c8b7fe5e84cc3d023..f89712e2c13dfa0bcb48e55cd3872c67
    },
  
    overrides: [
+@@ -477,6 +481,25 @@ module.exports = {
+         "csstools/use-logical": null,
+       },
+     },
++    // >>> TRANCE
++    // The rules that keep Trance's CSS from reintroducing the failure modes in
++    // TRANCE.md §3. Scoped to Trance's own tree so upstream Zen and Firefox CSS
++    // is untouched.
++    {
++      name: "trance-css-rules",
++      files: ["zen/trance/**/*.css"],
++      rules: {
++        "trance/no-important": true,
++        "trance/no-literal-colors": true,
++        "trance/no-literal-durations": true,
++        "trance/no-infinite-animation": true,
++        "trance/no-backdrop-filter": true,
++        "trance/no-will-change": true,
++        "trance/max-specificity": true,
++        "trance/root-tokens-only-in-tokens-file": true,
++      },
++    },
++    // <<< TRANCE
+     // Rollouts should always be applied last in the overrides section
+     // to ensure that they take precedence over other overrides.
+     ...rollouts,

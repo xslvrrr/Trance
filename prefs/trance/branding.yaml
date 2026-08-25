@@ -1,0 +1,56 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: branding URLs and update policy.
+#
+# surfer generates browser/branding/<brand>/pref/firefox-branding.js itself and
+# hardcodes zen-browser.app into it (see @zen-browser/surfer
+# dist/commands/patches/branding-patch.js, configureProfileBranding). That file
+# is not ours to edit, but it is loaded as browser/defaults/preferences/
+# firefox-branding.js, which sorts *before* firefox.js — and firefox.js is what
+# #includes zen.js. So these values win at runtime.
+#
+# Refs: TRANCE.md §7.4, §13 Phase 1
+
+# === Mark: Branding URLs ===
+
+- name: startup.homepage_override_url
+  value: ""
+
+- name: startup.homepage_welcome_url
+  value: ""
+
+- name: startup.homepage_welcome_url.additional
+  value: ""
+
+- name: app.update.url.manual
+  value: "https://github.com/xslvrrr/Trance/releases"
+
+- name: app.update.url.details
+  value: "https://github.com/xslvrrr/Trance/releases"
+
+- name: app.releaseNotesURL
+  value: "https://github.com/xslvrrr/Trance/releases"
+
+- name: app.releaseNotesURL.aboutDialog
+  value: "https://github.com/xslvrrr/Trance/releases"
+
+- name: app.releaseNotesURL.prompt
+  value: "https://github.com/xslvrrr/Trance/releases"
+
+# === Mark: Updates ===
+
+# There is no Trance update server yet, and surfer.json points MOZ_APPUPDATE_HOST
+# at a reserved .invalid host on purpose. Leaving auto-update on would mean a
+# failing background request on every check plus user-visible update errors.
+# Provisional until TRANCE.md §16 Q3 is decided in Phase 12.
+
+- name: app.update.auto
+  value: false
+
+- name: app.update.background.scheduling.enabled
+  value: false
+
+- name: app.update.checkInstallTime
+  value: false

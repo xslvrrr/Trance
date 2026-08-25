@@ -1,0 +1,28 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the single stylesheet entry point.
+ *
+ * TranceCore loads this one URL through `nsIDOMWindowUtils` when
+ * `trance.enabled` is true, and removes it when the pref is flipped off. It is
+ * deliberately NOT `@import`ed from `zen-theme.css`: a static import would keep
+ * every Trance rule in the style set even when Trance is disabled, which breaks
+ * the zero-cost guarantee (TRANCE.md §6.5) and would cost an upstream
+ * touchpoint for nothing. See ADR-010.
+ *
+ * Order matters. Tokens first (nothing may consume a token before it is
+ * declared), reset second (neutralise what Trance takes over), motion last of
+ * the foundation.
+ *
+ * Feature stylesheets are NOT listed here. Each feature declares its own in
+ * `static styles = []` and TranceFeature loads/unloads them with the feature's
+ * pref, so a disabled feature contributes no rules at all.
+ *
+ * Refs: TRANCE.md §6.1, §6.2, §6.5
+ */
+
+@import url("chrome://browser/content/trance-styles/trance-tokens.css");
+@import url("chrome://browser/content/trance-styles/trance-reset.css");
+@import url("chrome://browser/content/trance-styles/trance-motion.css");

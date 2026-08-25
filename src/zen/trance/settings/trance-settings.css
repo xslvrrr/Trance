@@ -1,0 +1,32 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: about:preferences#trance layout.
+ *
+ * This sheet is loaded into the preferences document, which is a content-ish
+ * page rather than the browser chrome, so it does not have the Trance token
+ * layer available — TranceCore only loads that into browser windows. Keep this
+ * file to layout only and let Firefox's own in-content design tokens supply the
+ * colours.
+ *
+ * Refs: TRANCE.md §6.6
+ */
+
+#tranceSurfacesGroup label[control],
+#tranceMotionGroup label[control] {
+  min-width: 12em;
+}
+
+#tranceSurfacesGroup input[type="range"] {
+  flex: 1;
+  min-width: 8em;
+  margin-inline: var(--space-small, 4px);
+}
+
+.trance-range-value {
+  min-width: 4em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}

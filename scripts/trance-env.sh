@@ -60,6 +60,23 @@ for _trance_dep in gtar; do
 done
 unset _trance_dep
 
+# --- Surfer brand ------------------------------------------------------------
+# surfer stores the active brand in .surfer/, which is gitignored, so a fresh
+# clone defaults to 'unofficial' and silently builds with Firefox's placeholder
+# branding instead of Trance's. Pin it here rather than in package.json so the
+# fix stays in a Trance-owned file.
+_trance_brand_file="$_trance_root/.surfer/dynamicConfig.brand.json"
+if [ -d "$_trance_root/node_modules/@zen-browser/surfer" ]; then
+  if ! grep -q '"trance"' "$_trance_brand_file" 2>/dev/null; then
+    if (cd "$_trance_root" && npx --no-install surfer set brand trance >/dev/null 2>&1); then
+      echo "trance-env: surfer brand set to 'trance'"
+    else
+      echo "trance-env: could not set surfer brand; run 'npx surfer set brand trance'" >&2
+    fi
+  fi
+fi
+unset _trance_brand_file
+
 # --- Report ------------------------------------------------------------------
 printf 'trance-env: python %s | node %s | rustc %s\n' \
   "$(python3 -V 2>&1 | awk '{print $2}')" \

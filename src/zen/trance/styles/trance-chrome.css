@@ -1,0 +1,206 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the chrome furniture — icon plumbing, menus and panels, the new-tab
+ * button, and the address bar.
+ *
+ * Behaviour inspired by "Context Menu Icons" (Starry, MIT), "Zen Context Menu"
+ * (KiKaraage, MIT), "Hide Extension Name" (ch4og, MIT), "Zen Custom URL Bar"
+ * (rasyidrafi, Apache-2.0), "Better New Tab Button" (themaster5209), "New Icons"
+ * and "Nova UI" (qumeqa). The icon packs and their selector mapping are adapted
+ * from Context Menu Icons under MIT; the two generated `trance-icons-*.css`
+ * files carry that attribution. Everything in this file is written for Trance —
+ * three of those seven mods carry no licence at all (TRANCE.md §7.3).
+ *
+ * ── Why there is no `!important` here either ──────────────────────────────
+ *
+ * Every one of the seven has to out-`!important` Firefox to change an icon, a
+ * padding or a radius, and then out-`!important` each other. Trance's sheets
+ * are author sheets loaded after the document's own, so an equal-specificity
+ * rule wins outright (TRANCE.md §3.1, §6.2 rule 1). Where Zen itself uses
+ * `!important` — and it does, on toolbar geometry — the fix is to re-declare
+ * the variable Zen's rule reads on the element that consumes it, which is the
+ * same technique Phase 4 used for the collapsed rail (ADR-015).
+ *
+ * Refs: TRANCE.md §3.1, §3.8, §8.1, §13 Phase 5;
+ * docs/trance/mods/{context-menu-icons,zen-context-menu,new-icons,nova-ui,
+ * better-new-tab-button,hide-extension-name,zen-custom-urlbar}.md
+ */
+
+:root[trance="true"][trance-chrome="true"] {
+  /* ── Icon plumbing ───────────────────────────────────────────────────────
+   *
+   * The generated pack sheets assign `list-style-image` and `--menu-image`.
+   * This is everything those assignments need in order to render: the context
+   * properties that make a `context-fill` SVG take the current text colour, the
+   * size, and the background plumbing for checkable rows.
+   *
+   * It lives here rather than in the generated files because it is identical
+   * for both packs and because it is hand-written — the generator's output
+   * should be nothing but the mapping.
+   */
+
+  &[trance-chrome-icons="true"] {
+    & :is(menuitem, menu, .subviewbutton, .toolbarbutton-1) {
+      -moz-context-properties: fill, fill-opacity;
+      fill: currentColor;
+    }
+
+    & :is(menuitem, menu) > .menu-icon,
+    & .subviewbutton > .toolbarbutton-icon {
+      width: var(--trance-menu-icon-size);
+      height: var(--trance-menu-icon-size);
+      opacity: var(--trance-menu-icon-opacity);
+    }
+
+    /* A checkable row's icon slot is taken by the platform tick, so its glyph
+     * has to be painted as a background instead. `--menu-image` is the
+     * indirection the upstream mapping already uses for exactly these rows;
+     * keeping the name means the generated sheets need no special case. */
+    & menuitem:is([type="checkbox"], [type="radio"]):not([checked]) {
+      background-image: var(--menu-image, none);
+      background-repeat: no-repeat;
+      background-position: left var(--trance-gap-lg) center;
+      background-size: var(--trance-menu-icon-size);
+    }
+
+    /* Nested popups must not inherit the parent row's glyph. */
+    & menupopup menupopup {
+      --menu-image: none;
+    }
+  }
+
+  /* ── Menus and panels ────────────────────────────────────────────────────
+   *
+   * Nova UI's stated purpose was consistency rather than a new look, and
+   * Trance already has the scale it was reaching for: `--trance-gap-*`,
+   * `--trance-radius-*`, `--trance-elev-*`, `--trance-surface-border`. Phase 3
+   * shipped those as tokens and deliberately did not apply them to menus,
+   * because Phase 5 owns menus and two phases styling one element is the
+   * problem this project exists to remove (docs/trance/mods/nebula.md §2).
+   *
+   * This is where that debt is paid. One pref covers all of it: they are one
+   * decision applied consistently, and six switches would let a user rebuild
+   * the inconsistency by hand.
+   */
+
+  &[trance-chrome-panels="true"] {
+    /* Firefox draws a panel's frame in its shadow tree, on `::part(content)`,
+     * from these four variables. Setting the variables rather than the part is
+     * both shorter and the documented extension point — and it means the
+     * rounded-corner clipping, which upstream already applies to that part, is
+     * not something Trance has to reproduce. Nova UI's "bleeding corners fix"
+     * is therefore not needed here: the artifact it patched belongs to an older
+     * panel implementation. */
+    & :is(panel, menupopup) {
+      --panel-border-radius: var(--trance-radius-md);
+      --panel-border-color: var(--trance-surface-border);
+      --panel-padding: var(--trance-gap-sm) 0;
+    }
+
+    & .panel-subview-body {
+      padding-block: var(--trance-gap-sm);
+    }
+
+    & :is(.subviewbutton, menuitem, menu) {
+      border-radius: var(--trance-radius-sm);
+      min-height: var(--trance-menu-item-height);
+    }
+
+    /* Thumb only. A custom-drawn scrollbar is a maintenance surface; a
+     * Firefox scrollbar recoloured to sit on glass is two declarations. */
+    & :is(panel, menupopup, #navigator-toolbox) {
+      scrollbar-width: thin;
+      scrollbar-color: var(--trance-scrollbar-thumb) var(--trance-scrollbar-track);
+    }
+  }
+
+  /* The one behaviour kept out of Zen Context Menu's thirty-five: menus follow
+   * the space's colour, like every other Trance surface. Tint only — the blur
+   * budget is spent, and a menu is the worst place to spend a fourth pass
+   * (TRANCE.md §3.3).
+   *
+   * `--panel-background-color` is the variable upstream reserves for exactly
+   * this: a popup that opts out of the native look gets its background from it,
+   * and a popup that keeps the native look ignores it. On macOS with native
+   * context menus that means page and tab menus stay system-drawn and this
+   * reaches the browser's own panels only, which is the intended outcome
+   * (docs/trance/mods/zen-context-menu.md §2, B7). */
+  &[trance-chrome-menus="true"] {
+    & :is(panel, menupopup) {
+      --panel-background-color: var(--trance-surface-bg);
+    }
+  }
+
+  /* ── New tab button ──────────────────────────────────────────────────────
+   *
+   * Unlabelled, centred plus. The collapsed rail already draws it this way, so
+   * today the expanded sidebar is the inconsistent one.
+   */
+
+  &[trance-chrome-newtab="true"] {
+    & #tabs-newtab-button .toolbarbutton-text,
+    & #vertical-tabs-newtab-button .toolbarbutton-text {
+      display: none;
+    }
+
+    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button) {
+      justify-content: center;
+    }
+
+    /* Motion, and therefore owned by `trance.motion.level`: at level 0 the
+     * duration token is 0ms and the button simply does not turn. There is no
+     * second switch to find (TRANCE.md §6.2). */
+    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button) .toolbarbutton-icon {
+      transition: transform var(--trance-dur-fast) var(--trance-ease-emphasis);
+    }
+
+    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button):active .toolbarbutton-icon {
+      transform: rotate(90deg);
+    }
+  }
+
+  /* ── Address bar ─────────────────────────────────────────────────────────*/
+
+  /* Hide Extension Name, in full: an add-on's name otherwise eats a third of
+   * the address bar every time you open its options page. The original needs
+   * `!important` because a userChrome rule has no other way to beat Firefox's;
+   * this one does not. */
+  &[trance-chrome-urlbar-noextname="true"] {
+    /* trance-specificity: two IDs, because both are Firefox's own and the
+     * label only exists inside the identity box. */
+    & #identity-box.extensionPage #identity-icon-label {
+      display: none;
+    }
+  }
+
+  /* Zen Custom URL Bar's one real behaviour: the expanded address bar reads as
+   * a modal layer because the page behind it recedes.
+   *
+   * This is `filter`, not `backdrop-filter` — a different tool, and the correct
+   * one. It costs nothing against the blur budget (TRANCE.md §3.3) and it only
+   * runs while the bar is open, which is also why the blur radius is allowed to
+   * be the same token the rest of the browser uses.
+   *
+   * The `:has()` is scoped to the toolbox rather than to `:root`, so the
+   * invalidation it creates is local to the sidebar's subtree instead of
+   * hanging off the root element for the whole session.
+   */
+  &[trance-chrome-urlbar-dim="true"] {
+    & #zen-tabbox-wrapper {
+      transition:
+        filter var(--trance-dur-base) var(--trance-ease-standard),
+        transform var(--trance-dur-base) var(--trance-ease-standard);
+    }
+
+    /* trance-specificity: two IDs each, because the address bar and the content
+     * wrapper are siblings — the relationship between them is the rule. Both
+     * ids are Firefox's or Zen's, not Trance's. */
+    & #navigator-toolbox:has(#urlbar[breakout-extend]:focus-within) ~ * #zen-tabbox-wrapper,
+    & #zen-appcontent-wrapper:has(#urlbar[breakout-extend]:focus-within) #zen-tabbox-wrapper {
+      filter: blur(var(--trance-surface-blur)) brightness(var(--trance-urlbar-dim));
+    }
+  }
+}

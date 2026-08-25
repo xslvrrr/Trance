@@ -1,0 +1,93 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the surface layer — transparency, blur and the Nebula look.
+#
+# Merges Nebula (10), Transparent Zen (17), Zen Compact Transparent Mode (19)
+# and Nova UI's chrome treatment (12) into one system with a hard blur budget.
+#
+# Note there is no float pref type: ffprefs quotes any value containing a `.`,
+# which would make it a string pref. Opacity and saturation are therefore
+# integer percentages.
+#
+# Refs: TRANCE.md §3.3, §8.1, §13 Phase 3; docs/trance/mods/nebula.md
+
+# === Mark: Master switch ===
+
+- name: trance.surface.enabled
+  value: true
+
+# === Mark: Preset ===
+
+# nebula  — frosted glass, the default; Nebula's design language
+# compact  — nebula geometry tightened for Zen's compact mode overlays
+# flat     — translucent but unblurred; Transparent Zen + Nova UI's geometry.
+#            The cheapest preset: zero backdrop-filter surfaces.
+# custom   — the sliders below are used as-is with no preset adjustments
+- name: trance.surface.preset
+  value: "nebula"
+
+# === Mark: Surface tuning ===
+
+# Mirrored into --trance-surface-blur by TranceTokens.
+- name: trance.surface.blur.radius
+  value: 24
+
+# Percentage. Mirrored into --trance-surface-alpha, which is applied as an
+# `opacity` on Zen's own background elements — NOT as an alpha channel on a
+# tint Trance paints over the chrome. That distinction is the feature: 100%
+# is stock Zen, and lower values let the window's native translucency
+# (macOS vibrancy, Windows Mica, transparent GTK) through, which is where
+# the frost comes from. Painting a translucent dark tint on top instead is
+# what made the first implementation look like a black box.
+- name: trance.surface.opacity
+  value: 62
+
+# Percentage. Mirrored into --trance-surface-saturate.
+- name: trance.surface.saturation
+  value: 130
+
+# === Mark: Regions ===
+
+# The blur budget is one surface per region and at most three *blurred*
+# regions (TRANCE.md §3.3). These are the three.
+#
+# `sidebar` also owns the translucency of Zen's whole browser-area background,
+# which is why it covers the sidebar's outer edge, the splitter hairline, the
+# gutter around the content pane and the full window width when the sidebar is
+# collapsed — regions the old per-element tint kept missing.
+
+- name: trance.surface.region.sidebar
+  value: true
+
+- name: trance.surface.region.toolbar
+  value: true
+
+- name: trance.surface.region.overlay
+  value: true
+
+# The fourth region, and the only one that is not blurred: a blurred content
+# pane is the most expensive surface a browser can have (full window area, a
+# backdrop that changes on every scrolled frame) and the window's own
+# translucency already supplies the frost behind it. See ADR-019.
+#
+# Off by default. Every other region affects chrome only; this one can put a
+# workspace gradient behind body text.
+- name: trance.surface.region.content
+  value: false
+
+# Percentage. Mirrored into --trance-content-alpha. 100 is Zen's own opaque
+# page backdrop, so the region is a no-op at that value rather than a colour
+# change.
+- name: trance.surface.content.opacity
+  value: 85
+
+# === Mark: Power ===
+
+# On macOS a blurred surface must be resolved even when nothing changed, which
+# defeats the window server's ability to skip drawing an occluded window. When
+# this is on, blur is dropped the moment the window loses focus and restored
+# when it regains it — the largest single idle-power win available.
+- name: trance.surface.suspend-when-unfocused
+  value: true

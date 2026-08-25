@@ -1,0 +1,22 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: neutralise the Zen defaults Trance replaces.
+ *
+ * Anything Trance takes ownership of gets switched off here once, rather than
+ * being fought selector-by-selector in each feature stylesheet. Keeping the
+ * "turn it off" rules in one file is what lets every feature stylesheet stay at
+ * low specificity and free of `!important` (TRANCE.md §6.2 rules 1 and 7).
+ *
+ * Every rule in this file must name what it neutralises and why. Rules that
+ * merely *set* a Trance token belong in trance-tokens.css, not here — this file
+ * must never write a `--trance-*` custom property.
+ *
+ * Nothing needs neutralising yet: the foundation layer adds behaviour, it does
+ * not replace any. Phase 3 onwards fills this in as features take ownership of
+ * regions Zen currently styles.
+ *
+ * Refs: TRANCE.md §3.1, §6.2
+ */
