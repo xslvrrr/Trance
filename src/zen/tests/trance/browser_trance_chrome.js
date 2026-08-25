@@ -45,6 +45,23 @@ function loadedSheets() {
   return window.gTrance.context.styles.loadedSheets;
 }
 
+/**
+ * Reads a Trance stylesheet's text.
+ *
+ * Not via `document.styleSheets`: Trance loads its sheets through
+ * `nsIDOMWindowUtils.loadSheetUsingURIString`, and a sheet loaded that way is
+ * in the style set but not in the document's sheet list, so `cssRules` is not
+ * reachable from here. Fetching the chrome URL reads the same bytes the style
+ * system parsed, which is what these assertions are actually about.
+ *
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function sheetText(url) {
+  const response = await fetch(url);
+  return response.text();
+}
+
 function tokenValue(name) {
   return window
     .getComputedStyle(document.documentElement)
@@ -109,12 +126,17 @@ add_task(async function test_no_glyph_is_a_data_uri() {
       set: [["trance.chrome.icons.pack", pack]],
     });
 
-    const sheet = [...document.styleSheets].find(
-      s => s.href === iconSheet(pack)
+    ok(
+      loadedSheets().includes(iconSheet(pack)),
+      `the ${pack} sheet is in the style set`
     );
-    ok(sheet, `the ${pack} sheet is in the style set`);
 
-    const text = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
+    const source = await sheetText(iconSheet(pack));
+    // Comments stripped: the generated header explains that every `!important`
+    // was removed on the way in, and that sentence must not be what fails —
+    // or passes — this assertion.
+    const text = source.replace(/\/\*[\s\S]*?\*\//g, "");
+
     ok(!text.includes("data:"), `no data URI in the ${pack} pack`);
     ok(!text.includes("!important"), `and no !important in the ${pack} pack`);
     ok(
@@ -183,21 +205,26 @@ add_task(async function test_tokens_follow_their_prefs() {
 });
 
 add_task(async function test_no_important_anywhere() {
-  const sheet = [...document.styleSheets].find(s => s.href === CHROME_SHEET);
-  ok(sheet, "the chrome sheet is in the style set");
-  const text = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
-  ok(!text.includes("!important"), "and it contains no !important at all");
+  ok(loadedSheets().includes(CHROME_SHEET), "the chrome sheet is loaded");
+  const text = await sheetText(CHROME_SHEET);
+  // The comment block explains why there is none; strip comments so the
+  // explanation cannot satisfy the assertion.
+  const rules = text.replace(/\/\*[\s\S]*?\*\//g, "");
+  ok(!rules.includes("!important"), "and it contains no !important at all");
 });
 
 add_task(async function test_macos_context_menus_are_left_alone_by_default() {
   // The platform pref is a real trade, so Trance does not take it silently.
   // Off by default; claimed and restored exactly when it is asked for
   // (ADR-020, and ADR-011 for the same pattern in TranceSurfaces).
+  // Deliberately not asserting the platform default here: the mochitest
+  // harness sets this pref itself, because a native AppKit menu cannot be
+  // driven from a test. What Trance owes is the round trip — whatever the value
+  // was, it comes back.
   const original = Services.prefs.getBoolPref(
     "widget.macos.native-context-menus",
     true
   );
-  ok(original, "the platform default is untouched at Trance's defaults");
 
   await SpecialPowers.pushPrefEnv({
     set: [["trance.chrome.icons.macos-emulated-menus", true]],

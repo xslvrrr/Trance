@@ -117,6 +117,13 @@ add_task(async function test_observer_hub_batches() {
   const { observers } = window.gTrance.context;
   const target = document.documentElement;
 
+  // Relative to whatever is already subscribed, not to zero. Features hold
+  // their own subscriptions for the life of the window — TranceTabStrip keeps
+  // exactly one, to track folders appearing and disappearing — so "the hub
+  // disconnects when nothing is subscribed" is a claim about this
+  // subscription's effect on the count, not about the count's value.
+  const baseline = observers.observerCount;
+
   let callbacks = 0;
   let records = 0;
   const handle = observers.observeMutations(
@@ -141,7 +148,11 @@ add_task(async function test_observer_hub_batches() {
 
   await nextFrames();
   is(callbacks, 1, "no callbacks after unsubscribing");
-  is(observers.observerCount, 0, "and the shared observer is disconnected");
+  is(
+    observers.observerCount,
+    baseline,
+    "and the hub is back to exactly the subscriptions it had before"
+  );
 });
 
 add_task(async function test_motion_level() {

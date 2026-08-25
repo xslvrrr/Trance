@@ -40,6 +40,19 @@ const FLAGS = [
   },
 ];
 
+/**
+ * Reads a Trance stylesheet's text. Not via `document.styleSheets`: Trance
+ * loads its sheets through `nsIDOMWindowUtils.loadSheetUsingURIString`, which
+ * puts them in the style set but not in the document's sheet list.
+ *
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function sheetText(url) {
+  const response = await fetch(url);
+  return response.text();
+}
+
 function tabStrip() {
   return window.gTrance.features.find(f => f.name === "TabStrip");
 }
@@ -180,11 +193,10 @@ add_task(async function test_sticky_pins_do_not_paint_an_empty_band() {
   // beneath it. It used to borrow the frosted-chrome token for that, which
   // painted a dark band under the space name — and it painted that band even
   // when there were no pinned tabs to keep visible.
-  const sheet = [...document.styleSheets].find(s => s.href === TABSTRIP_SHEET);
-  const text = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
+  const text = await sheetText(TABSTRIP_SHEET);
 
   ok(
-    !text.includes("--trance-surface-bg"),
+    !text.includes("var(--trance-surface-bg)"),
     "the tab strip no longer reaches into the surface feature's tokens"
   );
   ok(
@@ -208,10 +220,17 @@ add_task(async function test_rail_overrides_zen_without_important() {
   // :root but declares `--zen-toolbox-max-width` — the one the toolbox actually
   // consumes — normally. Trance re-declares it on the toolbox instead, which is
   // why this whole feature contains no `!important` (TRANCE.md §6.2 rule 1).
-  const sheet = [...document.styleSheets].find(s => s.href === TABSTRIP_SHEET);
-  ok(sheet, "the tab-strip sheet is in the style set");
+  ok(
+    window.gTrance.context.styles.loadedSheets.includes(TABSTRIP_SHEET),
+    "the tab-strip sheet is loaded"
+  );
 
-  const text = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
+  // Comments stripped: this file explains at length why it has no `!important`,
+  // and that explanation must not be what satisfies the assertion.
+  const text = (await sheetText(TABSTRIP_SHEET)).replace(
+    /\/\*[\s\S]*?\*\//g,
+    ""
+  );
   ok(!text.includes("!important"), "and it contains no !important at all");
 });
 

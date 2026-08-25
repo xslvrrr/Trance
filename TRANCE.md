@@ -1616,7 +1616,15 @@ where two of the four mods correctly shipped nothing (ADR-021) and the loading b
 ninety lines of CSS.
 
 `npm run lint`, `mach lint -l stylelint zen/trance` and the Trance half of `npm run lc` are clean;
-the stylelint plugin was re-verified to actually reject a planted `!important`.
+the stylelint plugin was re-verified to actually reject a planted `!important`. The browser
+mochitests were **run**, not merely written: 196 assertions across five files, all passing.
+
+Running them found that four of the older ones had never worked. Three read `document.styleSheets`
+looking for a Trance sheet, which cannot find one — Trance loads its sheets through
+`nsIDOMWindowUtils`, so they are in the style set but not in the document's sheet list; those
+assertions had been silently throwing rather than checking anything. The fourth asserted the
+observer hub returns to *zero* subscriptions, which stopped being true the moment Phase 4 added a
+permanent one. All four now assert what they meant to.
 
 Outstanding: original icon artwork (ADR-008, deliberately deferred by the user); deleting
 `xslvrrr/trance-browser`, which needs a `delete_repo` OAuth scope the CLI does not have; visual

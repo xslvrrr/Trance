@@ -45,6 +45,34 @@ function surfaces() {
   return window.gTrance.features.find(f => f.name === "Surfaces");
 }
 
+/**
+ * The alpha of a computed colour, whatever Gecko chose to serialise it as.
+ *
+ * A `color-mix(in srgb, …)` result comes back as `rgb(r g b / a)`, not as
+ * `rgba(r, g, b, a)`, so a check that only understands the legacy form reads
+ * every mixed colour as fully opaque — which is the wrong answer for exactly
+ * the token this file exists to check.
+ *
+ * @param {string} color - A computed `background-color`.
+ * @returns {number} 0..1
+ */
+function alphaOf(color) {
+  if (!color || color === "transparent") {
+    return 0;
+  }
+  const modern = color.match(/\/\s*([\d.]+%?)\s*\)/);
+  if (modern) {
+    const value = parseFloat(modern[1]);
+    return modern[1].endsWith("%") ? value / 100 : value;
+  }
+  const legacy = color.match(/^rgba?\(([^)]*)\)/);
+  if (legacy) {
+    const parts = legacy[1].split(",");
+    return parts.length > 3 ? parseFloat(parts[3]) : 1;
+  }
+  return 1;
+}
+
 function blurredElementCount() {
   let count = 0;
   for (const { selector } of REGIONS) {
@@ -120,15 +148,10 @@ add_task(async function test_sidebar_region_is_translucency_not_a_tint() {
   // transparent, or it would be hiding the backdrop it exists to reveal.
   const toolbox = document.querySelector("#navigator-toolbox");
   const background = window.getComputedStyle(toolbox).backgroundColor;
-  const alpha = background.startsWith("rgba")
-    ? parseFloat(background.split(",").pop())
-    : background === "transparent"
-      ? 0
-      : 1;
   Assert.lessOrEqual(
-    alpha,
+    alphaOf(background),
     0.35,
-    "the sidebar sheen leaves the backdrop visible"
+    `the sidebar sheen leaves the backdrop visible (${background})`
   );
 });
 

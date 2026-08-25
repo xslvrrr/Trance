@@ -21,6 +21,23 @@
 const FEEDBACK_SHEET =
   "chrome://browser/content/trance-styles/trance-feedback.css";
 
+/**
+ * Reads a Trance stylesheet's text.
+ *
+ * Not via `document.styleSheets`: Trance loads its sheets through
+ * `nsIDOMWindowUtils.loadSheetUsingURIString`, and a sheet loaded that way is
+ * in the style set but not in the document's sheet list, so `cssRules` is not
+ * reachable from here. Fetching the chrome URL reads the same bytes the style
+ * system parsed, which is what these assertions are actually about.
+ *
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function sheetText(url) {
+  const response = await fetch(url);
+  return response.text();
+}
+
 function feedback() {
   return window.gTrance.features.find(f => f.name === "Feedback");
 }
@@ -63,18 +80,23 @@ add_task(async function test_the_loading_bar_exists_and_is_inert() {
 });
 
 add_task(async function test_no_infinite_animation_and_no_keyframes() {
-  const sheet = [...document.styleSheets].find(s => s.href === FEEDBACK_SHEET);
-  ok(sheet, "the feedback sheet is in the style set");
+  ok(
+    window.gTrance.context.styles.loadedSheets.includes(FEEDBACK_SHEET),
+    "the feedback sheet is loaded"
+  );
 
-  const rules = [...sheet.cssRules];
-  const text = rules.map(rule => rule.cssText).join("\n");
+  // Comments stripped: this file explains at length what it does not contain,
+  // and that explanation must not be what satisfies the assertion.
+  const text = (await sheetText(FEEDBACK_SHEET)).replace(
+    /\/\*[\s\S]*?\*\//g,
+    ""
+  );
 
   ok(!text.includes("infinite"), "no infinite animation anywhere");
   ok(!text.includes("!important"), "and no !important");
   ok(!text.includes("will-change"), "and no will-change in CSS");
-  is(
-    rules.filter(rule => rule instanceof CSSKeyframesRule).length,
-    0,
+  ok(
+    !text.includes("@keyframes"),
     "and no keyframes at all — the bar is a transition, not an animation"
   );
 
@@ -89,12 +111,20 @@ add_task(async function test_no_infinite_animation_and_no_keyframes() {
 add_task(async function test_the_bar_scales_rather_than_resizes() {
   // `width` is a layout property; `transform` composites. The original animates
   // width on every frame, which is a reflow of the content pane each time.
-  const sheet = [...document.styleSheets].find(s => s.href === FEEDBACK_SHEET);
-  const barRule = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
+  const text = await sheetText(FEEDBACK_SHEET);
   ok(
-    barRule.includes("scalex(var(--trance-loading-progress") ||
-      barRule.includes("scaleX(var(--trance-loading-progress"),
+    text.includes("scaleX(var(--trance-loading-progress"),
     "progress is expressed as a horizontal scale"
+  );
+  // Scoped to the bar's own rule: the burst bubbles legitimately have a
+  // `width`, and they are not animated.
+  const barRule = text.slice(
+    text.indexOf("#trance-loading-bar {"),
+    text.indexOf("&[trance-feedback-loading=")
+  );
+  ok(
+    barRule && !/^\s*width:/m.test(barRule),
+    "and the bar's length is never a width, which would reflow the pane"
   );
 });
 
@@ -136,20 +166,24 @@ add_task(async function test_bubble_count_is_clamped() {
 });
 
 add_task(async function test_closing_a_tab_bursts_and_cleans_up() {
+  // No `browserLoaded` wait: `about:blank` is already loaded by the time the
+  // tab exists, so waiting for its load event never resolves. The burst is
+  // driven by `TabClose`, which does not care whether anything loaded.
   const tab = BrowserTestUtils.addTab(gBrowser, "about:blank");
-  await BrowserTestUtils.browserLoaded(gBrowser.getBrowserForTab(tab));
-
   BrowserTestUtils.removeTab(tab);
 
   const layer = document.getElementById("trance-burst-layer");
   ok(layer, "the burst layer exists");
 
+  // Wait on the burst's own animations, not on `document.getAnimations()`:
+  // the chrome document holds animations that never finish, so awaiting all of
+  // them hangs the test rather than failing it.
+  //
   // Every bubble removes itself on `finished` rather than after a timer, so
-  // once the animations are done nothing Trance created is left behind.
-  await Promise.all(
-    document
-      .getAnimations()
-      .map(animation => animation.finished.catch(() => {}))
+  // once they are done nothing Trance created is left behind.
+  await TestUtils.waitForCondition(
+    () => !layer.querySelector(".trance-burst-bubble"),
+    "every bubble removed itself when its animation finished"
   );
 
   is(
@@ -163,7 +197,6 @@ add_task(async function test_motion_level_zero_suppresses_the_burst() {
   await SpecialPowers.pushPrefEnv({ set: [["trance.motion.level", 0]] });
 
   const tab = BrowserTestUtils.addTab(gBrowser, "about:blank");
-  await BrowserTestUtils.browserLoaded(gBrowser.getBrowserForTab(tab));
   BrowserTestUtils.removeTab(tab);
 
   const layer = document.getElementById("trance-burst-layer");
