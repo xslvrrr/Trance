@@ -290,6 +290,37 @@ export class nsZenSessionManager {
     } catch (e) {
       console.error("ZenSessionManager: Failed to read session file", e);
     }
+    // >>> TRANCE
+    // Trance's onboarding can import an installed Zen's sidebar. It cannot
+    // apply one: by the time a window exists this file has already been read
+    // and the sidebar object built, and there is no way back into it. So the
+    // import is staged as a session file of its own and adopted here, once,
+    // before anything downstream has looked at `_dataFromFile`.
+    //
+    // The name is a constant and the pref is a boolean, deliberately. This runs
+    // before any window, with full privileges, and a pref holding a path would
+    // be a pref that names any file on the disk for a privileged read.
+    //
+    // The pref is cleared and the file removed whether or not the read worked:
+    // an import that cannot be parsed must not be retried on every startup.
+    // ADR-053, UPSTREAM-TOUCHPOINTS.md #25.
+    if (Services.prefs.getBoolPref("trance.import.staged", false)) {
+      Services.prefs.clearUserPref("trance.import.staged");
+      const staged = PathUtils.join(
+        PathUtils.profileDir,
+        "trance-zen-import.jsonlz4"
+      );
+      try {
+        this._dataFromFile = await IOUtils.readJSON(staged, {
+          decompress: true,
+        });
+        this.log("Adopted a Trance-staged Zen import");
+      } catch (e) {
+        console.error("Trance: could not adopt the staged Zen import", e);
+      }
+      await IOUtils.remove(staged, { ignoreAbsent: true });
+    }
+    // <<< TRANCE
     this.#sidebar = this._dataFromFile || {};
     if (
       !this.#sidebarWithoutCloning.spaces?.length &&

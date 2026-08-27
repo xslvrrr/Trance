@@ -1,0 +1,46 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: bringing an installed Zen's sidebar across.
+#
+# Firefox's migration wizard imports bookmarks, history, passwords and cookies,
+# and it treats a Zen profile as a Firefox one — which means it imports
+# everything about that profile *except* the spaces, folders, essentials and
+# pinned tabs that are the reason it looks like anything. Those are Zen's, they
+# live in `zen-sessions.jsonlz4` rather than in `places.sqlite`, and nothing in
+# the wizard knows they exist.
+#
+# `TranceZenImport` finds the profiles — `profiles.ini` for the list,
+# `compatibility.ini` for which build last ran each one, so Zen and Twilight are
+# told apart rather than lumped together — and stages the chosen one.
+#
+# Staging rather than applying, because `ZenSessionManager` reads its file once
+# at startup, before any window exists, and there is no way back into the
+# sidebar object afterwards. The onboarding flow restarts the browser at the end
+# so that "the next startup" is a few seconds away (ADR-053).
+#
+# Refs: TRANCE.md §13 Phase 13; ADR-053
+
+# === Mark: State ===
+
+# True while a staged import is waiting in `<profile>/trance-zen-import.jsonlz4`.
+#
+# Read by one `if` in `ZenSessionManager.readFile` (touchpoint #25), which
+# clears it and deletes the file whether or not the read succeeded — an import
+# that cannot be parsed must not be retried on every startup.
+#
+# A boolean and not a path: the code that reads it runs before any window, with
+# full privileges, and joins a constant filename onto the profile directory. A
+# pref holding a path would be a pref that names any file on the disk for a
+# privileged early-startup read.
+- name: trance.import.staged
+  value: false
+
+# What was imported, in the form the finish page and Settings show it:
+# "Zen Twilight — Default (twilight)". Empty when nothing has been imported.
+#
+# Kept after the import is adopted, so that "where did these spaces come from"
+# has an answer later than the one screen that asked the question.
+- name: trance.import.source
+  value: ""

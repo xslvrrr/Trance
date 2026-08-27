@@ -198,6 +198,15 @@ Preferences.addAll([
   { id: "trance.mods.channel", type: "string", default: "cosine" },
   { id: "trance.perf.arch", type: "string", default: "arm64" },
 
+  // The Zen import (ADR-053). Both are state, not settings: `source` records
+  // what was brought across so that "where did these spaces come from" has an
+  // answer later than the one screen that asked, and `staged` is true only
+  // between the flow ending and the restart that adopts the import. Surfaced as
+  // one readout and one button, the same treatment the two `completed` prefs
+  // above get.
+  { id: "trance.import.staged", type: "bool", default: false },
+  { id: "trance.import.source", type: "string", default: "" },
+
   // Floating Status Bar's behaviour is Zen's `zen.theme.styled-status-panel`,
   // surfaced rather than mirrored — the same treatment SuperPins' lazy pinned
   // tabs got in Phase 4, and for the same reason: mirroring Zen or platform
@@ -357,6 +366,7 @@ var gTranceSettings = {
     this.initSavedThemes();
     this.initFirstRun();
     this.initOnboarding();
+    this.initImport();
     this.initImagePicker({
       pref: "trance.surface.image",
       path: "tranceSurfaceImagePath",
@@ -584,6 +594,51 @@ var gTranceSettings = {
         item.setAttribute("label", label);
       }
     }
+  },
+
+  /**
+   * The Zen import row.
+   *
+   * `trance.import.source` is the readout and `trance.import.staged` is the
+   * reason the button is not only a pref clear: when an import is staged there
+   * is a file behind it, and clearing the pref alone would leave
+   * `trance-zen-import.jsonlz4` in the profile forever with nothing left to
+   * adopt it.
+   *
+   * The button is inert when both prefs are empty, which is the same rule
+   * "Forget all" and "Show it again" follow — a button that does nothing should
+   * look like one.
+   */
+  initImport() {
+    const shown = document.getElementById("tranceImportSource");
+    const button = document.getElementById("tranceImportForget");
+    const source = Preferences.get("trance.import.source");
+    const staged = Preferences.get("trance.import.staged");
+    if (!shown || !button || !source || !staged) {
+      return;
+    }
+
+    const show = () => {
+      const value = source.value || "";
+      shown.value = staged.value
+        ? `${value || "Zen"} (on restart)`
+        : value || "Nothing";
+      button.disabled = !value && !staged.value;
+    };
+
+    button.addEventListener("command", () => {
+      source.value = "";
+      staged.value = false;
+      IOUtils.remove(
+        PathUtils.join(PathUtils.profileDir, "trance-zen-import.jsonlz4"),
+        { ignoreAbsent: true }
+      ).catch(error =>
+        console.error("Trance: could not drop the staged import", error)
+      );
+    });
+    source.on("change", show);
+    staged.on("change", show);
+    show();
   },
 
   /**

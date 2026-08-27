@@ -1866,13 +1866,57 @@ person sees is this flow.*
       honour
 - [x] `browser_trance_onboarding.js` — nine tasks, the first of which is that turning the feature
       off mid-flow gives the window back
+- [x] `TranceZenImport` and the reworked import page (2026-08-28, ADR-053). The page opened
+      Firefox's migration wizard and nothing else, and that wizard reads a Zen profile as a Firefox
+      profile — so it imported everything about it *except* the spaces, folders, essentials and
+      pinned tabs, which for somebody already running Zen is the whole switching cost. It now lists
+      every Zen profile on the machine with its channel — `compatibility.ini`'s `LastPlatformDir`
+      separates `/Applications/Zen.app` from `/Applications/Twilight.app`, and `LastVersion`
+      (`1.22t_…` against `1.18.10b_…`) is the fallback where it cannot — and stages the chosen one
+- [x] Touchpoint 25 — one `if` in `ZenSessionManager.readFile` to adopt the staged import. The
+      sidebar object is built before any window exists and its setter is private, so an import
+      cannot be applied to a running browser; onboarding restarts once at the end of the flow
+- [x] `prefs/trance/import.yaml`: `import.staged`, `import.source`
+- [x] `browser_trance_import.js` — 25 assertions over fixture profile directories, covering the
+      three shapes `compatibility.ini` takes and the four ways a donor profile can be unreadable
 
 **Acceptance:** a fresh profile runs Trance's flow rather than Zen's; every answer is a pref that is
 still reachable in Settings afterwards; turning the feature off restores Zen's welcome exactly;
-and disabling it mid-flow leaves a whole browser window.
+disabling it mid-flow leaves a whole browser window; and an installed Zen or Twilight is offered by
+name, with its spaces and folders arriving intact on the restart that follows.
 
 *Known gap: the five Trance pages are English. Trance has no locale pipeline of its own, and
 building one for ten strings is a Phase 12 decision — see §16.*
+
+*Open defect, found 2026-08-28 while running this suite: **every Trance build ships the twilight
+defaults**, which is the opposite of what ADR-006 and the channel page above assume.
+`tools/ffprefs/src/main.rs:321` resolves `@IS_TWILIGHT@` with*
+
+```rust
+return !content.contains("\"release\"");
+```
+
+*against `.surfer/dynamicConfig.brand.json`, whose contents are `"trance"`. Zen's two brands are
+`release` and `twilight`, so "not release" means twilight; Trance's one brand is neither, and falls
+on the twilight side of a test written for a fork with exactly two. `zen.view.context-menu.refresh`,
+`zen.theme.acrylic-elements` and `zen.theme.styled-status-panel` therefore default to `true` in
+every build, and `browser_trance_onboarding.js`'s `test_twilight_writes_and_stable_clears` fails on
+all three — the channel page writes `true` over a default that is already `true`, so no user value
+is created and "stable" has nothing to clear. The fix is one line and a new touchpoint in a tool
+Trance does not own; it changes three browser-wide defaults, so it is recorded here rather than
+taken in passing.*
+
+*And the reason it went unseen: **the suite has never been run whole.** The last time mochitests
+were run, five files existed and all 196 assertions passed. Phases 8 to 13 added six more files
+without executing them, and running all eleven on 2026-08-28 gives **766 passed, 23 failed**. The
+three above are the channel page's. The other twenty are spread across Phases 3 to 9 and are
+unexamined — the first-run panel's `popup is null` in three tasks, the app-menu mark's three, the
+theme translucency slider's two, edgeless's two, and one each in surfaces, tabstrip, chrome and
+settings. A separate run of `browser_trance_feedback.js` three times over shows a further four that
+fail every time, with the burst's bubble-count assertion migrating between two task names run to
+run — flaky in attribution, not in outcome. None of this is a regression: it is work that was
+committed without the tests that were written for it ever being executed, which is the same class of
+mistake as ADR-052's, found the same day and for the same reason.*
 
 ---
 

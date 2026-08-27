@@ -58,6 +58,7 @@
 
 import { TranceFeature } from "chrome://browser/content/trance-components/TranceFeature.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
+import { TranceZenImport } from "chrome://browser/content/trance-components/TranceZenImport.mjs";
 
 const NS = "Onboarding";
 
@@ -221,10 +222,22 @@ export class TranceOnboarding extends TranceFeature {
     edgeless: true,
     setDefaultBrowser: false,
     essentials: [],
+    /** The `id` of the chosen Zen profile, or `""` for "don't import". */
+    importFrom: "",
+    importOpenTabs: false,
   };
 
   /** Tabs created for the chosen essentials, pinned once the flow is over. */
   #pendingEssentials = [];
+
+  /**
+   * Zen profiles found on this machine, or `null` before the import page has
+   * looked. Cached on the instance so that going back to the page does not walk
+   * the disk a second time.
+   *
+   * @type {object[]|null}
+   */
+  #zenProfiles = null;
 
   onEnable() {
     // Three of the flow's five answers are prefs that nothing else applies:
@@ -801,6 +814,29 @@ export class TranceOnboarding extends TranceFeature {
 
     this.context.window.gZenUIManager?.showToast?.("zen-welcome-finished");
     TranceLog.log(NS, "finished");
+
+    // The staged import can only be adopted by a startup, so this is the
+    // startup. It happens after the window has been given back rather than
+    // instead of it, so that a restart that is refused — by a beforeunload, by
+    // a download in flight — leaves a working browser rather than a torn-down
+    // one, and the import is still waiting the next time Trance is opened.
+    if (TranceZenImport.isStaged) {
+      this.#restartForImport();
+    }
+  }
+
+  #restartForImport() {
+    // Never from a test. `eRestart` takes the whole application down, and a
+    // mochitest that reached the end of the flow would take the harness with
+    // it.
+    if (Cu.isInAutomation) {
+      TranceLog.log(NS, "import staged; not restarting under automation");
+      return;
+    }
+    TranceLog.log(NS, "restarting to adopt the staged Zen import");
+    Services.startup.quit(
+      Ci.nsIAppStartup.eRestart | Ci.nsIAppStartup.eAttemptQuit
+    );
   }
 
   #dismantle() {
@@ -1497,51 +1533,192 @@ export class TranceOnboarding extends TranceFeature {
         },
         { label: { l10n: "zen-welcome-skip-button" } },
       ],
-      render: container => {
-        const doc = this.context.document;
-        const group = doc.createElement("div");
-        group.className = "trance-onboarding-choices";
-        group.setAttribute("role", "radiogroup");
-
-        for (const [value, l10n] of [
-          ["yes", "zen-welcome-set-default-browser"],
-          ["no", "zen-welcome-dont-set-default-browser"],
-        ]) {
-          const label = doc.createElement("label");
-          label.className = "trance-onboarding-choice";
-          const input = doc.createElement("input");
-          input.type = "radio";
-          input.name = "trance-onboarding-default-browser";
-          input.checked =
-            value === (this.#answers.setDefaultBrowser ? "yes" : "no");
-          this.addListener(input, "change", () => {
-            this.#answers.setDefaultBrowser = value === "yes";
-          });
-          const body = doc.createElement("span");
-          body.className = "trance-onboarding-choice-body";
-          const title = doc.createElement("span");
-          title.className = "trance-onboarding-choice-title";
-          doc.l10n.setAttributes(title, l10n);
-          body.appendChild(title);
-          label.append(input, body);
-          group.appendChild(label);
-        }
-        container.appendChild(group);
-      },
+      render: container => this.#renderImport(container),
       commit: async () => {
-        if (
-          !this.#answers.setDefaultBrowser ||
-          !AppConstants.HAVE_SHELL_SERVICE
-        ) {
-          return;
-        }
-        try {
-          await this.context.window.getShellService()?.setDefaultBrowser(false);
-        } catch (error) {
-          TranceLog.error(NS, "could not set the default browser", error);
-        }
+        await this.#commitImport();
+        await this.#commitDefaultBrowser();
       },
     };
+  }
+
+  /**
+   * The import page: Zen's own data first, then Firefox's wizard, then the
+   * default-browser question.
+   *
+   * The order is the argument. `MigrationUtils` covers bookmarks, history,
+   * passwords and cookies for every browser it knows, and it knows Zen only as
+   * "a Firefox" — which means it imports everything about a Zen profile except
+   * the spaces, folders, essentials and pinned tabs that are the reason the
+   * profile looks like anything. Those come first because they are the ones
+   * nothing else can do.
+   *
+   * @param {Element} container
+   */
+  async #renderImport(container) {
+    const doc = this.context.document;
+
+    if (this.#zenProfiles === null) {
+      this.#status(container, "Looking for an installed Zen…", "busy");
+      try {
+        this.#zenProfiles = await TranceZenImport.detect();
+      } catch (error) {
+        TranceLog.error(NS, "could not look for Zen profiles", error);
+        this.#zenProfiles = [];
+      }
+      // The page can be left while the disk walk is still running. Everything
+      // below writes into `container`, which by then is detached and about to
+      // be collected, so the work would be invisible rather than wrong — but a
+      // status strip that says "Looking for" forever is worse than nothing.
+      if (!this.#running) {
+        return;
+      }
+      container.querySelector(".trance-onboarding-status")?.remove();
+    }
+
+    if (this.#zenProfiles.length) {
+      this.#renderZenProfiles(container);
+    }
+
+    const group = doc.createElement("div");
+    group.className = "trance-onboarding-choices";
+    group.setAttribute("role", "radiogroup");
+
+    for (const [value, l10n] of [
+      ["yes", "zen-welcome-set-default-browser"],
+      ["no", "zen-welcome-dont-set-default-browser"],
+    ]) {
+      const label = doc.createElement("label");
+      label.className = "trance-onboarding-choice";
+      const input = doc.createElement("input");
+      input.type = "radio";
+      input.name = "trance-onboarding-default-browser";
+      input.checked =
+        value === (this.#answers.setDefaultBrowser ? "yes" : "no");
+      this.addListener(input, "change", () => {
+        this.#answers.setDefaultBrowser = value === "yes";
+      });
+      const body = doc.createElement("span");
+      body.className = "trance-onboarding-choice-body";
+      const title = doc.createElement("span");
+      title.className = "trance-onboarding-choice-title";
+      doc.l10n.setAttributes(title, l10n);
+      body.appendChild(title);
+      label.append(input, body);
+      group.appendChild(label);
+    }
+    container.appendChild(group);
+  }
+
+  /**
+   * The detected-Zen list, and the one option it needs beyond "which".
+   *
+   * @param {Element} container
+   */
+  #renderZenProfiles(container) {
+    const doc = this.context.document;
+
+    const heading = doc.createElement("p");
+    heading.className = "trance-onboarding-subheading";
+    heading.textContent =
+      this.#zenProfiles.length === 1
+        ? "Trance found an installed Zen. Bring its sidebar across?"
+        : "Trance found more than one installed Zen. Bring one across?";
+    container.appendChild(heading);
+
+    const options = this.#zenProfiles.map(profile => ({
+      value: profile.id,
+      title: `${profile.label} — ${profile.name}`,
+      detail: this.#zenProfileDetail(profile),
+      note: profile.version ? `Last run by ${profile.version}` : undefined,
+    }));
+    options.push({
+      value: "",
+      title: "Start clean",
+      detail:
+        "Trance sets up its own spaces and leaves your Zen profile alone.",
+    });
+
+    const tabsToggle = doc.createElement("label");
+    tabsToggle.className = "trance-onboarding-toggle";
+    tabsToggle.hidden = !this.#answers.importFrom;
+    const tabsInput = doc.createElement("input");
+    tabsInput.type = "checkbox";
+    tabsInput.checked = this.#answers.importOpenTabs;
+    this.addListener(tabsInput, "change", () => {
+      this.#answers.importOpenTabs = tabsInput.checked;
+    });
+    const tabsText = doc.createElement("span");
+    tabsText.textContent =
+      "Also reopen the tabs that were open, not just the pinned ones";
+    tabsToggle.append(tabsInput, tabsText);
+
+    this.#choiceGroup(container, options, this.#answers.importFrom, value => {
+      this.#answers.importFrom = value;
+      tabsToggle.hidden = !value;
+    });
+    container.appendChild(tabsToggle);
+  }
+
+  /**
+   * "4 spaces · 4 folders · 3 essentials · 12 pinned tabs".
+   *
+   * Every count is dropped when it is zero rather than shown as "0", because
+   * the line is there to say what is in the profile and a list of zeroes says
+   * the opposite of what it looks like.
+   *
+   * @param {object} profile
+   * @returns {string}
+   */
+  #zenProfileDetail(profile) {
+    const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+    const parts = [plural(profile.counts.spaces, "space")];
+    if (profile.counts.folders) {
+      parts.push(plural(profile.counts.folders, "folder"));
+    }
+    if (profile.counts.essentials) {
+      parts.push(plural(profile.counts.essentials, "essential"));
+    }
+    if (profile.counts.pinned) {
+      parts.push(plural(profile.counts.pinned, "pinned tab"));
+    }
+    if (profile.counts.open) {
+      parts.push(plural(profile.counts.open, "open tab"));
+    }
+    return parts.join(" · ");
+  }
+
+  /**
+   * Stages the chosen Zen profile, or clears a choice that was made and undone.
+   *
+   * Staging rather than applying: the session manager reads its file once, at
+   * startup, long before this page exists. `#finish` restarts the browser when
+   * something is staged, and one `if` in `ZenSessionManager.readFile` adopts it
+   * on the way back up (ADR-053).
+   */
+  async #commitImport() {
+    const chosen = this.#zenProfiles?.find(
+      profile => profile.id === this.#answers.importFrom
+    );
+    if (!chosen) {
+      if (TranceZenImport.isStaged) {
+        await TranceZenImport.unstage();
+      }
+      return;
+    }
+    await TranceZenImport.stage(chosen, {
+      includeOpenTabs: this.#answers.importOpenTabs,
+    });
+  }
+
+  async #commitDefaultBrowser() {
+    if (!this.#answers.setDefaultBrowser || !AppConstants.HAVE_SHELL_SERVICE) {
+      return;
+    }
+    try {
+      await this.context.window.getShellService()?.setDefaultBrowser(false);
+    } catch (error) {
+      TranceLog.error(NS, "could not set the default browser", error);
+    }
   }
 
   // 7 ── Search engine --------------------------------------------------------
@@ -1834,6 +2011,7 @@ export class TranceOnboarding extends TranceFeature {
               ? `${this.#answers.essentials.length} added`
               : "None",
           ],
+          ["Imported", this.#importSummary()],
         ]) {
           const dt = doc.createElement("dt");
           dt.textContent = term;
@@ -1842,7 +2020,34 @@ export class TranceOnboarding extends TranceFeature {
           summary.append(dt, dd);
         }
         container.appendChild(summary);
+
+        if (TranceZenImport.isStaged) {
+          this.#status(
+            container,
+            "Trance will restart once to bring your spaces across.",
+            "ok"
+          );
+        }
       },
     };
+  }
+
+  /**
+   * The finish page's one-line account of the import, read from the staged
+   * state rather than from `#answers`.
+   *
+   * They can disagree, and when they do the staged state is the true one: a
+   * profile whose session file could not be read is a choice that was made and
+   * did not take, and the summary should say so rather than repeat the answer
+   * back.
+   *
+   * @returns {string}
+   */
+  #importSummary() {
+    if (!TranceZenImport.isStaged) {
+      return this.#answers.importFrom ? "Nothing (import failed)" : "Nothing";
+    }
+    const source = Services.prefs.getStringPref("trance.import.source", "");
+    return source || "Zen";
   }
 }

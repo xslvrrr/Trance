@@ -190,6 +190,15 @@ const TRANCE_STATE_PREFS = {
     empty: "Pending",
     cleared: "false",
   },
+  "trance.import.source": {
+    readout: "tranceImportSource",
+    action: "tranceImportForget",
+    set: pref => Services.prefs.setStringPref(pref, "Zen — Default (release)"),
+    read: pref => Services.prefs.getStringPref(pref, "unset"),
+    full: "Zen — Default (release)",
+    empty: "Nothing",
+    cleared: "",
+  },
 };
 
 /**
@@ -211,6 +220,16 @@ const TRANCE_CUSTOM_CONTROL_PREFS = {
   "trance.surface.newtab.logo": {
     readout: "tranceNewTabLogoPath",
     action: "tranceNewTabLogoClear",
+  },
+  // The third is a different shape of the same argument. `trance.import.staged`
+  // is true only between the flow ending and the restart that adopts the
+  // import, and it shares the readout and the button with
+  // `trance.import.source` above rather than getting a row of its own — a
+  // checkbox for "there is a file waiting" would be a control over something
+  // nobody should be setting by hand.
+  "trance.import.staged": {
+    readout: "tranceImportSource",
+    action: "tranceImportForget",
   },
 };
 

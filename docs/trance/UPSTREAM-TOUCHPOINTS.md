@@ -7,7 +7,7 @@ when `git rebase upstream/dev` conflicts, it will be in one of these files.
 **Keep this list under ~15 entries.** If a change can be made in a Trance-owned file instead,
 make it there. Adding an entry requires a matching ADR in `DECISIONS.md`.
 
-It stands at **23**, eight over budget, and the retirement pass §11.3 wants is still outstanding.
+It stands at **25**, ten over budget, and the retirement pass §11.3 wants is still outstanding.
 
 Phase 9 added three, each one line of consequence: #15 is a `DIRS` entry, #16 is a *deletion* (which
 can only conflict if upstream edits a file that is no longer there), and #17 is one pref inside a
@@ -94,6 +94,8 @@ Mark every change in-place:
 | 21 | `prefs/zen/zen-urlbar.yaml` | One pref value: `zen.urlbar.behavior` → `float`, so the address bar is always the floating panel Trance paints | — | ADR-044 |
 | 22 | `prefs/firefox/urlbar.yaml` | One pref value: `browser.search.suggest.enabled` → `true`. The private-window switch is left off | — | ADR-044 |
 | 23 | `src/zen/common/modules/ZenStartup.mjs` | One `if` around the existing `loadSubScript` of `ZenWelcome.mjs`, so Zen's welcome flow does not start when Trance's onboarding is enabled. Two full-window takeovers cannot share a window. Nothing is added, moved or reordered — with `trance.onboarding.enabled` false the call runs exactly as it did | 13 | ADR-051 |
+| 24 | `src/browser/installer/package-manifest-in.patch` (`browser/installer/package-manifest.in`) | Deletes the `#if defined(BUILT_BY_MOZILLA)` around `@RESPATH@/distribution/*`. The flag is set by `--built-by-mozilla` and by nothing else, so no fork's package has ever contained a `distribution/` directory — which is why the 0.1.0 release shipped with no extension policy at all. Zen already patches this file | 12 | ADR-052 |
+| 25 | `src/zen/sessionstore/ZenSessionManager.sys.mjs` | One `if` in `readFile`, after the session file has been read and before anything looks at it, adopting a Zen import staged by onboarding and deleting it. The sidebar object is built before any window exists and its setter is private, so an import has nowhere else to land. With `trance.import.staged` false — which is its default and its state on every startup but the one after an import — the method runs exactly as it did | 13 | ADR-053 |
 
 ## Planned touchpoints
 

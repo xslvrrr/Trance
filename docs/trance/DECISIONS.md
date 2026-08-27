@@ -2415,3 +2415,116 @@ wait; only which pair to read changes, decided by the same condition `ZenStartup
 - The flow is the only Trance feature that can be running while the user has no browser UI to escape
   to. Every allocation goes through the base class, so flipping the pref off mid-flow gives the
   window back rather than stranding it — and that is what the mochitest asserts first.
+
+---
+
+## ADR-052 — `distribution/policies.json` ships unconditionally, because upstream ships it only to Mozilla
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+ADR-032 made `src/zen/trance/distribution/policies.json` the one owner of Trance's update policy and
+its seven preinstalled extensions, installed by `src/zen/trance/moz.build` into `dist/bin/distribution/`
+so that the packager maps it to `@RESPATH@/distribution/*` — `Contents/Resources/distribution/` on
+macOS, the install directory elsewhere.
+
+It worked in every dev build and in none of the packaged ones, and the 0.1.0 release shipped without
+it. Nobody noticed for the same reason ADR-032 noticed nothing: `npm start` runs out of
+`obj-*/dist/Trance.app`, where `distribution/policies.json` is a symlink into the source tree that
+the build put there. The packaged app is built from a *manifest*, and the manifest line is:
+
+```
+#if defined(BUILT_BY_MOZILLA)
+@RESPATH@/distribution/*
+#endif
+```
+
+`BUILT_BY_MOZILLA` is set by `--built-by-mozilla` and by nothing else. No fork sets it, so no fork's
+package has ever contained a `distribution/` directory. The extensions did not fail to install in
+the release build — the policy that installs them was never in the release build.
+
+**Decision:** delete the guard. Touchpoint 24, one hunk in
+`src/browser/installer/package-manifest-in.patch`, a file Zen already patches.
+
+The alternative was to set `--built-by-mozilla` in `configs/common/mozconfig`, which is already
+touchpoint 2 and would therefore have cost nothing new. It was rejected on what the flag *means*
+rather than on what it does here: `AppConstants.BUILT_BY_MOZILLA` is read by Normandy's client
+environment and by UITour, and `browser/app/distribution/moz.build` installs Mozilla's own
+distribution files behind it. A browser that is not built by Mozilla asserting that it was, in order
+to get one manifest line, is three lies to fix one bug.
+
+**Consequences:**
+- Verified the way it should have been the first time: `Trance.app/Contents/Resources/distribution/policies.json`
+  is present in the repackaged `.dmg`, not merely in `dist/bin`.
+- The dev build and the packaged build now disagree about nothing here, which is the property that
+  was missing. A check that only ever ran against `npm start` could not have caught this, and
+  Phase 12's CI matrix is where a packaged-artefact assertion belongs.
+- Upstream's guard is deleted rather than duplicated with an inverted condition. A second
+  `@RESPATH@/distribution/*` under `#if !defined(BUILT_BY_MOZILLA)` would list the same glob twice in
+  any build that ever did set the flag, and "the line is there once, unconditionally" is the whole
+  intent.
+
+---
+
+## ADR-053 — A Zen import is staged for the next startup rather than applied to the running one
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+Onboarding's import page opened Firefox's migration wizard and nothing else. The wizard imports
+bookmarks, history, passwords and cookies, and it recognises a Zen profile as a Firefox profile — so
+it imports everything about that profile *except* the spaces, folders, essentials and pinned tabs
+that are the reason it looks like anything. For somebody already running Zen, that is the whole
+switching cost, and importing everything but it is close to importing nothing.
+
+Two things had to be worked out before it could be built.
+
+**Where the data is.** It is no longer in `places.sqlite`. `zen_workspaces` and `zen_pins` still
+exist in older profiles, but `ZenSessionManager` migrates both into `zen-sessions.jsonlz4` on the
+first run after the update and writes only there afterwards. A reader that preferred the tables
+would import whatever the profile looked like on the day it upgraded. So the import reads the
+session file and only the session file; a profile too old to have one reports nothing to import
+rather than importing a year-old sidebar.
+
+**Which build wrote which profile.** Zen keeps every channel's profiles in one vendor directory and
+`profiles.ini` does not record the channel. `compatibility.ini` does: `LastPlatformDir` is the app
+bundle that last ran the profile, so `/Applications/Twilight.app/…` and `/Applications/Zen.app/…`
+separate cleanly. `LastVersion` gives the same answer a second way — `1.22t_…` against `1.18.10b_…` —
+and is the fallback where the platform directory says nothing, which is Linux, where both channels
+install under `/opt`. A profile with neither is still listed, as "Zen (unknown build)": a profile
+with spaces in it is worth offering whatever wrote it.
+
+**Decision:** detect and stage in Trance-owned code; adopt in one `if` upstream.
+
+`TranceZenImport` walks the vendor directory next to Trance's own, lists every profile with at least
+one space, and writes the chosen one's `spaces`, `folders`, `groups` and `splitViewData` — plus its
+pinned and essential tabs — to `<profile>/trance-zen-import.jsonlz4`. Unpinned tabs are dropped
+unless asked for: an open tab is something you were doing, a pinned tab is something you keep.
+
+It stages rather than applies because there is nothing to apply *to*. `ZenSessionManager.readFile`
+runs from `SessionFileInternal.read`, before any window exists; by the time the import page is on
+screen the sidebar object is built, its setter is private, and everything that consumes it has run.
+Touchpoint 25 is the adoption: one `if` in `readFile`, after the file has been read and before
+anything looks at it, which replaces `_dataFromFile` and deletes the staging file.
+
+Onboarding restarts the browser at the end of the flow when something is staged, so "the next
+startup" is a few seconds away rather than a thing the user has to be told to do.
+
+**Consequences:**
+- `trance.import.staged` is a **boolean** and the filename is a constant in both halves. The
+  touchpoint runs before any window, with full privileges; a pref holding a path would be a pref
+  that names any file on the disk for a privileged early-startup read.
+- The pref is cleared and the file deleted whether or not the read succeeded. An import that cannot
+  be parsed must not be retried on every startup for the life of the profile.
+- The restart is skipped under `Cu.isInAutomation`. `eRestart` takes the whole application down, and
+  a mochitest that reached the end of the flow would take the harness with it.
+- Workspace-scoped bookmarks (`zen_bookmarks_workspaces`) are **not** imported. They are GUIDs into
+  `moz_bookmarks`, and the bookmarks themselves arrive — if they arrive — through the migration
+  wizard under new GUIDs. Importing the mapping without the thing it maps would produce spaces that
+  claim bookmarks that do not exist.
+- Detection is `detectIn(root)` rather than a private method, so the suite can point it at a fixture
+  directory. A test that reads the real `~/Library/Application Support/zen` tests the machine.

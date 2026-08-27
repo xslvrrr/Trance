@@ -51,6 +51,7 @@
         content/browser/trance-styles/trance-theme.css                          (../../zen/trance/styles/trance-theme.css)
 
         content/browser/trance-components/TranceOnboarding.mjs                  (../../zen/trance/features/onboarding/TranceOnboarding.mjs)
+        content/browser/trance-components/TranceZenImport.mjs                   (../../zen/trance/features/onboarding/TranceZenImport.mjs)
         content/browser/trance-styles/trance-onboarding.css                     (../../zen/trance/styles/trance-onboarding.css)
 
         content/browser/trance-components/TranceFirstRun.mjs                    (../../zen/trance/features/firstrun/TranceFirstRun.mjs)

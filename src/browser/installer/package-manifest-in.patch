@@ -14,3 +14,16 @@ index 83e52b260c380b8a4fdcb9146c36a048adffba68..f55844c294bc0a0e648fd6fc09f63218
  #if defined(XP_WIN)
  @BINPATH@/@DLL_PREFIX@mozwer@DLL_SUFFIX@
  #endif
+@@ -469,6 +469,10 @@ bin/libfreebl_64int_3.so
+ @BINPATH@/desktop-launcher/desktop-launcher@BIN_SUFFIX@
+ #endif
+
+-#if defined(BUILT_BY_MOZILLA)
++; >>> TRANCE
++; Unconditional. Upstream guards this with BUILT_BY_MOZILLA, which is only set
++; by --built-by-mozilla, so no fork's package ever contains distribution/. Trance
++; ships distribution/policies.json - the extension and update policy - in every
++; build, so the guard has to go. ADR-052.
+ @RESPATH@/distribution/*
+-#endif
++; <<< TRANCE
