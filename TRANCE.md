@@ -1813,18 +1813,31 @@ tell which of them were decisions and which were defects.
 
 ---
 
-### Phase 12 — Release infrastructure
+### Phase 12 — Release infrastructure *(in progress, 2026-08-28)*
 
 **Deliverables**
-- CI build matrix (macOS arm64/x64, Linux x64/aarch64, Windows x64/arm64) modelled on
-  `.github/workflows/`
-- Signing (macOS notarisation, Windows Authenticode) — needs certificates; decision required
-- Update server / `updateHostname`, or explicitly disabled auto-update via policy
-- Release channel decision: single `trance` channel, or `release` + `twilight` equivalents
-- Public repo, README, screenshots, license/attribution pages
+- [ ] CI build matrix (macOS arm64/x64, Linux x64/aarch64, Windows x64/arm64) modelled on
+      `.github/workflows/`. Zen's workflows still reference `--brand release`/`twilight` and fail
+- [ ] Signing (macOS notarisation, Windows Authenticode) — needs certificates; decision required
+- [x] Update server / `updateHostname`, or explicitly disabled auto-update via policy — disabled,
+      in `src/zen/trance/distribution/policies.json` (Phase 9)
+- [ ] Release channel decision: single `trance` channel, or `release` + `twilight` equivalents
+- [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
+- [x] A downloadable macOS arm64 build: the `0.1.0` prerelease, built locally rather than in CI
+
+**The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
+Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
+clears the quarantine attribute. That is stated on the release page rather than worked around: a
+build nobody can verify is one the user is vouching for personally.
+
+surfer's AUS step writes a distribution URL of
+`https://github.com/xslvrrr/Trance/releases/download/0.1.0/macos.mar`, which is why the tag is bare
+`0.1.0` and not `v0.1.0`. No MAR is uploaded — updates are off by policy, and shipping the artefact
+would advertise an update path that does not exist.
 
 **Acceptance:** a downloadable, installable, self-updating (or explicitly non-updating) Trance
-build on at least macOS arm64.
+build on at least macOS arm64. *Met for macOS arm64 as of 0.1.0; the CI matrix, signing and the
+channel decision are still open.*
 
 ---
 

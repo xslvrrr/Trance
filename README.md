@@ -12,8 +12,22 @@ loader, without the conflicts, and without the power drain.**
 
 *Trance* = **Tran**sparency + the calm of *Zen*. It is not a theme pack. It is a browser.
 
-> **Status: pre-alpha.** No releases yet. See [`TRANCE.md`](./TRANCE.md) for the full plan and
-> the phase Trance is currently on.
+> **Status: pre-alpha.** See [`TRANCE.md`](./TRANCE.md) for the full plan and the phase Trance is
+> currently on.
+
+## Download
+
+[**Trance 0.1.0 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.1.0)
+
+A development build: no PGO, no LTO, **not signed and not notarised**. Gatekeeper will refuse to
+open it until you clear the quarantine attribute yourself:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Trance.app
+```
+
+No Intel, Linux or Windows builds yet, and no auto-update — updates are disabled by policy and new
+builds appear on the releases page. Both are Phase 12 (`TRANCE.md` §13).
 
 ## Why
 
