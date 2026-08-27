@@ -1,8 +1,8 @@
 diff --git a/testing/profiles/mochitest/user.js b/testing/profiles/mochitest/user.js
-index 782258420cdce901f182897b796731a1fdf69ecf..a762067169b1cf3cd05147f9e715eb0db56a3299 100644
+index 782258420cdce901f182897b796731a1fdf69ecf..7690799bc3eea4a9a7614a14d0623084aba3a08c 100644
 --- a/testing/profiles/mochitest/user.js
 +++ b/testing/profiles/mochitest/user.js
-@@ -36,3 +36,9 @@ user_pref("places.history.floodingPrevention.enabled", false);
+@@ -36,3 +36,26 @@ user_pref("places.history.floodingPrevention.enabled", false);
  // permission, and we can open it and wait for the user to give permission, then
  // don't do that.
  user_pref("geo.prompt.open_system_prefs", false);
@@ -12,3 +12,20 @@ index 782258420cdce901f182897b796731a1fdf69ecf..a762067169b1cf3cd05147f9e715eb0d
 +user_pref("zen.testing.enabled", true);
 +user_pref("zen.window-sync.enabled", true);
 +user_pref("widget.macos.native-context-menus", false);
++
++// >>> TRANCE
++// Trance ships an enterprise policy that installs seven extensions from
++// addons.mozilla.org (docs/trance/DECISIONS.md ADR-032). Gecko only ignores a
++// local policies.json under automation on NIGHTLY_BUILD channels, and Trance's
++// channel is `trance` — so without this every mochitest in the tree starts by
++// dialling AMO, and the harness kills the browser for it:
++// "Non-local network connections are disabled and a connection attempt to
++// addons.mozilla.org was made".
++//
++// `perUserDir` points the policy reader at the run-time directory instead of
++// the install directory. Nothing writes a policies.json there, so no policy is
++// active — while `browser.policies.alternatePath`, which the enterprise-policy
++// tests themselves use, still wins, because it is consulted exactly when the
++// local file does not exist.
++user_pref("toolkit.policies.perUserDir", true);
++// <<< TRANCE

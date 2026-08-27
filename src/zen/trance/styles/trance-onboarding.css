@@ -1,0 +1,456 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the first-run onboarding flow.
+ *
+ * Loaded only while the flow is on screen — `TranceOnboarding` is a
+ * TranceFeature, so a browser whose first run is over has none of this in its
+ * style set, and a browser with the flow switched off never loads it at all.
+ *
+ * ── Why there is no `backdrop-filter` here ────────────────────────────────
+ *
+ * There is exactly one frosted layer in a Trance window and it lives in
+ * `trance-surfaces.css` (TRANCE.md §3.3, §6.2 rule 2). The flow sits on the
+ * workspace gradient — `#zen-browser-background` is one of the two elements it
+ * deliberately leaves visible — so it has a surface to sit on already, and a
+ * second blur over it would be the stacking this project exists to remove.
+ *
+ * ── Why every duration is a token ─────────────────────────────────────────
+ *
+ * The entrances and exits are Web Animations, driven from the module through
+ * `TranceMotion`, which is what makes them disappear at motion level 0. What is
+ * left in CSS is hover and checked-state feedback, and those go through the
+ * motion tokens so the same switch turns them off too.
+ *
+ * Refs: TRANCE.md §3.3, §6.2, §13 Phase 13; ADR-051
+ */
+
+/* The whole flow is one absolutely-positioned layer over `#browser`, whose
+ * other children the module has already hidden. `contain: strict` because
+ * nothing inside it can affect the layout of anything outside it, and this is
+ * a large subtree built and torn down in one go. */
+#trance-onboarding {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  contain: strict;
+  font: message-box;
+}
+
+/* ── The splash ──────────────────────────────────────────────────────────── */
+
+#trance-onboarding-splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--trance-gap-lg);
+}
+
+/* The mark, drawn the way the toolbar draws it: a mask in `currentColor`
+ * rather than a picture. One asset, both colour schemes, and it inherits the
+ * text colour the rest of the splash is using. */
+#trance-onboarding-mark {
+  width: 84px;
+  height: 84px;
+  background-color: currentColor;
+  mask-image: url("chrome://browser/content/trance-icons/trance-mark.svg");
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
+
+#trance-onboarding-splash-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--trance-gap-xs);
+  margin: 0;
+  font-size: 2.6em;
+  font-weight: 600;
+  line-height: 1.05;
+  text-align: center;
+}
+
+/* ── The staged pages ────────────────────────────────────────────────────── */
+
+/* Hidden until the splash is gone rather than not built: the stage is what the
+ * splash animates into, and building it late would mean measuring an element
+ * that does not exist yet. */
+#trance-onboarding-pages {
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+
+#trance-onboarding-pages[shown] {
+  display: flex;
+}
+
+/* The sidebar is a fixed share of the window and the content pane takes the
+ * rest. A fraction rather than a width in pixels because the flow maximises
+ * the window and the copy should not end up in a 30em column on a 5K display. */
+#trance-onboarding-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 38%;
+  gap: var(--trance-gap-lg);
+  justify-content: center;
+  padding: var(--trance-gap-xl);
+  overflow: hidden;
+}
+
+/* `pre-line`, because one of Zen's own strings — `zen-welcome-start-browsing-
+ * title` — carries a literal `<br/>`. The module turns it into a newline rather
+ * than writing markup from a string, and this is the half that makes the break
+ * render. Everything else collapses as normal; `pre-line` keeps line breaks and
+ * nothing else. */
+#trance-onboarding-copy h1 {
+  margin: 0 0 var(--trance-gap-md);
+  font-size: 2em;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: pre-line;
+}
+
+#trance-onboarding-copy p {
+  margin: 0 0 var(--trance-gap-sm);
+  max-width: 34ch;
+  opacity: 0.75;
+  line-height: 1.5;
+}
+
+#trance-onboarding-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--trance-gap-sm);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+/* HTML buttons, not XUL ones. The flow is a document-shaped thing built out of
+ * `<div>`s and `<label>`s, and a XUL `button` inside it would bring its own
+ * platform metrics into a layout that has none of them elsewhere. */
+.trance-onboarding-button {
+  padding: var(--trance-gap-sm) var(--trance-gap-lg);
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-md);
+  background-color: var(--trance-surface-tint);
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-onboarding-button:hover {
+  background-color: var(--trance-surface-bg);
+}
+
+.trance-onboarding-button.primary {
+  border-color: transparent;
+  background-color: var(--trance-accent-vivid);
+  color: var(--trance-fg-on-accent);
+}
+
+/* ── Choice cards ────────────────────────────────────────────────────────── */
+
+.trance-onboarding-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trance-gap-sm);
+  width: 100%;
+  max-width: 30em;
+}
+
+/* The input is present and focusable but not drawn: the card is the control,
+ * and `appearance: none` on a radio that still receives focus keeps the
+ * keyboard behaviour of a radio group without a dot beside a card that is
+ * already showing its state. The focus ring is put back on the card below. */
+.trance-onboarding-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.trance-onboarding-choice {
+  display: block;
+  position: relative;
+  padding: var(--trance-gap-md) var(--trance-gap-lg);
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-md);
+  background-color: var(--trance-surface-tint);
+  cursor: pointer;
+  transition:
+    border-color var(--trance-dur-fast) var(--trance-ease-standard),
+    background-color var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-onboarding-choice:hover {
+  background-color: var(--trance-surface-bg);
+}
+
+.trance-onboarding-choice:has(input:checked) {
+  border-color: var(--trance-accent-vivid);
+  background-color: var(--trance-accent-wash);
+}
+
+.trance-onboarding-choice:has(input:focus-visible) {
+  outline: var(--trance-border-width-strong) solid var(--trance-accent-vivid);
+  outline-offset: 2px;
+}
+
+.trance-onboarding-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trance-gap-xs);
+}
+
+.trance-onboarding-choice-title {
+  font-weight: 600;
+}
+
+.trance-onboarding-choice-detail {
+  opacity: 0.72;
+  line-height: 1.45;
+}
+
+/* The "Detected" / "expect rough edges" line. Smaller and in the accent, so it
+ * reads as an annotation on the card rather than as a third sentence of it. */
+.trance-onboarding-choice-note {
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--trance-accent-vivid);
+}
+
+/* ── The content pane ────────────────────────────────────────────────────── */
+
+#trance-onboarding-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--trance-gap-md);
+  align-content: center;
+  justify-content: center;
+  padding: var(--trance-gap-xl);
+  overflow: auto;
+}
+
+/* Two pages need a grid of tiles rather than a column: the engines and the
+ * essentials. `auto-fill` rather than a fixed count because the same pane is
+ * a third of a laptop window and a third of a 5K one. */
+#trance-onboarding-content[layout="grid"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr));
+  align-content: center;
+}
+
+.trance-onboarding-engine,
+.trance-onboarding-essential {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--trance-gap-sm);
+  padding: var(--trance-gap-md);
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-md);
+  background-color: var(--trance-surface-tint);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color var(--trance-dur-fast) var(--trance-ease-standard),
+    background-color var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-onboarding-engine input,
+.trance-onboarding-essential input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.trance-onboarding-engine:has(input:checked),
+.trance-onboarding-essential:has(input:checked) {
+  border-color: var(--trance-accent-vivid);
+  background-color: var(--trance-accent-wash);
+}
+
+.trance-onboarding-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trance-gap-sm);
+  margin: 0;
+  padding: 0;
+  max-width: 34em;
+  list-style: none;
+  counter-reset: trance-onboarding-step;
+}
+
+.trance-onboarding-list li {
+  counter-increment: trance-onboarding-step;
+  padding: var(--trance-gap-md) var(--trance-gap-lg);
+  border-radius: var(--trance-radius-md);
+  background-color: var(--trance-surface-tint);
+}
+
+.trance-onboarding-list li::before {
+  content: counter(trance-onboarding-step) ". ";
+  font-weight: 600;
+  color: var(--trance-accent-vivid);
+}
+
+/* ── The status strip ────────────────────────────────────────────────────── */
+
+/* Same argument `trance-firstrun.css` makes: "installed" versus "not found" is
+ * a status, Firefox already ships a palette for statuses in
+ * `tokens-platform.css`, and a Trance token for green would be a second owner
+ * of a decision the platform has made. Each state names its colour once as a
+ * variable and the rule below consumes it. */
+.trance-onboarding-status {
+  margin: 0;
+  max-width: 34em;
+  font-size: 0.92em;
+  line-height: 1.45;
+  color: var(--trance-onboarding-state, inherit);
+}
+
+.trance-onboarding-status[state="ok"] {
+  --trance-onboarding-state: var(--color-green-50);
+}
+
+.trance-onboarding-status[state="warn"] {
+  --trance-onboarding-state: var(--color-orange-50);
+}
+
+.trance-onboarding-status[state="error"] {
+  --trance-onboarding-state: var(--color-red-50);
+}
+
+.trance-onboarding-status[state="busy"] {
+  --trance-onboarding-state: var(--color-blue-50);
+}
+
+/* ── The edgeless diagram ────────────────────────────────────────────────── */
+
+/* Two rectangles in a frame: a sidebar rail and a page. The whole difference
+ * between the two arrangements is the page's corners, its gap and its own fill,
+ * so those three declarations are all that the `[edgeless]` state changes. */
+#trance-onboarding-edgeless {
+  display: flex;
+  gap: var(--trance-gap-sm);
+  width: 100%;
+  max-width: 30em;
+  aspect-ratio: 16 / 10;
+  padding: var(--trance-gap-sm);
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-lg);
+  background-color: var(--trance-surface-tint);
+  transition: gap var(--trance-dur-base) var(--trance-ease-standard);
+}
+
+#trance-onboarding-edgeless .trance-onboarding-preview-rail {
+  flex: 0 0 22%;
+  border-radius: var(--trance-radius-sm);
+  background-color: var(--trance-accent-wash);
+}
+
+#trance-onboarding-edgeless .trance-onboarding-preview-page {
+  flex: 1;
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-md);
+  background-color: var(--trance-surface-bg);
+  transition:
+    border-radius var(--trance-dur-base) var(--trance-ease-standard),
+    background-color var(--trance-dur-base) var(--trance-ease-standard);
+}
+
+#trance-onboarding-edgeless[edgeless] {
+  gap: 0;
+  padding: 0;
+}
+
+#trance-onboarding-edgeless[edgeless]
+  .trance-onboarding-preview-page {
+  border: none;
+  /* One corner, and it is the one beside the rail — the arrangement ADR-040
+   * settled on, drawn rather than described. */
+  border-radius: var(--trance-radius-lg) 0 0 0;
+  background-color: transparent;
+}
+
+#trance-onboarding-edgeless[edgeless]
+  .trance-onboarding-preview-rail {
+  border-radius: var(--trance-radius-lg) 0 0 var(--trance-radius-lg);
+}
+
+/* ── The summary ─────────────────────────────────────────────────────────── */
+
+#trance-onboarding-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--trance-gap-sm) var(--trance-gap-lg);
+  margin: 0;
+  width: 100%;
+  max-width: 26em;
+}
+
+#trance-onboarding-summary dt {
+  opacity: 0.65;
+}
+
+#trance-onboarding-summary dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ── Progress ────────────────────────────────────────────────────────────── */
+
+#trance-onboarding-progress {
+  display: flex;
+  gap: var(--trance-gap-xs);
+  align-items: center;
+}
+
+.trance-onboarding-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.25;
+  transition:
+    opacity var(--trance-dur-fast) var(--trance-ease-standard),
+    width var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-onboarding-dot[done] {
+  opacity: 0.5;
+}
+
+/* The current step is a capsule rather than a brighter dot: at 6px a change of
+ * opacity is not legible, and a change of shape is. */
+.trance-onboarding-dot[current] {
+  width: 18px;
+  border-radius: var(--trance-radius-sm);
+  opacity: 1;
+}
+
+/* ── Narrow windows ──────────────────────────────────────────────────────── */
+
+/* Below this the two-pane layout is two half-panes, and the copy wins: the
+ * content pane's controls are all either a column of cards or a grid that
+ * reflows, so stacking costs nothing, while a 20ch paragraph is unreadable. */
+@media (max-width: 800px) {
+  #trance-onboarding-pages {
+    flex-direction: column;
+  }
+
+  #trance-onboarding-sidebar {
+    flex: 0 0 auto;
+    padding-block-end: 0;
+  }
+}

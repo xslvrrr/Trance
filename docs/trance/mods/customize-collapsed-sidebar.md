@@ -172,3 +172,16 @@ nothing to restore.
   rail ever looks wrong around a collapsed folder, that is the boundary this
   reimplementation inherited, and it is now fixable in-tree rather than in a
   stylesheet fighting `!important`.
+
+---
+
+## 8. Revision — 2026-08-25
+
+The rail width default and slider floor are both **60px**, not 48.
+
+60 is Zen's own rail: a 48px tab with 6px of toolbox padding either side. Below
+it the macOS traffic lights no longer fit the strip Zen reserves for them on
+`#titlebar` and the stacked top buttons begin to clip — so a narrower rail was
+not a smaller rail, it was a broken one. The slider's `min` is 60 for the same
+reason; the mod's own lower range was reachable only because it never had to
+coexist with the window buttons.

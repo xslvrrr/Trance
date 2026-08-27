@@ -26,8 +26,18 @@
   value: true
   locked: true
 
+# >>> TRANCE
+# `true`, not `false`. Search suggestions are the address bar doing the job the
+# address bar is for, and Trance's other seven privacy defaults — the whole of
+# prefs/privatefox/, plus uBlock Origin, Privacy Badger and ClearURLs installed
+# on first run — are about tracking rather than about the search engine you
+# deliberately chose seeing what you deliberately typed into it.
+#
+# The private-window switch stays off. A private window's whole contract is that
+# it does not talk about itself.
 - name: browser.search.suggest.enabled
-  value: false
+  value: true
+# <<< TRANCE
 
 - name: browser.search.suggest.enabled.private
   value: false

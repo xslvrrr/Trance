@@ -183,10 +183,26 @@ class ZenStartup {
         "zen.updates.last-version",
         Services.appinfo.version
       );
-      Services.scriptloader.loadSubScript(
-        "chrome://browser/content/zen-components/ZenWelcome.mjs",
-        window
-      );
+      // >>> TRANCE: Trance replaces this flow rather than running around it.
+      // Two full-window takeovers cannot share a window — ZenWelcome hides
+      // every child of `#browser` on entry and restores them in `finish()` — so
+      // the one that runs second inherits a window the first has already torn
+      // down. `TranceOnboarding` is a TranceFeature and starts itself from the
+      // window's first idle; all this has to do is not start Zen's.
+      //
+      // Deliberately an `if` around the existing call and nothing else: with
+      // `trance.onboarding.enabled` false, or Trance itself disabled, upstream
+      // behaviour is exactly what it was. Refs: TRANCE.md §13 Phase 13; ADR-051
+      if (!(
+        Services.prefs.getBoolPref("trance.enabled", true) &&
+        Services.prefs.getBoolPref("trance.onboarding.enabled", false)
+      )) {
+        Services.scriptloader.loadSubScript(
+          "chrome://browser/content/zen-components/ZenWelcome.mjs",
+          window
+        );
+      }
+      // <<< TRANCE
     } else {
       this.#createUpdateAnimation();
     }

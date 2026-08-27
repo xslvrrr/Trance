@@ -41,15 +41,30 @@
  *
  * ── The blur budget ────────────────────────────────────────────────────────
  *
- * Three `backdrop-filter` surfaces. One per region. Never nested.
+ * At most three `backdrop-filter` surfaces — two in the shipped configuration,
+ * and zero of them on a platform whose window is already translucent, where a
+ * backdrop filter replaces the operating system's frost with black rather than
+ * softening it. See the Blur section below; that is the single most
+ * consequential thing in this file.
  *
- *   sidebar  → #navigator-toolbox
- *   toolbar  → #zen-appcontent-navbar-wrapper   (multi-toolbar layout only —
- *              in single-toolbar layout the nav bar lives inside the toolbox,
- *              so blurring both would nest, which is the one case that is
- *              strictly worse than either alone: the parent surface has to be
- *              resolved before the child can sample it)
- *   overlay  → #urlbar[breakout-extend]
+ * Where they do apply: one per region, never nested.
+ *
+ *   edgeless → #zen-main-app-wrapper             (the default: one layer for the
+ *              sidebar, the toolbar and the space around the page at once,
+ *              which is what the two below add up to)
+ *   sidebar  → #navigator-toolbox                (only with edgeless off)
+ *   toolbar  → #zen-appcontent-navbar-wrapper    (only with edgeless off, and
+ *              multi-toolbar layout only — in single-toolbar layout the nav bar
+ *              lives inside the toolbox, so blurring both would nest, which is
+ *              the one case that is strictly worse than either alone: the
+ *              parent surface has to be resolved before the child can sample it)
+ *   overlay  → #urlbar[breakout-extend]          (either way: it floats over the
+ *              page, not over the chrome, so no other surface is behind it)
+ *   internal → browser[trance-internal-page]     (opt-in, and not a chrome
+ *              region at all: the browser's own pages, frosted rather than
+ *              merely translucent. Painted only while a browser is showing an
+ *              `about:` page, and never nested — the page is what covers the
+ *              edgeless layer, so the two cannot sample each other. ADR-026)
  *
  * The `content` region is a fourth *region* but deliberately not a fourth blur
  * surface: it is translucency only. A blurred content pane is the most
@@ -86,10 +101,34 @@
  * blurred surface to achieve the same look.
  */
 
-:root[trance="true"][trance-surface-sidebar="true"] {
+:root[trance="true"][trance-surface-transparent="true"] {
   & #zen-browser-background,
   & #zen-toolbar-background {
     opacity: var(--trance-surface-alpha);
+
+    /* Saturation belongs here, not only inside the `backdrop-filter` below.
+     *
+     * On macOS the window is transparent and the frost comes from an
+     * `NSVisualEffectView` *behind* Gecko's surface, so a `backdrop-filter` on
+     * a chrome region has nothing of the desktop to sample — it can only reach
+     * what Gecko itself painted. In the default side-by-side layout that is
+     * the workspace gradient and nothing else, which is why the saturation
+     * slider appeared to be inert: it was only ever wired to a filter that had
+     * no coloured backdrop to act on.
+     *
+     * Applied here it acts on the gradient itself, which is the thing a person
+     * moving a slider called "surface saturation" is looking at.
+     *
+     * It is not free, and the first version of this comment claimed it was.
+     * These elements carry the workspace gradient, so every theme change
+     * invalidates them and the filter pass runs again over the whole window —
+     * ~6ms of a ~20ms colour change, measured at 1800×1131@2x, and it grows
+     * with the window. That is the price of the effect and it is worth paying
+     * while the effect is asked for; at 100% it is not asked for, and
+     * `saturate(100%)` would still cost the pass. TranceSurfaces therefore
+     * writes `--trance-surface-saturate-fn: none` at that value, which is a
+     * genuine no-op rather than an identity filter. */
+    filter: var(--trance-surface-saturate-fn);
   }
 }
 
@@ -103,81 +142,647 @@
  */
 
 :root[trance="true"] {
-  &[trance-surface-sidebar="true"] #navigator-toolbox {
-    --zen-navigator-toolbox-background: var(--trance-surface-bg);
+  /* The one sheen, and the one surface.
+   *
+   * `#zen-main-app-wrapper` is the box that holds the whole browser — toolbox,
+   * app content and the space between them — so one declaration on it is behind
+   * every piece of chrome at once and behind nothing else. It is painted
+   * whether or not the window is edgeless: what edgeless changes is whether the
+   * web view is *part of* this surface or cropped out of it, which is a
+   * question about the pane rather than about the layer behind it.
+   *
+   * `#browser`, one level in, would have been the obvious choice and cannot be
+   * used: Zen declares `background: transparent !important` on it
+   * (zen-browser-ui.css), and `!important` is not available here to answer with
+   * (TRANCE.md §6.2 rule 1).
+   *
+   * `background-image`, not `background-color`, and that is the point rather
+   * than a workaround. Zen paints `--zen-themed-toolbar-bg-transparent` here
+   * with the `background` shorthand; replacing that colour would mean Trance
+   * deciding what the browser's base colour is on every platform, including the
+   * ones where it is what makes an opaque window opaque. A gradient of one
+   * colour is a background *layer*, so the sheen composites over whatever Zen
+   * chose and nothing is taken away. */
+  & #zen-main-app-wrapper {
+    background-image: linear-gradient(
+      var(--trance-surface-bg),
+      var(--trance-surface-bg)
+    );
   }
 
-  /* Multi-toolbar layout only. In single-toolbar layout this element is a thin
-   * window-drag strip a few pixels high (zen-tabs.css), not the toolbar — a
-   * sheen there is a visible band, not a surface. */
-  &[trance-surface-toolbar="true"]:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper {
-    background-color: var(--trance-surface-bg);
-  }
-
-  &[trance-surface-overlay="true"] #urlbar[breakout-extend] {
+  /* The expanded address bar keeps an edge of its own either way: it floats
+   * over the page rather than over the chrome, so the layer above is not
+   * behind it. */
+  & #urlbar[breakout-extend] {
     border-radius: var(--trance-radius-lg);
     box-shadow: var(--trance-elev-2);
   }
 }
 
-/* ── Content pane ───────────────────────────────────────────────────────────
+/* ── The background image ───────────────────────────────────────────────────
  *
- * The page's own backdrop — "the actual tab background" — opt-in and off by
- * default, because unlike every other region this one can put a workspace
- * gradient behind body text.
+ * A texture over the surface and under every piece of chrome.
  *
- * Scope, stated honestly: Trance styles chrome, never content (TRANCE.md §9.3).
- * What this changes is the pane the page is painted *onto*, which Zen fills
- * with an opaque `light-dark(white, rgb(32,32,32))`. A site that paints its own
- * opaque background still covers it — nothing short of restyling content could
- * change that, and Zen Internet already owns that job. What it does reach is
- * every surface the page leaves alone: new tabs, `about:` pages, the rounded
- * corners and the moment before first paint, plus any site Zen Internet has
- * made transparent.
+ * It is a pseudo-element rather than a second background layer on the rule
+ * above for one reason: the blur slider. `filter` applies to an element, not to
+ * one of its background layers, so blurring the image as a layer would blur the
+ * sheen and the workspace gradient with it — and blurring a gradient is a
+ * full-window render pass that changes nothing anyone can see.
  *
- * `:not([transparent="true"])` keeps Zen Internet the single owner of the sites
- * it has already handled. `:not([zen-pseudo-hidden="true"])` is Zen's own
- * "hidden but rendered" flag; excluding it costs nothing and brings this
- * selector to the same specificity as the rule in zen-browser-container.css it
- * has to beat, which — Trance's sheets being author sheets loaded last — is
- * enough without `!important`.
+ * `isolation: isolate` is what makes `z-index: -1` safe. Without a stacking
+ * context on the wrapper, a negatively-stacked child paints behind the nearest
+ * ancestor that *has* one — which is the window — so the image would disappear
+ * under the workspace gradient instead of sitting on it. With one, "behind the
+ * wrapper's content and in front of its background" is exactly the layer this
+ * wants, and no chrome element has to be given a stacking order of its own.
  *
- * No `backdrop-filter` here. See the blur budget note above.
+ * The inset is negative by twice the blur radius: a `filter: blur()` samples
+ * transparent black outside the element's box, so an image blurred at its own
+ * edges fades out along all four of them. Growing the box past the window is
+ * what keeps the texture reaching the corners.
  */
 
-/* trance-specificity: matches the two IDs in zen-browser-container.css's own
- * `browser[type="content"]` rule, which is the declaration this replaces. A
- * shorter selector loses to it, and the alternative is !important. */
-:root[trance="true"][trance-surface-content="true"]
+:root[trance="true"][trance-surface-image="true"] #zen-main-app-wrapper {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: calc(-2 * var(--trance-surface-image-blur, 0px));
+    background-image: var(--trance-surface-image);
+    background-position: center;
+    background-size: cover;
+    opacity: var(--trance-surface-image-alpha);
+    filter: var(--trance-surface-image-blur-fn);
+    pointer-events: none;
+  }
+}
+
+/* ── The empty-tab mark ─────────────────────────────────────────────────────
+ *
+ * One box, over the content pane, painted only while the selected tab is
+ * showing nothing. `TranceSurfaces` creates the element when the pref holds a
+ * URL and sets the attribute when the tab is empty, so a browser with the mark
+ * switched off has neither — no element, no rule matching, nothing to composite.
+ *
+ * `contain: strict` rather than the default, because this box's size, position
+ * and paint are all fixed by the tokens above it: nothing inside it can change
+ * the layout around it, and telling the style system so is what keeps a
+ * full-window absolutely-positioned element off the reflow path when a tab is
+ * opened next to it.
+ *
+ * The mark is over the page rather than behind it, which is the honest way
+ * round: the pages this appears on are transparent today, and would put the
+ * mark behind a canvas the moment somebody turned internal-page transparency
+ * off — an "empty tab logo" that only exists while an unrelated switch is on is
+ * not a feature, it is a coincidence. Over the page it is always visible, it is
+ * never in the way (`pointer-events: none`), and the opacity token is what
+ * keeps it a mark rather than content.
+ */
+
+:root[trance="true"][trance-surface-newtab="true"] #trance-newtab-logo {
+  position: absolute;
+  /* A square of the configured size, centred: the mark is `contain`ed inside
+   * it, so "size" means the same thing for a wide image and a tall one and
+   * neither is stretched to match the other. */
+  inset-inline-start: 50%;
+  inset-block-start: 50%;
+  width: var(--trance-newtab-logo-size);
+  height: var(--trance-newtab-logo-size);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  contain: strict;
+
+  /* The easing back to level, and the only motion this element has. It is a
+   * `transition` rather than an animation, so at motion level 0 the duration
+   * token is zero and the mark simply follows the pointer with no settle — and
+   * none of this has to know that motion levels exist (TRANCE.md §3.5). */
+  transition: transform var(--trance-dur-base) var(--trance-ease-standard);
+
+  /* ── Why the artwork is a pseudo-element and the box paints nothing ────────
+   *
+   * It used to be a `background-image` on this element with
+   * `--trance-newtab-logo-alpha` as the element's `opacity`, and the sheen was
+   * a descendant of that — so the sheen was multiplied by the mark's opacity
+   * and could never be brighter than it. At the shipped 35% mark that put a
+   * hard ceiling on the effect: "the holographic sheen is too subtle" was not a
+   * colour choice, it was that ceiling.
+   *
+   * Splitting the drawing off the box removes it. The box is now a transparent
+   * frame at full opacity; the artwork carries the mark's alpha and the sheen
+   * carries its own, so the two are siblings rather than a layer inside a
+   * faded parent. The tilt stays on the box, so both still lean together.
+   *
+   * It costs one more pseudo-element on one element that exists only while an
+   * empty tab is selected. */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--trance-newtab-logo);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    opacity: var(--trance-newtab-logo-alpha);
+    pointer-events: none;
+  }
+}
+
+/* ── The mark, in three dimensions ──────────────────────────────────────────
+ *
+ * Two opt-out effects over the same two numbers.
+ *
+ * `TranceSurfaces` writes `--trance-newtab-logo-px` / `-py` — where the pointer
+ * is inside the mark's own box, −1 to 1 — onto the element, coalesced to one
+ * write per frame. Both effects read that same pair, which is what stops a mark
+ * whose highlight and whose lean disagree about where the light is.
+ *
+ * Neither rule matches unless its attribute is set, so a switched-off effect is
+ * not a transform resolving to the identity and not a background layer at zero
+ * opacity: it is no declaration at all (TRANCE.md §6.6).
+ */
+
+/* The lean. `perspective()` is a function *in this element's own transform
+ * list* rather than the `perspective` property on an ancestor, and that is not
+ * a stylistic choice: the property establishes a containing block for every
+ * fixed-position descendant of the element it is on, and the element it would
+ * have to go on is the content pane's wrapper.
+ *
+ * The rotations are inverted on X because a pointer *below* the centre should
+ * tip the bottom of the mark towards the viewer, which is a negative rotation
+ * about the horizontal axis.
+ *
+ * ── Why this waits for `[trance-newtab-logo-hover]` ───────────────────────────
+ *
+ * The pointer numbers come from a listener on the *window*, because the mark is
+ * `pointer-events: none` and cannot be hovered in the CSS sense (see
+ * `#syncPointerTracking`). Without a second condition that means the mark leans
+ * towards the pointer wherever the pointer is — a mark in the middle of the
+ * page tilting because somebody moved the mouse across the address bar. It is
+ * an object on the page, so it should answer to being touched and not to being
+ * near.
+ *
+ * `TranceSurfaces` sets the attribute on the element while the pointer is
+ * actually inside the mark's box, in the same frame-coalesced write that sets
+ * the two numbers. Off it goes, and the transition on the base rule is what
+ * eases the mark back to level rather than snapping it. The sheen is
+ * deliberately *not* gated: it is light falling on the mark, and light does not
+ * wait to be touched. */
+
+/* trance-specificity: the element's own ID plus four attributes — three feature
+   gates on the root and the pointer state on the element. Every one of them is a
+   condition the declaration genuinely has ("the mark is shown", "the tilt is on",
+   "the pointer is over it"), and dropping any of them would make the mark lean
+   in a case where it must not. There is nothing here that is winning a fight:
+   no other sheet declares a transform on this element, which is Trance's own. */
+:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-tilt="true"]
+  #trance-newtab-logo[trance-newtab-logo-hover="true"] {
+  transform: translate(-50%, -50%)
+    perspective(calc(var(--trance-newtab-logo-size) * 2))
+    rotateX(calc(var(--trance-newtab-logo-py, 0) * var(--trance-newtab-logo-tilt) * -1))
+    rotateY(calc(var(--trance-newtab-logo-px, 0) * var(--trance-newtab-logo-tilt)));
+}
+
+/* The sheen.
+ *
+ * A pseudo-element rather than a second background layer on the rule above,
+ * because `mask-image` applies to an element and not to one of its background
+ * layers — the same reason the chrome's texture is a pseudo-element rather than
+ * a layer, arrived at from `filter` instead of from `mask`. It is a sibling of
+ * the artwork rather than a child of it — see the base rule — so
+ * `--trance-newtab-logo-sheen-alpha` is an absolute strength and not a fraction
+ * of the mark's own. That is the change that let the effect be vivid at all.
+ *
+ * `mask-image` is the whole trick. The sheen is a rectangle of gradient; masked
+ * by the mark's own artwork it becomes exactly the shape of the drawing, so it
+ * reads as light on the object instead of a coloured card behind it. That also
+ * means it needs no second asset and works with whatever picture the user
+ * chose, including one with holes in it.
+ *
+ * The parallax is what makes it holographic rather than merely colourful: the
+ * ramp slides across the mask as the pointer moves, so the highlight travels
+ * over the artwork the way a highlight does.
+ *
+ * ── Why the parallax waits for the tilt ───────────────────────────────────
+ *
+ * It is the same light. The sheen is what is reflecting off a surface and the
+ * tilt is the surface moving, so a sheen that slides while the mark stays flat
+ * is a highlight with nothing behind it — it reads as a texture crawling over a
+ * sticker rather than as light on an object. So the parallax is declared in the
+ * rule below, under the tilt's own two gates: the effect is switched on, and the
+ * pointer is actually over the mark.
+ *
+ * Without them the two pointer properties stay at their token rest value and
+ * the sheen is a fixed ramp at its centre position — still iridescent, simply
+ * not reactive, which is exactly what the mark looks like at rest anyway.
+ *
+ * ── Two layers, not one ───────────────────────────────────────────────────
+ *
+ * One ramp travelling on one axis is a coloured wash that slides. Real
+ * iridescence changes *which* colours you are looking at as the angle changes,
+ * not just where they are, and one gradient cannot do that: its stops are
+ * fixed, so moving it only ever shows the same sequence shifted along.
+ *
+ * So there are two. The oil-slick ramp runs at 115° and the narrower specular
+ * band crosses it at −35°. Both travel on both pointer axes, at different rates.
+ * Their irregular ramps meet at different points, so the colour mix changes
+ * rather than repeating as a predictable horizontal stripe.
+ * Two background layers on one element: one composite, no filter, no
+ * animation. */
+:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-holographic="true"]
+  #trance-newtab-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--trance-newtab-logo-streak),
+    var(--trance-newtab-logo-sheen);
+  background-repeat: no-repeat, no-repeat;
+  /* Five times the box on both sliding axes for the ramp, and this is where the
+   * "two turns visible, eight turns travelled" pair is actually decided. The
+   * ramp repeats one turn of hue every 9% of its own gradient line (see
+   * trance-tokens.css), so a layer five marks wide shows two of those turns
+   * through the mark and keeps four marks of ramp in reserve — which is exactly
+   * the travel `--trance-newtab-logo-parallax` asks for at its 50% ceiling.
+   *
+   * The streak is three marks wide and travels at half that rate in the
+   * opposite direction, so it crosses the ramp rather than riding along with
+   * it. */
+  background-size: 300% 300%, 500% 500%;
+  background-position: center center, center center;
+  /* `screen` between the two layers, so the band *adds* light to the ramp
+   * instead of covering it — a white band drawn over an oil slick is a white
+   * band, and the point is the colour it brightens. Layer blending is a
+   * per-element background operation, not a `mix-blend-mode` that would isolate
+   * the element against the page behind it. */
+  background-blend-mode: screen;
+  mask-image: var(--trance-newtab-logo);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  opacity: var(--trance-newtab-logo-sheen-alpha);
+  pointer-events: none;
+  transition: background-position var(--trance-dur-base) var(--trance-ease-standard);
+}
+
+/* The parallax, and the only part of the sheen that reads the pointer. */
+
+/* trance-specificity: the element's own ID plus four attributes — three feature
+   gates on the root and the pointer state on the element. The sheen can travel
+   independently of tilt, so a holographic mark remains reactive when rotation
+   is disabled. Nothing here is winning a fight; the rule above is Trance's own
+   and this is the same author overriding one property of it. */
+:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-holographic="true"]
+  #trance-newtab-logo[trance-newtab-logo-hover="true"]::after {
+  background-position:
+    calc(
+        50% + var(--trance-newtab-logo-px, 0) *
+          var(--trance-newtab-logo-parallax) * -1
+      )
+      calc(
+        50% + var(--trance-newtab-logo-py, 0) *
+          var(--trance-newtab-logo-parallax) * 0.5
+      ),
+    calc(
+      50% + var(--trance-newtab-logo-px, 0) * var(--trance-newtab-logo-parallax)
+    )
+    calc(
+      50% + var(--trance-newtab-logo-py, 0) * var(--trance-newtab-logo-parallax) * -0.75
+    );
+}
+
+/* ── Edgeless ───────────────────────────────────────────────────────────────
+ *
+ * Stock Zen floats the web view: `--zen-element-separation` of gutter around
+ * it, `--zen-big-shadow` under it, four rounded corners, and an opaque
+ * background of its own. That is a card sitting on the browser, and it is the
+ * reason the frost never read as one material — the card was opaque, the gutter
+ * around it was frosted, and the seam between them was the hardest edge in the
+ * window.
+ *
+ * Edgeless removes the card. Four declarations, in four places, that are one
+ * decision:
+ *
+ *   1. the wrapper's margin goes, so the view reaches the window edge;
+ *   2. a corner radius goes when — and only when — that corner meets a window
+ *      edge. Zeroing all four unconditionally was the previous answer and it is
+ *      wrong in the other direction: the pane's inline-start edge does not run
+ *      along the screen, it runs along the sidebar, and squaring the corner
+ *      there does not remove an edge because there was never a window edge to
+ *      meet. What an arc against the side of the screen *does* do is take a
+ *      notch out of it. So each corner asks about its own two edges, the
+ *      answers come from the layout (which side the sidebar is on, whether
+ *      anything is above the pane), and the same four values drive the
+ *      `clip-path` in trance-chrome.css so the two cannot disagree;
+ *   3. the shadow goes, because a shadow is what a floating card casts;
+ *   4. the view takes the colour of what surrounds it — the same colour, not a
+ *      near miss. It paints nothing of its own, so the layers that make the
+ *      chrome what it is (the workspace gradient at the surface alpha, the
+ *      sheen, and the window's own translucency behind both) are what shows
+ *      through the pane too. Painting `--zen-main-browser-background` there
+ *      instead — the gradient at full strength, over none of that — is what
+ *      made the page read as a slightly different shade of the same idea;
+ *   5. the sidebar stops painting its own gradient. Zen renders the workspace
+ *      gradient twice — `#zen-browser-background` spans the whole browser area
+ *      with `--zen-main-browser-background`, and `#zen-toolbar-background`
+ *      spans the entire vertical tab strip with a *separate*
+ *      `--zen-main-browser-background-toolbar`, which the gradient generator
+ *      derives independently. Two gradients meeting at the tab strip's edge is
+ *      a hard colour seam down the window, and it is the one edge that survived
+ *      removing every geometric one. Both variables are inline styles on those
+ *      elements, so there is nothing to re-point without `!important`; the
+ *      answer is to stop painting the second copy, at which point the sidebar
+ *      and the page are the same gradient at the same alpha.
+ *
+ * And then the frost itself collapses. Instead of a sheen on the toolbox and a
+ * second on the toolbar — two panes that happen to be adjacent — one layer is
+ * painted on `#browser`, which spans the sidebar, the toolbar, the gutter and
+ * the space around the page. The content pane paints over it, so the page is
+ * never behind glass; everything that is not the page is behind the same glass.
+ *
+ * That also takes the blur budget from three surfaces to one on the platforms
+ * that pay for blur at all (ADR-025).
+ */
+
+:root[trance="true"][trance-surface-edgeless="true"] {
+  /* The second gradient. See point 5 in the header: this element is the tab
+   * strip's own copy of the workspace gradient, generated separately from the
+   * browser-area one, and the seam between the two is the last edge in an
+   * edgeless window. `#zen-browser-background` is `inset: 0` on `#browser` and
+   * therefore already behind the tab strip, so removing this paints nothing
+   * new — it uncovers what was always underneath.
+   *
+   * `display: none`, not `opacity: 0`: the element carries `::before`,
+   * `::after` and a grain child that Zen crossfades on every workspace change,
+   * and a transparent element still gets that work. The grain is not lost — the
+   * browser-area background has its own. */
+  & #zen-toolbar-background {
+    display: none;
+  }
+
+  /* Anything inside the tab box that reaches for Zen's inner radius — the
+   * glance overlay, split-view panels — gets zero from here rather than from a
+   * rule per element. The specificity-matched overrides below still exist for
+   * `.browserSidebarContainer`, whose radius Zen declares directly. */
+  & #zen-tabbox-wrapper {
+    --zen-native-inner-radius: 0;
+  }
+}
+
+/* ── The collapsed top strip ────────────────────────────────────────────────
+ *
+ * The other half of "no gutters": when the toolbar is not shown, the page runs
+ * to the top of the window instead of starting under a few pixels of chrome.
+ *
+ * Two states, one rule each, and both of them are Zen's own idea of "collapsed"
+ * rather than a new one:
+ *
+ *   - single-toolbar layout with no bookmarks toolbar, where
+ *     `#zen-appcontent-navbar-wrapper` is nothing but a drag strip
+ *     (zen-tabs.css);
+ *   - compact mode with the toolbar hidden, where the same element shrinks to
+ *     `--zen-element-separation` and grows back on hover
+ *     (compact-mode/toolbar.inc.css).
+ *
+ * The hover states are excluded rather than overridden, so the toolbar still
+ * comes back exactly as it did — this only takes away the residue it leaves
+ * behind when it is gone.
+ *
+ * `min-height` as well as `height`: the single-toolbar rule sets both, and
+ * leaving the minimum at `--zen-element-separation` would keep the strip at
+ * its old size no matter what the height said.
+ */
+
+/* trance-specificity: matches the rule in zen-tabs.css declaration for
+   declaration — its `:root`, its negation and the element's ID. */
+:root[trance="true"][trance-surface-edgeless="true"][zen-single-toolbar="true"]:not([zen-has-bookmarks]):not([customizing])
+  #zen-appcontent-navbar-wrapper:not([should-hide="true"]):not([zen-has-hover]):not([has-popup-menu]):not([zen-compact-mode-active]) {
+  min-height: 0;
+  height: 0;
+}
+
+/* stylelint-disable-next-line media-query-no-invalid */
+@media -moz-pref("zen.view.compact.hide-toolbar") {
+  :root[trance="true"][trance-surface-edgeless="true"][zen-compact-mode="true"]:not([zen-single-toolbar="true"]):not([customizing]):not([inDOMFullscreen="true"])
+    #zen-appcontent-navbar-wrapper:not([zen-has-hover]):not([has-popup-menu]):not([zen-compact-mode-active]) {
+    height: 0;
+  }
+}
+
+/* trance-specificity: the rule in zen-browser-ui.css that insets the web view,
+   matched declaration for declaration — its `:root`, its three negations and its
+   ID. This is the one that mattered: at `:root[trance][trance-surface-edgeless]
+   #zen-tabbox-wrapper` the selector was *shorter* than Zen's, so Zen's
+   `margin: var(--zen-element-separation)` won and "edgeless" still left a gutter
+   down the right-hand side and along the bottom. The top and the sidebar side
+   were already zero in Zen's own rule, which is why only two edges were wrong
+   and the bug read as a rounding error rather than as a dead declaration. */
+:root[trance="true"][trance-surface-edgeless="true"]:not([inDOMFullscreen="true"]):not([chromehidden~="location"]):not([chromehidden~="toolbar"])
+  #zen-tabbox-wrapper {
+  margin: 0;
+}
+
+/* trance-specificity: as above, for the mirrored layout — Zen sets the sidebar
+   side to zero with a second rule of the same weight. */
+:root[trance="true"][trance-surface-edgeless="true"][zen-right-side="true"]:not([inDOMFullscreen="true"]):not([chromehidden~="location"])
+  #zen-tabbox-wrapper {
+  margin: 0;
+}
+
+/* trance-specificity: this is the rule in zen-browser-container.css that floats
+   the web view, matched declaration for declaration — its two IDs, its class and
+   its two negations. A shorter selector loses to it outright, and the only other
+   way to win is !important.
+
+   Four longhands rather than the shorthand, because the four corners are four
+   separate answers now — see "Which corners meet a window edge" above. There is
+   still no mirrored twin of this rule: the mirroring happens once, in the two
+   variables that say which physical side the sidebar is on, rather than being
+   restated by every rule that draws a corner. */
+:root[trance="true"][trance-surface-edgeless="true"]:not([inDOMFullscreen="true"]):not([chromehidden~="location"]):not([chromehidden~="toolbar"])
+  #tabbrowser-tabbox
+  #tabbrowser-tabpanels
+  .browserSidebarContainer:not(.zen-glance-overlay) {
+  border-top-left-radius: var(--trance-webview-radius-tl);
+  border-top-right-radius: var(--trance-webview-radius-tr);
+  border-bottom-right-radius: var(--trance-webview-radius-br);
+  border-bottom-left-radius: var(--trance-webview-radius-bl);
+  box-shadow: none;
+}
+
+/* trance-specificity: matches the `browser[type="content"]` rule in
+   zen-browser-container.css, which is the declaration this replaces — and the
+   three negations on its `:root` are part of that match rather than decoration.
+   Without them this selector was (2,5,2) against Zen's (2,6,2) and lost, so on
+   every tab built with `transparent="true"` Zen's own
+   `light-dark(rgba(255,255,255,.6), rgba(255,255,255,.1))` was what actually
+   painted: a 10%-white veil over the content pane and nowhere else, which is
+   the "edgeless has a visible panel over the content" report exactly. The pane
+   was not darker than the chrome, it was *lighter*, by precisely that veil. */
+:root[trance="true"][trance-surface-edgeless="true"]:not([inDOMFullscreen="true"]):not([chromehidden~="location"]):not([chromehidden~="toolbar"])
   #tabbrowser-tabbox
   #tabbrowser-tabpanels
   .browserSidebarContainer
-  browser[type="content"]:not([transparent="true"]):not([zen-pseudo-hidden="true"]) {
-  background: var(--trance-content-bg);
+  browser[type="content"]:not([trance-internal-page="true"]) {
+  /* "The same colour as the surroundings", and the only way to be sure of that
+   * is to paint nothing.
+   *
+   * `--zen-main-browser-background` was the previous answer and it is a near
+   * miss by construction: it is the workspace gradient at full strength, and
+   * what the chrome around the pane actually shows is that gradient at
+   * `--trance-surface-alpha`, over the window's own translucency, under the
+   * edgeless sheen. Three layers against one, so the pane read as a slightly
+   * different shade of the same colour — visible as a rectangle wherever the
+   * page did not paint over it.
+   *
+   * Transparent puts the pane over the identical stack. `#zen-browser-background`
+   * is `inset: 0` on `#browser` and therefore already spans the content area,
+   * and the edgeless layer on `#zen-main-app-wrapper` is behind both, so there
+   * is nothing to reproduce — only something to stop covering.
+   *
+   * This is not the `content` region, which is why that one is still opt-in and
+   * still off: a page's *own* backdrop going translucent can put a gradient
+   * behind body text. What shows here is what showed before — the pixels a page
+   * leaves unpainted — in the colour the rest of the window is. */
+  background: transparent;
+}
+
+/* ── Content pane: gone ─────────────────────────────────────────────────────
+ *
+ * There used to be a `content` region here — a translucent backdrop for
+ * *websites*, opt-in and off by default — and it is removed (ADR-042).
+ *
+ * It was not removed for being expensive. It was removed because in the browser
+ * this actually is, it decided nothing:
+ *
+ *   - a site that paints its own background covers it, which is nearly all of
+ *     them, and Trance never restyles content;
+ *   - the sites that do not are the ones Zen Internet has already made
+ *     transparent, and Zen Internet is preinstalled — so on exactly the pages
+ *     where the region could be seen, something else had already decided the
+ *     answer and this was a second opinion about it;
+ *   - what was left — the pixels a page leaves unpainted, the rounded corners,
+ *     `about:` documents — the edgeless rule above and the internal-pages
+ *     switch below already own, and they own them at `transparent` rather than
+ *     at a percentage.
+ *
+ * So the switch's "on" state was indistinguishable from its "off" state on
+ * every page anyone looked at, and the slider under it moved a token with no
+ * remaining consumer. `browser.tabs.allow_transparent_browser` is still claimed
+ * — by the internal-pages switch, which is the half of this that was doing the
+ * work.
+ */
+
+/* ── Internal pages ─────────────────────────────────────────────────────────
+ *
+ * The browser's own pages, made translucent without making websites
+ * translucent. The page half of this lives in trance-internal.css, a USER sheet
+ * registered against `about:` documents — no chrome stylesheet is in scope
+ * inside a content document, so that is the only reachable half from here.
+ *
+ * This is the chrome half: the `<browser>` element that page lives in has to
+ * stop painting a backdrop, or the page's new translucency reveals a colour
+ * rather than the window.
+ *
+ * `[trance-internal-page]` is written by TranceSurfaces from one tabs progress
+ * listener — the URI is not something CSS can ask about, and the alternative
+ * (making every browser transparent) is the thing the edgeless rule above
+ * exists to undo.
+ */
+
+/* trance-specificity: matches the `browser[type="content"]` rule in
+   zen-browser-container.css, whose `[transparent="true"]` branch this replaces
+   — negations included, for the reason the edgeless rule above gives at
+   length. `about:` pages are the ones that are transparent in the first place,
+   so this is where Zen's white veil was most visible. */
+:root[trance="true"][trance-surface-internal="true"]:not([inDOMFullscreen="true"]):not([chromehidden~="location"]):not([chromehidden~="toolbar"])
+  #tabbrowser-tabbox
+  #tabbrowser-tabpanels
+  .browserSidebarContainer
+  browser[type="content"][trance-internal-page="true"] {
+  background: transparent;
 }
 
 /* ── Blur ───────────────────────────────────────────────────────────────────
  *
  * One declaration block per region, each gated on its own attribute plus the
- * shared visibility attribute. `flat` opts out of blur entirely; that preset is
- * translucency without a single Gaussian pass, and on macOS the window server's
- * own vibrancy already supplies most of the effect.
+ * shared visibility attribute — and all of it gated on the window *not* already
+ * being translucent. That last condition is the whole of this section, and it
+ * was learned the hard way.
+ *
+ * ── Why a translucent window must not carry a backdrop-filter ─────────────
+ *
+ * Frosting comes from two completely different places depending on the
+ * platform:
+ *
+ *   - Where the window itself is translucent — macOS vibrancy, Windows Mica,
+ *     a transparent GTK window — the frost is produced *behind Gecko* by the
+ *     compositor, and `#main-window` is `background: transparent` so it shows
+ *     through (zen-theme.css). Nothing Gecko paints is involved.
+ *   - Everywhere else the window is opaque, the workspace gradient is what is
+ *     behind a chrome region, and `backdrop-filter` is how that gets softened.
+ *
+ * Putting a `backdrop-filter` on a region of a *translucent* window does not
+ * blur the desktop showing through it. It establishes a backdrop root, snapshots
+ * the empty region behind the element, filters that, and composites the result
+ * over the transparent area — which replaces the operating system's frost with
+ * a flat black rectangle. Measured, not theorised: with `backdrop-filter` on
+ * `#navigator-toolbox` the sidebar rendered solid black; with the identical
+ * translucency and no `backdrop-filter` it rendered as glass over the desktop.
+ *
+ * That is the answer to three separate reports at once — "frosting is pure
+ * black", "the area around the tab window is unfrosted", and "blur radius does
+ * nothing". The blur was not doing nothing. It was the thing painting the black.
+ *
+ * So on those platforms the blur budget is zero surfaces and the operating
+ * system is the whole effect, which is also the cheapest possible outcome
+ * (TRANCE.md §3.3). On the platforms where Gecko does paint the backdrop, the
+ * budget is the same three regions it always was.
+ *
+ * `flat` opts out of blur even there: translucency without a single Gaussian
+ * pass.
+ *
+ * The other half of the "blur does nothing" report was a plain bug:
+ * `trance-surface-visible` was never set at startup, because `TranceSurfaces`
+ * only listened for `focus` and a window that is already focused when the
+ * feature initialises never fires one. Every rule below was dead for the whole
+ * session. See `TranceSurfaces#observeVisibility`.
  */
 
-@media (prefers-reduced-transparency: no-preference) {
-  :root[trance="true"][trance-surface-visible="true"]:not([trance-surface="flat"]) {
-    &[trance-surface-sidebar="true"] #navigator-toolbox {
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (prefers-reduced-transparency: no-preference) and (not ((-moz-windows-mica) or (-moz-platform: macos) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')))) {
+  :root[trance="true"][trance-surface-visible="true"] {
+    /* One surface for the whole browser. `#zen-main-app-wrapper` spans the
+     * sidebar, the toolbar and the space around the page, so this is the whole
+     * of the chrome in one pass — and it cannot nest, because there is only
+     * one. */
+    & #zen-main-app-wrapper {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
 
-    /* Multi-toolbar layout only. In single-toolbar layout this element is not
-     * the one carrying the toolbar, and blurring it would nest inside the
-     * toolbox surface above. */
-    &[trance-surface-toolbar="true"]:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper {
+    /* The expanded address bar keeps its own surface: it floats over the page
+     * rather than over the chrome, so the layer above is not behind it and
+     * cannot do this job. Two surfaces at most, and only while the bar is
+     * actually extended. */
+    & #urlbar[breakout-extend] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
 
-    &[trance-surface-overlay="true"] #urlbar[breakout-extend] {
+    /* The browser's own pages, frosted rather than merely translucent.
+     *
+     * This is the surface behind `about:preferences` and friends. It is not a
+     * fourth *chrome* region — it is the same page-transparency feature the
+     * internal-pages switch already ships, with the blur that makes a
+     * translucent page read as glass instead of as a washed-out slab
+     * (ADR-026). It costs a pass only while a browser is actually showing an
+     * `about:` page, which is what `[trance-internal-page]` marks, and only on
+     * the platforms this whole block is gated to — where the window is
+     * translucent in its own right the operating system has already done it.
+     *
+     * It is also mutually exclusive with the edgeless surface in practice: the
+     * page paints over that layer, so the two never sample each other. */
+    &[trance-surface-internal-blur="true"] browser[trance-internal-page="true"] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
   }
@@ -191,6 +796,6 @@
  * a second rule existing anywhere.
  */
 
-:root[trance="true"][trance-surface-overlay="true"] #urlbar[breakout-extend] {
+:root[trance="true"] #urlbar[breakout-extend] {
   border: var(--trance-border-width) solid var(--trance-surface-border);
 }

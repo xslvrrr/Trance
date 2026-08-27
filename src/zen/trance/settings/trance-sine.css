@@ -1,0 +1,299 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: about:preferences#sineMods — Sine's own pane, in the Trance palette.
+ *
+ * ── Why this is a separate file, and why it may use `!important` ───────────
+ *
+ * Trance ships the Sine mod manager (ADR-018), so Sine's pane is part of this
+ * browser's settings whether or not Trance drew it. Most of it comes along for
+ * free: Sine resolves its colours from Firefox's in-content design tokens, and
+ * trance-settings.css re-points those once for the whole document. What does
+ * not come along is everything Sine declares with `!important` — its card
+ * background, its shadow, its radius, its padding, and its primary button's
+ * accent fill.
+ *
+ * Sine's stylesheet is an author sheet, injected into this document at runtime,
+ * and Trance does not control it. Inside one origin, `!important` beats normal
+ * whatever the selector says, so there is no specificity that answers it: the
+ * only way for a Trance rule to sit above a third-party author sheet is
+ * `!important` at equal or greater specificity.
+ *
+ * That is a different argument from the one TRANCE.md §6.2 rule 1 bans. The ban
+ * exists because the mod stack used `!important` to fight *itself* — four
+ * stylesheets, one element, a winner that changed with load order (§3.1). Here
+ * there are exactly two sheets, they are in a fixed order, and Trance's is the
+ * one that is supposed to win. Keeping it in its own file is what keeps that
+ * true: nothing else in `src/zen/trance/**` may use `!important`, and the
+ * stylelint plugin still enforces that everywhere but here (`SINE_SHEET_FILE`
+ * in src/zen/trance/lint/stylelint-plugin-trance/index.mjs).
+ *
+ * Selectors are prefixed with `#preferences-body` — the document's body — for
+ * the same reason: Sine's rules are single-class, so one ID is enough to win
+ * the tie, and it keeps every rule here at a weight that is deliberate rather
+ * than escalated.
+ *
+ * Colours are the local palette from trance-settings.css (`--trance-ui-*`),
+ * which is declared on the document root and therefore in scope here.
+ *
+ * Refs: TRANCE.md §6.2, §6.5; ADR-018, ADR-028
+ */
+
+/* ── The two groups ─────────────────────────────────────────────────────────*/
+
+#sineInstalledHeader,
+#sineInstallationHeader {
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 12px;
+
+  & h2 {
+    font-size: 0.95em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Sine's marketplace scroller is a 192px grid inside a 400px box with a 4px
+ * padding to keep focus rings from clipping. The gap is its own; the surface
+ * around it is ours. */
+#sineInstallationList {
+  gap: 8px !important;
+  padding: 4px;
+  margin-block: 14px 6px;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────────
+ *
+ * One card treatment for both lists. Sine draws the installed list as a
+ * bordered box and the marketplace as a shadowed, tinted one — two ideas of a
+ * card in one pane, which is exactly the inconsistency this pass exists to
+ * remove. Both become the same card the Trance pane uses: raised surface, one
+ * hairline, one radius, no shadow.
+ */
+
+#preferences-body .sineItem,
+#preferences-body .sineInstallationItem {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius-card) !important;
+  padding: 14px !important;
+  background-color: var(--trance-ui-raised) !important;
+  box-shadow: none !important;
+  margin-bottom: 8px;
+  transition: border-color var(--trance-ui-duration) var(--trance-ui-easing);
+}
+
+#preferences-body .sineItem:hover,
+#preferences-body .sineInstallationItem:hover {
+  border-color: var(--trance-ui-line-strong) !important;
+}
+
+#preferences-body .sineItemTitle,
+#preferences-body .sineMarketplaceItemTitle {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+#preferences-body .sineMarketplaceItemDescription,
+#preferences-body .sineItem description {
+  color: var(--trance-ui-fg-muted);
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+/* The "update available" dot. Sine paints it in the space's gradient colour,
+ * which on a profile with no gradient picked is a near-black dot on a near-black
+ * card — the same failure the Trance token layer documents for
+ * `--trance-accent`. The page's inverse is the one value that reads either way. */
+#preferences-body .sineItemUpdateIndicator {
+  background: var(--trance-ui-inverse) !important;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────────*/
+
+#preferences-body .sineMarketplaceItemButton {
+  background-color: var(--trance-ui-inverse) !important;
+  color: var(--trance-ui-inverse-fg) !important;
+  border: none !important;
+  border-radius: var(--trance-ui-radius) !important;
+  font-weight: 500;
+}
+
+#preferences-body .sineMarketplaceItemButton:hover {
+  background-color: var(--trance-ui-inverse-hover) !important;
+}
+
+/* The icon buttons beside it — readme, homepage, configure, auto-update — are
+ * ghost buttons, so the filled one is unambiguously the action. */
+#preferences-body .sineMarketplaceOpenButton,
+#preferences-body .sineItemConfigureButton,
+#preferences-body .sineItemHomepageButton,
+#preferences-body .github-link,
+#preferences-body .auto-update-toggle {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius) !important;
+  background-color: transparent !important;
+  color: var(--trance-ui-fg) !important;
+}
+
+#preferences-body .sineMarketplaceOpenButton:hover,
+#preferences-body .sineItemConfigureButton:hover,
+#preferences-body .sineItemHomepageButton:hover,
+#preferences-body .github-link:hover,
+#preferences-body .auto-update-toggle:hover {
+  background-color: var(--trance-ui-control-hover) !important;
+}
+
+/* On, this one is a state rather than an action, so it takes the same inverted
+ * fill the switches on the Trance pane use. */
+#preferences-body .auto-update-toggle[enabled] {
+  background-color: var(--trance-ui-inverse) !important;
+  color: var(--trance-ui-inverse-fg) !important;
+  border-color: var(--trance-ui-inverse) !important;
+}
+
+#preferences-body .sineItemUninstallButton {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius) !important;
+  background-color: transparent !important;
+  color: var(--trance-ui-danger) !important;
+}
+
+#preferences-body .sineItemUninstallButton:hover {
+  background-color: color-mix(in srgb, var(--trance-ui-danger) 12%, transparent) !important;
+}
+
+/* ── Switches ───────────────────────────────────────────────────────────────
+ *
+ * A mod's boolean preference is a XUL `checkbox`, and Sine leaves it as the
+ * platform draws it — a tickbox on the left of its label. Every other on/off
+ * control in this document is a switch on the right (the Trance pane, Zen's
+ * three panes), so Sine's dialogs were the one place in the settings where
+ * "off" looked like a different kind of thing.
+ *
+ * Same construction as the one on Zen's panes: the checkbox is the row, its
+ * `.checkbox-check` is the track, and the knob is a `radial-gradient` inside it
+ * — `background-position-x` is animatable, so the knob slides without a
+ * pseudo-element being asked of a XUL `<image>`.
+ *
+ * `!important` for the reason the rest of this file uses it: Sine's sheet is a
+ * third-party author sheet injected after Trance's, so specificity alone cannot
+ * answer its own `!important` declarations. See the header.
+ */
+
+#preferences-body :is(.sineItemPreferenceDialogContent, .sineItem, #sineModsList) checkbox {
+  display: flex !important;
+  flex-direction: row-reverse !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin-inline: 0 !important;
+  padding-block: 6px !important;
+
+  & > .checkbox-label-box {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  & > .checkbox-label-box > .checkbox-label {
+    margin: 0;
+    white-space: normal;
+  }
+
+  & > .checkbox-check {
+    appearance: none !important;
+    flex: 0 0 auto;
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 20px !important;
+    margin: 0 !important;
+    border: 1px solid var(--trance-ui-line-strong) !important;
+    border-radius: var(--trance-ui-radius-pill) !important;
+    background-color: var(--trance-ui-control) !important;
+    background-image: radial-gradient(
+      circle 7px at 10px 50%,
+      var(--trance-ui-fg-muted) 99%,
+      transparent 100%
+    ) !important;
+    background-repeat: no-repeat !important;
+    background-position-x: 0;
+    transition:
+      background-color var(--trance-ui-duration) var(--trance-ui-easing),
+      background-position-x var(--trance-ui-duration) var(--trance-ui-easing),
+      border-color var(--trance-ui-duration) var(--trance-ui-easing);
+  }
+
+  &[checked] > .checkbox-check {
+    border-color: var(--trance-ui-inverse) !important;
+    background-color: var(--trance-ui-inverse) !important;
+    background-image: radial-gradient(
+      circle 7px at 10px 50%,
+      var(--trance-ui-inverse-fg) 99%,
+      transparent 100%
+    ) !important;
+    background-position-x: 13px;
+  }
+}
+
+/* ── Inputs ─────────────────────────────────────────────────────────────────*/
+
+#preferences-body .sineCKSOption-input,
+#sineInstallationCustom input,
+#sineInstallationHeader input {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius) !important;
+  background-color: var(--trance-ui-control) !important;
+  color: var(--trance-ui-fg) !important;
+}
+
+/* ── Dialogs ────────────────────────────────────────────────────────────────
+ *
+ * A mod's preference sheet. Sine gives it a 5px radius and its own padding; it
+ * becomes the same card as everything else, over a dimmed page.
+ */
+
+#preferences-body dialog {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius-card) !important;
+  padding: 18px !important;
+  background-color: var(--trance-ui-raised) !important;
+  color: var(--trance-ui-fg) !important;
+  box-shadow: 0 16px 48px light-dark(rgba(0, 0, 0, 15%), rgba(0, 0, 0, 60%)) !important;
+}
+
+#preferences-body .sineItemPreferenceDialogTopBar {
+  border-bottom: 1px solid var(--trance-ui-line) !important;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+/* Sine draws a labelled rule by painting the label's background in a hardcoded
+ * `#1c1b22` so that it covers the line behind it. On a translucent page that is
+ * an opaque patch floating in the middle of a hairline. The label takes the
+ * card's own colour instead, so it covers the rule and nothing else. */
+#preferences-body .separator-label {
+  background: var(--trance-ui-raised) !important;
+  color: var(--trance-ui-fg-muted) !important;
+}
+
+#preferences-body .sineItemPreferenceDialogContent vbox > hr {
+  border: none;
+  height: 1px;
+  background-color: var(--trance-ui-line);
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────────────*/
+
+#navigation-container button {
+  border: 1px solid var(--trance-ui-line) !important;
+  border-radius: var(--trance-ui-radius) !important;
+  background-color: transparent !important;
+}
+
+#navigation-container button:hover {
+  background-color: var(--trance-ui-control-hover) !important;
+}

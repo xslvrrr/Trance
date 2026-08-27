@@ -90,6 +90,7 @@ positioned from that one measurement. The mod's shape invites one
 |---|---|---|---|
 | `trance.feedback.bubbles.enabled` | bool | `true` | Burst a tab into bubbles when it closes |
 | `trance.feedback.bubbles.count` | int | `8` | Bubbles per burst (clamped 3–16) |
+| `trance.feedback.bubbles.shape` | string | `circle` | Burst shape (`circle` \| `line`) |
 
 ### Teardown plan
 
@@ -110,3 +111,53 @@ bubble still in the DOM. With the pref off there is no listener and no node.
 ## 8. Open questions for the user
 
 None. The default count is a guess; say if 8 is wrong.
+
+---
+
+## 8. Revision — 2026-08-25
+
+Reported as "no bubble bursting effect on tab close". The burst was running: the
+`TabClose` listener fired, the rect was measured once, the Web Animations ran and
+`finished` removed each bubble. They were drawn in `--trance-accent-muted`, a
+35%-alpha mix of `--zen-primary-color` — `rgb(47, 47, 47)` on a fresh profile —
+so eight near-black circles burst across near-black chrome.
+
+Same fix as the loading bar: the bubbles use `--trance-accent-vivid`, and the
+default size went from 6px to 7px. See `deta-loading-bar.md` §8.
+
+## 9. Revision — 2026-08-26
+
+Reported as "the burst should be gaussian instead of uniform", with a request for
+a line burst as well as a circle one.
+
+The first version placed bubble `i` at exactly `i / count` of a circle and sent
+every one of them exactly `travel` pixels. That is not a burst — it is a ring
+expanding at a constant rate: identical on every close, in formation for the
+whole animation, and with none of the density falloff that makes a scatter read
+as a scatter. "Uniform" was visible as a rotating dial.
+
+Three quantities are now an evenly-spaced *mean* plus one clamped normal
+deviate, sampled with Box–Muller (`#gaussian`, clamped to ±2σ so one tail sample
+cannot throw a bubble across the window):
+
+| Quantity | Mean | Deviation |
+|---|---|---|
+| Angle | `index × 2π / count` | 0.55 of the gap between two neighbours |
+| Distance | half the tab's larger dimension | 0.4 of the mean |
+| End scale | 1 | 0.22 |
+
+The even spacing is kept as the mean rather than replaced by a uniform random
+angle, because N independent uniform angles clump: a burst of eight with three
+of them overlapping reads as a bug rather than as randomness. Stratify, then
+jitter.
+
+`line` sends the same scatter along the horizontal axis — the row the tab
+occupied — instead of around a circle. Bubbles alternate arms so both sides are
+used at any count, odd ones included, and are stratified along each arm so the
+near pair and the far pair are drawn from different strata rather than piling at
+the end. `LINE_REACH` (1.9×) buys back the reach a circle gets from spreading in
+two dimensions; `LINE_THICKNESS` (0.16 of the mean distance) is the cross-axis
+spread.
+
+Cost is unchanged: the same N elements, the same duration, the same `finished`
+cleanup, plus two `Math.random()` calls and one `log`/`cos` pair per sample.

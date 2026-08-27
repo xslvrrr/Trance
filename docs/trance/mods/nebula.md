@@ -175,3 +175,69 @@ byte-for-byte stock Zen.
    will not animate it, because that is the single largest idle-power item in
    the whole stack. Is a static gradient that follows the space accent an
    acceptable substitute?
+
+---
+
+## 9. Revision — 2026-08-25
+
+Three reported symptoms, one architectural cause, recorded in full as
+**ADR-022**.
+
+- **"Frosting is pure black."** Two causes, compounding. `trance-surface-visible`
+  was never set at startup — `TranceSurfaces` only listened for `focus`, and a
+  chrome window that is already frontmost when the feature initialises never
+  fires one — so every blur rule was dead. Once that was fixed the blur ran, and
+  the sidebar turned solid black: on a window whose translucency comes from the
+  compositor (`zen.widget.macos.window-vibrancy`, Mica, transparent GTK), a
+  `backdrop-filter` snapshots the empty region Gecko painted behind the element
+  and composites the filtered result over the transparent area, **replacing** the
+  operating system's frost rather than softening it.
+- **"The area around the tab window is unfrosted."** Same cause. The gutter is
+  `#zen-browser-background`, which the sidebar region already covers; it was
+  black for the same reason the sidebar was.
+- **"Blur radius and surface saturation do nothing."** The blur was not doing
+  nothing — it was the thing painting the black. Saturation genuinely did
+  nothing: it lived only inside the `backdrop-filter`, which had no coloured
+  backdrop to act on. It is now a `filter: saturate()` on Zen's own background
+  elements, where it acts on the workspace gradient.
+
+Changes:
+
+- No `backdrop-filter` at all on a platform whose window is translucent. The
+  three-surface budget is unchanged where the window is opaque.
+- `about:preferences#trance` hides the blur slider on exactly that condition and
+  shows one sentence in its place, so there is no control that cannot work.
+- `trance.surface.opacity` 62 → 35. With the black-painting filter gone, 62% of
+  Zen's gradient is still an almost-opaque sheet on a space with no gradient.
+- New opt-in `trance.surface.keep-transparent-unfocused`, which claims Zen's
+  `zen.view.grey-out-inactive-windows` (ADR-011's pattern). Without it an
+  unfocused window drops to opaque grey at the widget level, below anything a
+  Trance pref could reach — which is the other half of "pure black".
+
+## 10. Revision — 2026-08-27: the active tab glow
+
+§1 listed the glow behind the selected tab among Nebula's behaviours and §2 dropped it, on the
+grounds that a tab's selected state was already legible from its fill. That was right about the
+legibility and wrong about the point: the glow is not a state indicator, it is the one place in the
+sidebar where the space's colour reaches something other than a background, and dropping it left the
+tab strip reading as grey rows on a coloured window.
+
+It is back, as `trance.tabstrip.glow.mode` — `none` (default), `theme`, `icon` — with a reach and a
+strength. **Opt in**, because it is the one thing in the tab strip that paints outside a tab's own
+box and a default that does so is a stronger opinion than a default should hold.
+
+Clean-room, as everything from this mod must be: Nebula is GPL-3.0, so none of its rules were read
+and none may be copied (TRANCE.md §7.2). What was reimplemented is the described behaviour.
+
+Three things are Trance's own answers rather than Nebula's:
+
+- **`icon` mode does not sample the favicon.** Reading a dominant colour means drawing the image
+  into a canvas and walking its pixels on every tab switch. Scaling the favicon up and blurring it
+  past recognition behind the tab is cheaper *and* a better answer, because a two-colour favicon
+  goes on being two colours instead of collapsing to their average.
+- **It is drawn on the tab, not on `.tab-background`.** Zen declares `overflow: hidden` on the
+  latter, so a glow drawn there is clipped to exactly the box it exists to escape. The tab's own
+  clipping is `overflow: clip` with a margin — the same clipping with a dial on it — so the dial is
+  opened to twice the glow's reach and the glow paints.
+- **The shape is a half-ellipse, flush at the bottom.** A glow that reached under the tab reads as
+  the gap between two rows lighting up rather than as this row being the active one.

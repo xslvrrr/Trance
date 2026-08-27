@@ -10,10 +10,39 @@
 | **User's version** | 1.1 → 1.4 |
 | **Source** | `qumeqa/zen-icons` (Sine store id `zen-icons`) |
 | **License** | **none** |
-| **Verdict** | NATIVE |
+| **Verdict** | **PREINSTALL** (was NATIVE) |
 | **Phase** | 5 |
 | **Cluster** | icons |
 | **Investigated** | 2026-08-25 |
+| **Verdict revised** | 2026-08-26 — ADR-024 |
+
+## 0. The revised verdict
+
+Everything below §1 stands: the reimplementation was built, it works, and it is
+still shipped. What changed is which one is the default.
+
+A clean-room set can satisfy this mod's *requirement* — a stroke set that reaches
+the toolbar and the panels, not only the context menus — and by construction it
+cannot be this mod's *icons*, because §7.3 forbids reproducing them. For anyone
+who wanted this icon set, "a different icon set with the same coverage" is not
+the thing they asked for, and no amount of care in §6 changes that.
+
+Installing the mod is not copying it. Trance already ships Sine preinstalled so
+that everything it does not reimplement stays reachable (ADR-018), and
+`scripts/trance-cosine.py` already fetches Sine from its own releases rather than
+vendoring it. `PREINSTALLED_MODS` in that script now carries this one entry: the
+mod is fetched from the Sine store into `{profile}/chrome/sine-mods/` and into
+the new-profile stage, at whatever version its author is publishing, and Sine's
+own updater owns it from then on.
+
+So `trance.chrome.icons.enabled` defaulted to **false** — and then, in ADR-039,
+stopped existing. Three shipped packs behind a switch nobody was expected to
+flip is a second owner kept alive for its own sake, and the only way a pack
+could win was to disable Zen's icon sheet wholesale, which traded one problem
+for three drawing styles in one menu. The packs are gone; uninstalling this mod
+now falls back to the browser's own icons, and the mod guard says so on the
+mod's own card under a `shipped` status that is not coloured like a warning
+because it is not one.
 
 ## 1. What it actually does
 
@@ -74,16 +103,36 @@ context menus — and contributes **no assets and no code**.
 ## 6. Trance design
 
 - **Module:** `TranceChrome` (icons sub-feature) — no separate module
-- **Stylesheet:** the generated `trance-icons-<pack>.css`, extended by hand with
-  the toolbar / panel / site-data selectors CMI does not already cover
+- **Stylesheet:** none. Three packs were built and then withdrawn (ADR-039);
+  what is left of the icon cluster is `trance.chrome.icons.scale`, which sizes
+  whichever glyph is on screen through Zen's own `--zen-toolbar-button-size`
+  rather than supplying a glyph of its own
 - **Scheduler use:** none
 - **Observer use:** none
 - **New tokens:** none beyond the icon-size tokens in `context-menu-icons.md`
 
+### The thing that made all of this a no-op until it was found
+
+Zen's own `src/browser/themes/shared/zen-icons/icons.css` is a second owner for
+every element the packs map, and it wins: 137 of its declarations carry
+`!important`, including the `list-style-image` on `#back-button`,
+`#forward-button` and `#reload-button`. A normal author declaration cannot beat
+an important one at any specificity, so no Trance pack ever reached the toolbar.
+The only visible effect of turning the icon set on was that Trance's
+`fill: currentColor` reached `.toolbarbutton-1`, which Zen's sheet does not
+cover — so the switch left Zen's glyphs in place and *brightened* them.
+
+The sheet is a `<link>` in `zen-assets.inc.xhtml`, so `TranceChrome` disabled
+the element while a pack was loaded and re-enabled it the moment the switch went
+off. That worked and was exactly reversible — but it also meant every element
+the pack had no glyph for fell back to Firefox's icon rather than Zen's, which
+is a large price for a switch that was off by default. ADR-039 removed the packs
+and with them this whole mechanism: Zen's sheet is never touched now.
+
 ### Prefs
 
-None of its own. `trance.chrome.icons.enabled` and
-`trance.chrome.icons.pack` cover it.
+None of its own, and none left in the cluster except
+`trance.chrome.icons.scale` (ADR-039).
 
 ### Teardown plan
 
@@ -91,11 +140,14 @@ Shared with the icons sub-feature.
 
 ## 7. Acceptance criteria
 
-- [ ] Toolbar, app menu, downloads panel and site-information panel all draw
-      from the Trance set when the sub-feature is on
-- [ ] No glyph is inlined as a data URI (TRANCE.md §3.8, Phase 5 acceptance)
-- [ ] No asset or rule originates from this mod
-- [ ] `CREDITS.md` records qumeqa and that nothing was copied
+- [x] Toolbar, app menu, downloads panel and site-information panel all draw
+      from the Trance set when the sub-feature is on — verified against the
+      computed `list-style-image` of `#back-button`, not against the stylesheet
+      (`browser_trance_chrome.js`), because the stylesheet was correct the whole
+      time it was losing
+- [x] No glyph is inlined as a data URI (TRANCE.md §3.8, Phase 5 acceptance)
+- [x] No asset or rule originates from this mod
+- [x] `CREDITS.md` records qumeqa and that nothing was copied
 
 ## 8. Open questions for the user
 

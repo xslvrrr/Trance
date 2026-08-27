@@ -35,6 +35,103 @@ const MOTION_FILE = "trance-motion.css";
 /** The one file allowed to apply `backdrop-filter`. */
 const SURFACES_FILE = "trance-surfaces.css";
 
+/**
+ * The one file that is not an author sheet.
+ *
+ * `trance-internal.css` is registered with `nsIStyleSheetService` as a USER
+ * sheet so that it can reach `about:` documents, where no chrome stylesheet is
+ * in scope. That is a different cascade origin, and three of the rules below
+ * are about author-sheet-versus-author-sheet conflicts specifically:
+ *
+ *   - `no-important`: in the author origin `!important` is how the mod stack
+ *     fought itself (TRANCE.md §3.1). In the user origin it is the documented
+ *     way to sit above a page's own author rules, and there is no alternative —
+ *     the in-content theme declares some of these normally and some with
+ *     `!important`, and user-normal loses to author-normal.
+ *   - `no-literal-colors` and `root-tokens-only-in-tokens-file`: the token layer
+ *     is a chrome stylesheet. It is not loaded in a content document, so
+ *     `var(--trance-*)` resolves to nothing there. The file has to carry its own
+ *     small set of values, and it does so in one block at the top.
+ *
+ * This is an exemption for one named file with a stated reason, not a hole:
+ * every other rule still applies to it, and no other file may be added here
+ * without the same argument.
+ */
+const USER_SHEET_FILE = "trance-internal.css";
+
+/**
+ * The one file that has to answer a third-party author sheet.
+ *
+ * Trance ships the Sine mod manager (ADR-018), so Sine's own pane is part of
+ * this browser's settings page. Sine's stylesheet is an author sheet injected
+ * into the same document at runtime, and roughly a dozen of its declarations
+ * carry `!important` — its card background, its shadow, its radius, its padding
+ * and its primary button's fill. Inside one origin `!important` beats normal
+ * whatever the selector says, so no specificity answers it.
+ *
+ * That is a different situation from the one the ban is about. §6.2 rule 1
+ * exists because the mod stack used `!important` to fight *itself*: four
+ * stylesheets over one element with a winner that changed with load order
+ * (§3.1). Here there are exactly two sheets, in a fixed order, and Trance's is
+ * the one that is meant to win. The exemption is for that file and that
+ * argument; every other rule still applies to it.
+ */
+const SINE_SHEET_FILE = "trance-sine.css";
+
+/**
+ * The files that own a palette for a document the token layer cannot reach.
+ *
+ * `TranceCore` loads trance-tokens.css into browser windows only, so inside
+ * `about:preferences` every `--trance-*` resolves to nothing. Firefox's own
+ * in-content design tokens are in scope there and are consumed wherever they
+ * answer the question — but "the settings page is black" is not a question they
+ * answer, and a design that could only be expressed in the values Firefox
+ * happened to pick would not be a design.
+ *
+ * trance-settings.css is therefore the token owner for that document, on the
+ * same terms trance-tokens.css is for a browser window: one block, at the top
+ * of the file, and nothing below it declares a colour. trance-sine.css consumes
+ * that block and declares none of its own — it is listed because two of its
+ * shadows need an alpha and there is no token for one.
+ */
+const PALETTE_FILES = [USER_SHEET_FILE, "trance-settings.css", SINE_SHEET_FILE];
+
+/**
+ * The sheets that are not loaded into a browser window.
+ *
+ * `about:preferences` is a content-ish document. `TranceCore` loads the token
+ * layer into browser windows only, so in these files `var(--trance-dur-*)` and
+ * `var(--trance-ease-*)` resolve to nothing — a rule written against them would
+ * not be a rule, it would be a no-op that reads as one.
+ *
+ * They are therefore exempt from the duration rule. `no-literal-colors` is a
+ * separate list (`PALETTE_FILES`): trance-mod-guard.css is on this one and not
+ * on that one, because Firefox's own status colours answer its question exactly
+ * and there is simply no equivalent for a duration.
+ */
+const TOKENLESS_FILES = [
+  USER_SHEET_FILE,
+  "trance-settings.css",
+  "trance-mod-guard.css",
+  SINE_SHEET_FILE,
+];
+
+/**
+ * The reset layer, and the one file allowed to write `will-change: auto`.
+ *
+ * §6.2 rule 6 bans `will-change` because a static one *promotes* a permanent
+ * compositor layer. `will-change: auto` is the initial value: it does the
+ * opposite, and it is the only way to take back a promotion an upstream Zen
+ * sheet declared statically on an element Trance does not own. Fighting it any
+ * other way would need `!important`, which rule 1 bans for better reasons.
+ *
+ * The exemption is exactly `auto`, exactly here. Any other value in this file
+ * is still rejected, and every other rule still applies to it.
+ *
+ * Refs: TRANCE.md §3.5, §6.2 rule 6, §13 Phase 11
+ */
+const RESET_SHEET_FILE = "trance-reset.css";
+
 const ruleName = id => `${NAMESPACE}/${id}`;
 
 function basename(node) {
@@ -87,8 +184,12 @@ function rule(id, message, check) {
  */
 const noImportant = rule(
   "no-important",
-  "Unexpected !important in Trance CSS. Fix the selector or add a rule to trance-reset.css instead (TRANCE.md §6.2 rule 1).",
+  "Unexpected !important in Trance CSS. Fix the selector, add a rule to trance-reset.css, or — if the sheet it has to answer is a third party's — say so where the exemptions are listed (TRANCE.md §6.2 rule 1).",
   (root, report) => {
+    const file = basename(root);
+    if (file === USER_SHEET_FILE || file === SINE_SHEET_FILE) {
+      return;
+    }
     root.walkDecls(decl => {
       if (decl.important) {
         report(decl);
@@ -109,7 +210,7 @@ const noLiteralColors = rule(
   "no-literal-colors",
   `Literal colour outside ${TOKENS_FILE}. Add a --trance-* token and consume it (TRANCE.md §6.2 rule 2).`,
   (root, report) => {
-    if (basename(root) === TOKENS_FILE) {
+    if ([TOKENS_FILE, ...PALETTE_FILES].includes(basename(root))) {
       return;
     }
     root.walkDecls(decl => {
@@ -138,7 +239,11 @@ const noLiteralDurations = rule(
   `Literal duration or easing outside ${TOKENS_FILE}/${MOTION_FILE}. Use a --trance-dur-* or --trance-ease-* token (TRANCE.md §6.2 rule 3).`,
   (root, report) => {
     const file = basename(root);
-    if (file === TOKENS_FILE || file === MOTION_FILE) {
+    if (
+      file === TOKENS_FILE ||
+      file === MOTION_FILE ||
+      TOKENLESS_FILES.includes(file)
+    ) {
       return;
     }
     root.walkDecls(decl => {
@@ -219,15 +324,23 @@ const noBackdropFilter = rule(
  * Static `will-change` promotes a permanent compositor layer for an element
  * that animates for 200 ms a day. TranceMotion adds it for the lifetime of an
  * animation and removes it afterwards (TRANCE.md §3.5).
+ *
+ * `will-change: auto` in the reset layer is the one exception, and it enforces
+ * the same rule rather than bending it — see `RESET_SHEET_FILE`.
  */
 const noWillChange = rule(
   "no-will-change",
   "will-change in Trance CSS. TranceMotion.animate() adds and removes it around the animation instead (TRANCE.md §3.5, §6.2 rule 6).",
   (root, report) => {
+    const inResetSheet = basename(root) === RESET_SHEET_FILE;
     root.walkDecls(decl => {
-      if (decl.prop.toLowerCase() === "will-change") {
-        report(decl);
+      if (decl.prop.toLowerCase() !== "will-change") {
+        return;
       }
+      if (inResetSheet && decl.value.trim().toLowerCase() === "auto") {
+        return;
+      }
+      report(decl);
     });
   }
 );
@@ -291,7 +404,7 @@ const rootTokensOnlyInTokensFile = rule(
   "root-tokens-only-in-tokens-file",
   `Custom property declared on :root outside ${TOKENS_FILE}. One token layer, one owner per property (TRANCE.md §6.2).`,
   (root, report) => {
-    if (basename(root) === TOKENS_FILE) {
+    if ([TOKENS_FILE, USER_SHEET_FILE].includes(basename(root))) {
       return;
     }
     root.walkRules(node => {

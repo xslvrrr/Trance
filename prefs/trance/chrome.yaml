@@ -9,8 +9,9 @@
 # (8), New Icons (11), Nova UI (12), Zen Context Menu (20) and Zen Custom URL
 # Bar (21). Between them those seven ship four icon sets and roughly fifty
 # preferences, and two of them (4 and 20) actively undo each other on the same
-# selectors. Here there is one icon set with two packs, one owner per element,
-# and the six prefs below (TRANCE.md §3.8, §8.1).
+# selectors. Here there are no icon packs at all — the browser's own glyphs, one
+# size control over them, one owner per element, and the prefs below
+# (TRANCE.md §3.8, §8.1).
 #
 # Note there is no float pref type: ffprefs quotes any value containing a `.`,
 # which would make it a string pref. Sizes are integer pixels and percentages.
@@ -26,42 +27,38 @@
 
 # === Mark: Icons ===
 
-# One icon set, shipped as real files under
-# chrome://browser/content/trance-icons/<pack>/ — not inlined as data URIs,
-# which is how four mods managed to parse the same padlock four times and cache
-# it zero times (TRANCE.md §3.8).
-- name: trance.chrome.icons.enabled
-  value: true
-
-# fluent — Fluent UI, the default
-# zen    — a set drawn to match Zen's own line weight
+# There are no Trance icon packs any more, and no icon-set switch.
 #
-# Exactly one pack's stylesheet is loaded at a time. Switching this unloads one
-# file and loads the other, so the pack you are not using costs nothing.
+# Three complete sets shipped in-tree (`line`, `fluent`, `zen`) and every one of
+# them was a second owner for glyphs somebody else already draws: Zen's own
+# `zen-icons/icons.css` owns the toolbar with 137 `!important` declarations, and
+# Trance preinstalls the "New Icons" mod so that the icons are the ones that
+# mod's author draws (ADR-024). A pack could only win by disabling Zen's sheet,
+# which left every element the pack had no glyph for falling back to Firefox's
+# icon — one owner per element bought at the price of three different drawing
+# styles in one menu. Removing the packs removes the whole argument, and with it
+# `trance.chrome.icons.pack`, `trance.chrome.icons.enabled` and
+# `trance.chrome.icons.macos-emulated-menus`, which only ever existed to get
+# icons into a menu a pack had glyphs for (ADR-039).
 #
-# The packs are not identical: ZenUI has 31 glyphs Fluent does not and Fluent
-# has 22 ZenUI does not. Where a pack has no glyph for an element, that element
-# keeps the browser's own icon rather than borrowing from the other pack — two
-# drawing styles in one menu is worse than one missing custom icon.
-- name: trance.chrome.icons.pack
-  value: "fluent"
+# What is left is the one thing about icons that is a preference rather than a
+# second implementation: how big they are.
 
-# Pixels. Mirrored into --trance-menu-icon-size.
-- name: trance.chrome.icons.size
-  value: 16
-
-# macOS draws page and tab context menus itself
-# (widget.macos.native-context-menus, which defaults to true), and no stylesheet
-# can put an icon into an AppKit menu. Turning that off gets the icons and gives
-# up the platform menu — its accessibility behaviour, its feel, its scrolling.
+# Percentage of the browser's own icon size, 75 to 125 in steps of 1.
 #
-# Trance neither forces that trade nor hides it. Off by default; when on,
-# TranceChrome claims the platform pref and restores the user's value on
-# disable, the same way TranceSurfaces treats zen.theme.acrylic-elements
-# (ADR-011, ADR-020). Icons reach every menu the browser draws itself either
-# way: panels, the app menu, Zen's folder and space menus, the bookmarks menu.
-- name: trance.chrome.icons.macos-emulated-menus
-  value: false
+# Mirrored into `--trance-icon-scale` (unitless) and `--trance-menu-icon-size`
+# (pixels). The toolbar reads the scale through Zen's own
+# `--zen-toolbar-button-size`, which is the variable Firefox's toolbar-button
+# rule already multiplies out, so this reaches every toolbar glyph rather than
+# only the ones a pack had a file for.
+#
+# 100 is the browser's own size and is therefore a genuine no-op: the tokens
+# resolve to what Zen already declared and no rule changes anything. That is
+# also the answer to "the icon size setting does nothing" — it was bound to a
+# token only the pack stylesheets read, and the packs were off by default, so
+# moving the slider changed a variable nothing consumed.
+- name: trance.chrome.icons.scale
+  value: 100
 
 # === Mark: Menus and panels ===
 
@@ -81,17 +78,51 @@
 - name: trance.chrome.menus.tint
   value: true
 
-# === Mark: New tab button ===
+# === Mark: App menu button ===
 
-# Better New Tab Button (2) B1: no label, centred plus. The collapsed rail
-# already draws it this way, so today the expanded sidebar is the odd one out.
+# The Trance mark in place of the three-dot app-menu glyph.
 #
-# Its B2 (rotate on press) has no pref of its own. It is motion, motion is
-# owned by trance.motion.level, and at level 0 the duration token is 0ms so the
-# button simply does not turn. Its B3 (per-component radius sliders) is dropped:
-# Trance has one radius scale and the entire anti-conflict design rests on there
-# being one owner per value (TRANCE.md §6.2).
-- name: trance.chrome.newtab.compact
+# Zen's icon sheet declares `list-style-image: url("menu.svg") !important` on
+# `#PanelUI-menu-button`, so the button itself cannot be answered without an
+# `!important` of Trance's own (TRANCE.md §6.2 rule 1). It does not have to be:
+# `list-style-image` is inherited, the `<image class="toolbarbutton-icon">`
+# inside the button is what actually paints it, and a normal declaration on the
+# child beats an inherited value regardless of how important the declaration it
+# came from was.
+#
+# On by default — it is the browser's own mark on the browser's own menu — and
+# it is one switch away from the platform glyph for anyone who wants the
+# affordance to look like every other browser's.
+- name: trance.chrome.logo-menu-button
+  value: true
+
+# === Mark: New tab button — removed ===
+#
+# `trance.chrome.newtab.compact` is gone. Trance preinstalls "Better New Tab
+# button" itself now, at the version its author publishes, rather than
+# reimplementing the one behaviour of it that was kept — see PREINSTALLED_MODS
+# in scripts/trance-cosine.py. Two owners for one button was the thing this
+# project exists to remove, and the mod is the better owner: it is the whole
+# mod rather than a third of it, and its per-component radius sliders are the
+# author's problem to reconcile rather than a switch Trance had to refuse.
+
+# === Mark: The top of the sidebar ===
+
+# The window buttons and the compact-mode toggle, hidden until the pointer is
+# near them.
+#
+# Between them they occupy the top of the sidebar permanently to offer two
+# things nobody uses on a schedule: three window controls the platform also
+# offers by other means, and one toggle. On, they fade and slide in when the
+# pointer reaches the strip they live in, and go away again when it leaves.
+#
+# `opacity` and `transform`, never `display` or `visibility`: the box keeps its
+# size, so nothing below it moves when the buttons arrive, and — the part that
+# matters — the pointer landing *on* a hidden button is still inside the strip
+# that reveals them, so they cannot flicker away underneath the cursor. Keyboard
+# focus reveals them too, because a control that can only be found with a mouse
+# is a control some people do not have.
+- name: trance.chrome.topbuttons.reveal-on-hover
   value: true
 
 # === Mark: Address bar ===
@@ -105,6 +136,11 @@
 # the bar reads as the modal layer it is. This is `filter`, not
 # `backdrop-filter` — it does not touch the blur budget, and it only runs while
 # the bar is open.
+#
+# Dim and blur are two switches because they are two effects. They were one
+# declaration, which meant the blur could not be turned off without losing the
+# dim, and it borrowed --trance-surface-blur — the *frosted chrome* radius —
+# so 24px of smear landed on the page whenever anyone widened a surface.
 - name: trance.chrome.urlbar.focus-dim
   value: true
 
@@ -113,3 +149,20 @@
 # disappears entirely.
 - name: trance.chrome.urlbar.focus-dim.strength
   value: 30
+
+# The other half. Both halves are clipped to the content pane's own rounded
+# rectangle: a `filter: blur()` paints outside the box it is applied to, so the
+# blurred page used to bleed a halo over the sidebar and the gutter and the
+# effect read as belonging to the window rather than to the page.
+- name: trance.chrome.urlbar.focus-blur
+  value: true
+
+# Pixels. Mirrored into --trance-urlbar-blur. Its own value, not the surface
+# blur's: this is a `filter` on the page, that is a `backdrop-filter` on chrome.
+#
+# 15, not 6. The point of the effect is that the page stops being readable while
+# the address bar is the thing you are using, and at 6px it was still legible —
+# a slightly soft page reads as a rendering fault rather than as a layer moving
+# behind a modal one.
+- name: trance.chrome.urlbar.focus-blur.radius
+  value: 15

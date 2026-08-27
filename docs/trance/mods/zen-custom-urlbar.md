@@ -116,3 +116,26 @@ there is no half-dimmed state to clean up.
 
 1. B2 (scaling the page) is dropped, matching the mod's own default. Say so if
    you had turned it on.
+
+---
+
+## 9. Revision — 2026-08-25
+
+B1's implementation was wrong in three ways, all reported as one symptom
+("dim blur should be within tab window bounds and should have a slider and a
+separate setting for blur"):
+
+1. **The blur escaped the tab window.** `filter: blur()` paints outside the box
+   it is applied to, so the dimmed page bled a halo over the sidebar and the
+   gutter and the effect read as belonging to the window rather than to the
+   page. `clip-path` runs after `filter` in the rendering order, so an inset clip
+   at the content pane's own radius is exactly "within the tab window bounds" —
+   and it needs no `overflow` change on anything that has to scroll.
+2. **It borrowed `--trance-surface-blur`.** That is the *frosted chrome* radius,
+   a `backdrop-filter` value; 24px of it on the page is a smear, and widening a
+   surface smeared the page as a side effect. The address bar now has its own
+   `trance.chrome.urlbar.focus-blur.radius`, defaulting to 6px and capped at 24.
+3. **Dim and blur were one pref.** `filter` takes a single list, so a rule per
+   half would overwrite rather than compose. Each half is now a named function
+   (`--trance-urlbar-dim-fn`, `--trance-urlbar-blur-fn`) that resolves to an
+   identity when its switch is off, and one declaration carries both.

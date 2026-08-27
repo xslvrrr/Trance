@@ -47,6 +47,29 @@ const FEATURES = Object.freeze([
     url: "chrome://browser/content/trance-components/TranceFeedback.mjs",
     exportName: "TranceFeedback",
   },
+  {
+    // Last, and it matters: this one extends `gZenThemePicker`, which
+    // `ZenSpaceManager` constructs during Zen's own startup. Trance is already
+    // the final entry in ZenPreloadedScripts for the same reason (§3.7).
+    url: "chrome://browser/content/trance-components/TranceTheme.mjs",
+    exportName: "TranceTheme",
+  },
+  {
+    // After the theme picker, and it matters: the workspace-colours page opens
+    // `gZenThemePicker`'s own panel, which `TranceTheme` has by then extended
+    // (ADR-031). Opening it before that would show Zen's picker without
+    // Trance's controls on the one screen built to introduce them.
+    url: "chrome://browser/content/trance-components/TranceOnboarding.mjs",
+    exportName: "TranceOnboarding",
+  },
+  {
+    // Last, and it also matters, for the opposite reason to everything above:
+    // this one waits for the first-run flow to finish before it does anything
+    // at all, so it is the only feature here whose work happens after startup
+    // rather than during it.
+    url: "chrome://browser/content/trance-components/TranceFirstRun.mjs",
+    exportName: "TranceFirstRun",
+  },
 ]);
 
 class nsTranceCore extends nsZenPreloadedFeature {
@@ -151,6 +174,33 @@ class nsTranceCore extends nsZenPreloadedFeature {
       NS,
       `activated in ${(window.performance.now() - started).toFixed(1)}ms`
     );
+  }
+
+  /**
+   * The `TranceLog` counters for *this window*, for the §12.1 budget checks.
+   *
+   * `scripts/trance-perf.py` reads the counters over Marionette, and it cannot
+   * get at them by importing TranceLog itself: `ZenPreloadedScripts` imports
+   * TranceCore with `{ global: "current" }`, so the module — and the Map it
+   * keeps the counts in — lives in this window's global, while an import from
+   * a Marionette sandbox resolves to a different instance of the same module
+   * whose Map has never been written to. The symptom is not an error; it is a
+   * plausible-looking `{}`, which reads as "nothing ever happened".
+   *
+   * Exposing it here costs nothing when `trance.debug` is off, because nothing
+   * increments a counter in that case either.
+   *
+   * Refs: TRANCE.md §12.1, §13 Phase 11
+   *
+   * @returns {object} A snapshot of every counter.
+   */
+  get counters() {
+    return TranceLog.snapshot();
+  }
+
+  /** Clears the counters, so a measurement can be scoped to one interaction. */
+  resetCounters() {
+    TranceLog.resetCounters();
   }
 
   #deactivate() {

@@ -1,0 +1,146 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the browser's own pages, made translucent.
+ *
+ * ── Why this file is not like the others ───────────────────────────────────
+ *
+ * Every other Trance stylesheet is an AUTHOR sheet loaded into a browser
+ * window, where the token layer is in scope and `:root[trance="true"]` is a
+ * real selector. `about:preferences` is not that. It is a *content* document
+ * living in a `<browser>`, so no chrome stylesheet reaches it, `:root` is the
+ * page's own root, and none of `--trance-*` exists.
+ *
+ * So this sheet is registered with `nsIStyleSheetService` as a USER sheet by
+ * `TranceSurfaces`, once per application rather than once per window, and it is
+ * scoped with `@-moz-document` — which is exactly the mechanism `userContent.css`
+ * has always used and the only one available to a sheet that has to pick its
+ * documents by URL.
+ *
+ * Two consequences worth stating plainly:
+ *
+ *   1. **It needs `!important` and is exempt from the ban.** The ban
+ *      (TRANCE.md §6.2 rule 1) exists because author sheets fighting author
+ *      sheets is nondeterministic. A user sheet is a different cascade origin:
+ *      author `!important` beats user normal, and the in-content theme declares
+ *      its page background normally but its *panel* backgrounds behind
+ *      `!important` in places. `!important` in a user sheet is the documented
+ *      way to sit above the author, not a way to win a race. The plugin exempts
+ *      this one named file and says why; see `USER_SHEET_FILE` in
+ *      src/zen/trance/lint/stylelint-plugin-trance/index.mjs.
+ *   2. **It cannot read the token layer.** `--trance-internal-alpha` is
+ *      declared here with the shipped default, and `TranceSurfaces` registers a
+ *      second, generated, one-line sheet that re-declares it from
+ *      `trance.surface.internal.opacity`. That is the whole of the pref
+ *      plumbing — no rule is rebuilt when the slider moves.
+ *
+ * The canvas itself is made alpha-composited by
+ * `browser.tabs.allow_transparent_browser`, which `TranceSurfaces` claims. This
+ * sheet only stops the *page* painting over it.
+ *
+ * Refs: TRANCE.md §3.3, §6.2, §8.1; ADR-023
+ */
+
+@-moz-document url-prefix("about:") {
+  :root {
+    /* The one tunable. Re-declared at runtime; see the header. */
+    --trance-internal-alpha: 55%;
+
+    /* Firefox's in-content theme resolves every page surface from these. Mixing
+     * them toward `transparent` rather than replacing them with a colour keeps
+     * light mode light and dark mode dark, and keeps the contrast ratios the
+     * theme already chose between a card and the page behind it. */
+    /* Black, not Firefox's `#1c1b22`. These pages are the Trance settings
+     * palette's canvas (trance-settings.css), which is Vercel's: a true black
+     * page with one hairline doing the separating. A near-black with a violet
+     * cast under a black card is a colour cast, not a surface. */
+    --in-content-page-background: color-mix(
+      in srgb,
+      light-dark(#ffffff, #000000) var(--trance-internal-alpha),
+      transparent
+    ) !important;
+    --in-content-box-background: color-mix(
+      in srgb,
+      light-dark(#fafafa, #0c0c0c) min(100%, calc(var(--trance-internal-alpha) + 14%)),
+      transparent
+    ) !important;
+    --in-content-box-background-odd: var(--in-content-box-background) !important;
+    --in-content-table-background: var(--in-content-box-background) !important;
+
+    background-color: transparent !important;
+  }
+
+  /* `body` is what actually paints on most in-content pages: `common.css` gives
+   * it `background-color: var(--in-content-page-background)`, and a handful of
+   * pages set an opaque colour of their own. Clearing it here rather than
+   * per-page is why this file is eleven rules instead of forty. */
+  body {
+    background-color: transparent !important;
+  }
+
+  /* about:config and about:processes draw a full-bleed table with its own
+   * background; without this the page is translucent everywhere except the part
+   * anyone is looking at. */
+  #about-config-search,
+  #configTable,
+  #prefs {
+    background-color: transparent !important;
+  }
+
+  /* The new-tab page is a special case: it is not themed by `common.css` at all
+   * and paints `--newtab-background-color` over the whole viewport. */
+  #newtab-window,
+  .activity-stream {
+    background-color: transparent !important;
+  }
+}
+
+/* about:preferences is the page Trance owns, so it gets the treatment the
+ * others cannot: the sidebar and the sticky header become their own frosted
+ * layer instead of a translucent version of the page. Kept here rather than in
+ * trance-settings.css because that sheet is an author sheet in the same
+ * document and therefore *below* this one in the cascade — splitting one
+ * element's appearance across two origins is how a surface ends up with two
+ * owners (TRANCE.md §6.2). */
+@-moz-document url-prefix("about:preferences") {
+  #categories,
+  .sticky-container,
+  #searchInput {
+    background-color: transparent !important;
+  }
+
+  .main-content,
+  .pane-container,
+  #mainPrefPane,
+  #preferences-stack {
+    background-color: transparent !important;
+  }
+
+  /* The strip behind the search box is deliberately not here.
+   *
+   * `preferences.css` paints `#search-container` in `--background-color-canvas`
+   * so that settings scrolling underneath it are occluded, and pins it there
+   * with `.sticky-container`. On a translucent page that is a solid rectangle
+   * across the top of an otherwise transparent one — the "weird background"
+   * behind the search box.
+   *
+   * The first fix re-painted it from trance-settings.css in "the page's own
+   * colour at the page's own alpha", which did not work and could not: the two
+   * rules above clear the root's and the body's background outright, so nothing
+   * in this document paints `--in-content-page-background` and the strip was the
+   * only element rendering it. Matching a colour nothing else uses is not
+   * fixable by choosing a better colour.
+   *
+   * The strip is unpinned instead — `.sticky-container { position: static }` in
+   * trance-settings.css — at which point there is nothing scrolling under it to
+   * occlude and it needs no background at all. Both declarations stay in the
+   * author sheet, where they beat `preferences.css` on order at equal
+   * specificity; putting half of an element's appearance in this sheet and half
+   * in that one is how a surface ends up with two owners (ADR-029).
+   *
+   * Named rather than silently omitted: an element every other surface rule in
+   * this file touches, deliberately skipped, is exactly the kind of thing the
+   * next person removes as an oversight. */
+}

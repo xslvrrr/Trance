@@ -1,0 +1,33 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the one thing in this tree the build system has to place itself.
+#
+# ADR-012 established that `src/zen/trance/` needs no `moz.build`, and for eight
+# phases it did not: everything Trance ships is chrome-packaged through
+# `jar.inc.mn`, which `browser/base/jar.mn` already pulls in. Phase 9 ships the
+# first file that is not chrome content — the enterprise policy that installs
+# the seven bundled extensions. Gecko reads that from a real path on disk,
+# `<install>/distribution/policies.json`, before there is a profile or a window,
+# so it has to be installed by the build rather than packed into browser.jar.
+#
+# `DIST_SUBDIR` is the load-bearing line. `browser/moz.build` sets it to
+# "browser" and exports it, and `browser/base/moz.build` reaches this tree with
+# `DIRS += ["../../zen"]`, so everything under `zen/` inherits it. Without the
+# reset the policy would install to `dist/bin/browser/distribution/`, which is
+# not a path anything reads — the same reason `browser/app/distribution` carries
+# this line. Empty means `dist/bin/distribution/`, which the packager maps to
+# `@RESPATH@/distribution/*` on all three platforms (Contents/Resources on
+# macOS, the install directory elsewhere).
+#
+# Nothing else belongs here. A Trance file that can be reached by a `chrome://`
+# URL goes in `jar.inc.mn`, and ADR-012 still holds for all of them.
+#
+# Refs: TRANCE.md §9.1, §13 Phase 9; ADR-012, ADR-032
+
+DIST_SUBDIR = ""
+
+FINAL_TARGET_FILES.distribution += [
+    "distribution/policies.json",
+]

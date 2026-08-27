@@ -11,8 +11,18 @@
 - name: zen.urlbar.show-contextual-id
   value: false
 
+# >>> TRANCE
+# `float`, not Zen's `floating-on-type`: the address bar is always the floating
+# panel rather than becoming one when you start typing.
+#
+# Trance paints that panel — it is the one surface outside the single edgeless
+# layer with a `backdrop-filter` of its own, and `trance.chrome.urlbar.focus-*`
+# recedes the page behind it. A bar that is docked until the first keystroke
+# means both of those arrive one character late, which reads as the effect
+# stuttering rather than as the bar changing mode.
 - name: zen.urlbar.behavior
-  value: floating-on-type
+  value: float
+# <<< TRANCE
 
 - name: zen.urlbar.wait-to-clear
   value: 45000

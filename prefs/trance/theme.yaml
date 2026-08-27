@@ -1,0 +1,103 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the theme picker.
+#
+# The cluster is one mod (3), and it is a mod that extends a Zen feature rather
+# than replacing one — which is what Trance does here too. `TranceTheme` appends
+# its controls to Zen's existing gradient panel and wraps five methods on
+# `gZenThemePicker`; Zen keeps owning the dots, the harmonies and the saving
+# (ADR-031).
+#
+# There is deliberately **no** `trance.theme.translucency` pref, and no Trance
+# translucency slider. Zen's picker already has one, it already writes into the
+# theme, and a second slider over the same value is the two-owners problem this
+# project exists to remove. Requirement 2 of the phase brief was met by the
+# thing that was already there — which is also why the palettes below move
+# *Zen's* slider rather than one of their own.
+#
+# Per-space values — lightness, gradient angle and the selected palette — are
+# not prefs. They belong to the space, exactly like its colours do, so they are
+# three extra fields on the theme object Zen already saves. A pref would be one
+# global value for all spaces, and a pref per space would be an unbounded set
+# that TRANCE.md §6.6 could not surface.
+#
+# Refs: TRANCE.md §3.1, §6.6, §8.1, §13 Phase 8; ADR-031;
+# docs/trance/mods/better-zen-gradient-picker.md
+
+# === Mark: Master switch ===
+
+- name: trance.theme.enabled
+  value: true
+
+# === Mark: Controls ===
+
+# The lightness slider.
+#
+# Zen derives lightness from how far the dot is from the centre of the wheel, so
+# "this hue, but darker" means moving the dot somewhere it is no longer the hue
+# you wanted. While a lightness is set, Trance owns it and the wheel is hue and
+# saturation only; the "Full colour" palette hands it straight back.
+- name: trance.theme.controls.lightness
+  value: true
+
+# The gradient-angle knob. Inert while the theme is a single flat colour,
+# because a flat colour has no angle — Zen hard-codes -45 degrees for every
+# gradient it builds, and this is the control for that number.
+- name: trance.theme.controls.angle
+  value: true
+
+# The exact-colour row: type a hex code and it is used verbatim, rather than
+# being derived from a position on the wheel.
+#
+# It is a front-end for Zen's own custom-colour path, not a second one — which
+# is why turning this on also turns on Zen's `show-custom-colors`, borrowed
+# while the feature is enabled and given back when it is not. Without it the
+# list that *removes* an exact colour is hidden, and hex entry would be one-way.
+- name: trance.theme.controls.hex
+  value: true
+
+# === Mark: Palettes and saved themes ===
+
+# The palette button. A palette is a slider configuration — a saturation and a
+# lightness target, and sometimes a translucency — not a set of colours, because
+# the colours in this picker come from where you click.
+- name: trance.theme.palettes.enabled
+  value: true
+
+# The heart, and the extra page of saved themes at the start of the pager.
+#
+# The pager still opens on the page it opened on before: Trance prepends its
+# page and then walks Zen's own arrow handler forward by one, so the index and
+# the scroll position agree and both arrows work.
+- name: trance.theme.saved.enabled
+  value: true
+
+# The saved themes themselves, as JSON. State rather than a setting, and the
+# only Trance pref that is one.
+#
+# It is here rather than in a file because it is small, because it has to be
+# readable from every window at once, and because the alternative — a file — is
+# a second storage mechanism for one list. TRANCE.md §6.6 says every trance.*
+# pref appears on the settings page, and this one does: as a count, with a
+# button that empties it.
+#
+# The default is the empty string, not "[]", and that is ffprefs rather than a
+# preference: it quotes a value only when the value contains a letter, a dot, a
+# space or a quote, so "[]" is emitted bare and `pref("…", [])` is not
+# JavaScript. Empty reads as "nothing saved" on both sides.
+- name: trance.theme.saved.themes
+  value: ""
+
+# === Mark: Notifications ===
+
+# The in-panel message that names what a button just did: which palette was
+# selected, which colour harmony the algorithm button moved to, whether a theme
+# was saved or forgotten.
+#
+# It costs no timer. The whole life of a message is one Web Animation whose
+# duration is `--trance-toast-life`, so at motion level 0 there is no animation
+# and no timeout — the message stays until the next one replaces it.
+- name: trance.theme.notifications
+  value: true

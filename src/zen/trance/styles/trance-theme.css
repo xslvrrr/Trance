@@ -1,0 +1,430 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the theme picker's extra controls (TRANCE.md §13 Phase 8).
+ *
+ * Loaded only while `trance.theme.enabled` is true, and every selector here is
+ * scoped to `[trance-theme]` — the attribute TranceTheme puts on Zen's picker
+ * panel — or to a `.trance-theme-*` class on a node TranceTheme created. So
+ * there is nothing in this file that can reach an element Trance does not own,
+ * with two deliberate exceptions, both marked below.
+ *
+ * The visual language is Zen's own, on purpose: the lightness slider is built
+ * like Zen's translucency slider and the angle knob like Zen's grain knob,
+ * because the four of them are one control group and a panel where half the
+ * controls are in a different style reads as a mod, which is the thing this
+ * browser exists to stop looking like.
+ *
+ * Refs: TRANCE.md §6.2, §13 Phase 8; ADR-031
+ */
+
+/* ---- The row of Trance controls ------------------------------------------ */
+
+/* `box-sizing` is the whole reason this row used to be wider than Zen's.
+ *
+ * The row it sits under is a XUL `hbox`, and XUL boxes are `border-box`: its
+ * `width: 100%` plus `padding: 0 var(--panel-padding)` fits inside the panel.
+ * This one is an HTML `div`, which is `content-box`, so the identical
+ * declarations made it a full panel width *plus* two paddings — overflowing to
+ * the right by that much, which pushed the knob out and left the slider some
+ * 30px longer than the one it is supposed to match. */
+.trance-theme-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  padding: 0 var(--panel-padding);
+  margin-bottom: var(--trance-gap-md);
+
+  @media (-moz-platform: macos) {
+    gap: 2rem;
+  }
+}
+
+.trance-theme-slider-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Zen's translucency slider -------------------------------------------
+ *
+ * The one above Trance's, and the second of the two deliberate exceptions to
+ * "nothing here reaches an element Trance does not own". It is scoped to
+ * `[trance-theme]`, so it is exactly as reversible as everything else.
+ *
+ * ── Why the wave had to go ────────────────────────────────────────────────
+ *
+ * Zen does not fill this slider's track. It paints a separate SVG behind the
+ * input and moves two `<linearGradient>` stops to `${value * 100}%` of it, and
+ * the SVG is laid out by hand: `left: -5px` on the box, `margin-left: 4px` and
+ * `scale: 1.2` on the svg, and a gradient whose coordinate space is the *path's*
+ * bounding box rather than the element's — a path the same code reshapes as the
+ * value changes.
+ *
+ * A range input's thumb does not travel from 0% to 100% of its track. It travels
+ * from half a thumb-width in to half a thumb-width from the end, and this
+ * thumb's width is itself a function of the value (`--zen-thumb-width`, 10px to
+ * 25px). So the fill and the knob are two different functions of the same
+ * number, and they agree at exactly one point in the middle. That is the whole
+ * of "the fill of the line is offset from the knob", and no amount of nudging
+ * the SVG fixes it, because the mismatch grows and shrinks as you drag.
+ *
+ * `::-moz-range-progress` is the same fill computed by the layout engine from
+ * the thumb's actual position, which cannot disagree with the thumb by
+ * construction. So the wave is hidden and the track paints itself, in the same
+ * tokens the lightness slider below uses — the two sliders sit in one column
+ * and now they are the same control.
+ */
+
+[trance-theme] #PanelUI-zen-gradient-slider-wave {
+  display: none;
+}
+
+[trance-theme] #PanelUI-zen-gradient-generator-opacity {
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0 5px;
+  background: transparent;
+  appearance: none;
+}
+
+[trance-theme] #PanelUI-zen-gradient-generator-opacity::-moz-range-track {
+  height: var(--size-item-small);
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-track);
+}
+
+[trance-theme] #PanelUI-zen-gradient-generator-opacity::-moz-range-progress {
+  height: var(--size-item-small);
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-thumb);
+}
+
+/* A constant thumb, for the same reason. Zen grows it with the value, which is
+ * the other half of why the fill and the knob could not be made to line up. */
+[trance-theme] #PanelUI-zen-gradient-generator-opacity::-moz-range-thumb {
+  width: 10px;
+  height: 40px;
+  border: none;
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-thumb);
+  cursor: pointer;
+}
+
+/* ---- The lightness slider ------------------------------------------------ */
+
+/* The bar, drawn on the wrapper rather than on the slider's own track.
+ *
+ * Zen's translucency slider does not paint its track either: it paints a
+ * separate box behind the input, inset by 8px inside a wrapper that is itself
+ * pulled 5px left, and the input is transparent on top of it. A `::-moz-range-
+ * track` styled to "about the same size" lands three pixels wider at one end
+ * and two at the other, and two bars in one column that disagree by a few
+ * pixels read as a mistake even when nobody can say which one is wrong.
+ *
+ * So this is Zen's geometry to the pixel — `left: 3px` is its -5px wrapper plus
+ * its 8px inset — and the two bars are now the same length by construction
+ * rather than by coincidence. `--size-item-small` is the platform token Zen's
+ * own bar uses for its height. */
+.trance-theme-slider-wrapper::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 3px;
+  width: calc(100% - 8px);
+  height: var(--size-item-small);
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-lightness-track);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* The 5px of side padding is not decoration: it is what Zen's translucency
+ * slider has, and the two sit one above the other in the same column. It is
+ * what makes the thumb of each stop at the same place at both ends.
+ *
+ * The `z-index` is what keeps the thumb on top of the bar above: an absolutely
+ * positioned `::before` paints after its in-flow siblings, so without it the
+ * track would be drawn over the thing that moves along it. It applies without
+ * `position` because this input is a flex item, which is the same reason Zen's
+ * own slider can say `z-index: 2`. */
+.trance-theme-slider {
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  padding: 0 5px;
+  background: transparent;
+  appearance: none;
+}
+
+.trance-theme-slider::-moz-range-track {
+  height: 18px;
+  border-radius: var(--trance-radius-pill);
+  background: transparent;
+}
+
+.trance-theme-slider::-moz-range-progress {
+  background: transparent;
+}
+
+.trance-theme-slider::-moz-range-thumb {
+  width: 10px;
+  height: 40px;
+  border: none;
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-thumb);
+  cursor: pointer;
+}
+
+/* Until the slider has been touched, lightness is still Zen's — the thumb sits
+ * where the theme already is, and saying so is what stops the control claiming
+ * an authority it does not yet have. */
+.trance-theme-slider[auto]::-moz-range-thumb {
+  opacity: 0.55;
+}
+
+/* ---- The gradient-angle knob --------------------------------------------- */
+
+.trance-theme-knob {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  flex: none;
+  transition: opacity var(--trance-dur-fast) var(--trance-ease-standard);
+
+  @media (-moz-platform: macos) {
+    width: 6rem;
+    height: 6rem;
+  }
+}
+
+/* A flat colour has no angle. The knob is not hidden when the theme is one —
+ * a control that appears and disappears makes the panel jump — it goes inert,
+ * which is also what Zen does to its own buttons in the same situation. */
+.trance-theme-knob[disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* The track the handle runs on: one continuous ring at the full radius, rather
+ * than the twenty-four dots that used to stand in for one. The knob turns
+ * freely now, so a ring is the honest picture of what it can do — dots drew
+ * detents that no longer exist. */
+.trance-theme-knob::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: var(--trance-border-width) solid var(--trance-picker-dot);
+  pointer-events: none;
+}
+
+/* The inner disc is a face for the number to sit on. It used to be a rotated
+ * copy of the gradient, which is the panel's whole subject rendered at 1cm
+ * behind the readout that actually answers the question the knob asks. */
+.trance-theme-knob::after {
+  content: "";
+  position: absolute;
+  inset: 20%;
+  border-radius: 50%;
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  background: var(--trance-surface-highlight);
+  pointer-events: none;
+}
+
+.trance-theme-knob-value {
+  position: absolute;
+  z-index: 1;
+  inset: 20%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: small;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.trance-theme-knob-handle {
+  position: absolute;
+  z-index: 2;
+  width: 6px;
+  height: 12px;
+  border-radius: var(--trance-radius-sm);
+  background: var(--trance-picker-thumb);
+  cursor: pointer;
+  transition: height var(--trance-dur-instant) var(--trance-ease-standard);
+}
+
+.trance-theme-knob:hover .trance-theme-knob-handle {
+  height: 14px;
+}
+
+/* ---- The palette, heart and add buttons ---------------------------------- */
+
+.trance-theme-action {
+  min-width: 30px;
+  min-height: 30px;
+  max-width: 30px;
+  max-height: 30px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: var(--trance-radius-sm);
+  appearance: none;
+  background: transparent;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  transition: background var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-theme-action:hover {
+  background: var(--trance-surface-highlight);
+}
+
+.trance-theme-action .toolbarbutton-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.trance-theme-action .toolbarbutton-text {
+  display: none;
+}
+
+.trance-theme-palette {
+  list-style-image: url("chrome://browser/content/trance-icons/palette.svg");
+}
+
+.trance-theme-heart {
+  list-style-image: url("chrome://browser/content/trance-icons/heart.svg");
+}
+
+/* Saved is the one piece of state in this panel that is worth a colour of its
+ * own: everything else the picker shows is *the theme*, so a saved marker in
+ * the theme's own accent would be invisible on exactly the themes people save. */
+.trance-theme-heart[saved] {
+  fill: var(--trance-picker-heart);
+  list-style-image: url("chrome://browser/content/trance-icons/heart-filled.svg");
+}
+
+.trance-theme-hex-add {
+  list-style-image: url("chrome://browser/content/trance-icons/plus.svg");
+}
+
+/* ---- The in-panel notification ------------------------------------------- */
+
+.trance-theme-toast {
+  position: absolute;
+  top: var(--trance-gap-lg);
+  left: 50%;
+  z-index: 3;
+  max-width: 80%;
+  padding: var(--trance-gap-sm) var(--trance-gap-lg);
+  border-radius: var(--trance-radius-pill);
+  background: var(--trance-picker-toast-bg);
+  color: var(--trance-picker-toast-fg);
+  font-size: small;
+  font-weight: 600;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* The attribute is what TranceTheme sets; the animation that fades it back out
+ * is a Web Animation with `--trance-toast-life` as its duration, so at motion
+ * level 0 the message simply stays until the next one replaces it. */
+.trance-theme-toast[visible] {
+  opacity: 1;
+}
+
+/* ---- The saved-themes page ----------------------------------------------- */
+
+/* Zen's own preset pages, to the attribute: `space-between` over a fixed eight
+ * slots, so a saved theme lands exactly where a preset would have. */
+.trance-theme-saved-page {
+  justify-content: space-between;
+  min-width: 100%;
+  padding: 0 1px;
+  align-items: center;
+}
+
+.trance-theme-saved-swatch {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--trance-dur-instant) var(--trance-ease-standard);
+  background:
+    radial-gradient(circle at 0% 0%, var(--trance-saved-1), transparent 100%),
+    radial-gradient(circle at 100% 0%, var(--trance-saved-2), transparent 100%),
+    linear-gradient(to top, var(--trance-saved-3) 0%, transparent 60%);
+}
+
+.trance-theme-saved-swatch:hover {
+  transform: scale(1.05);
+}
+
+.trance-theme-saved-swatch:hover:active {
+  transform: scale(0.95);
+}
+
+/* The free slots. Same box as a swatch, drawn as an outline — the page says
+ * "saved themes go here" by showing the shape of one, which is both shorter
+ * than a sentence and still true once there are three of them.
+ *
+ * A hairline at the surface border's 12% of `currentColor`, faded to 0.7 on top
+ * of that, was a shape you had to already know was there: the panel behind it
+ * is the space's own gradient, and a dash that light disappears into a pale
+ * one entirely. It carries its own token at more than three times the contrast
+ * and its own width, and no opacity on top. */
+.trance-theme-saved-slot {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: var(--trance-border-width-strong) dashed var(--trance-picker-slot);
+}
+
+/* ---- Exact colours ------------------------------------------------------- */
+
+.trance-theme-hex-row {
+  display: flex;
+  align-items: center;
+  gap: var(--trance-gap-sm);
+  width: 100%;
+}
+
+.trance-theme-hex-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--trance-gap-sm) var(--trance-gap-md);
+  border: var(--trance-border-width) solid var(--trance-surface-border);
+  border-radius: var(--trance-radius-sm);
+  background: var(--trance-surface-highlight);
+  color: inherit;
+  font-family: monospace;
+  transition: border-color var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+.trance-theme-hex-input[invalid] {
+  border-color: var(--trance-picker-heart);
+}
+
+/* The one exception. Neither of Zen's two inputs is moved into the row above
+ * and neither is shown — the `<input type="color">` opens the platform's colour
+ * picker, and the `<input type="number">` draws a native stepper for a number
+ * `#RRGGBBAA` already carries — so both stay in the row below as the fields
+ * `addCustomColor` reads, and that row is hidden. Its label stays: it is the
+ * heading for the row above it. */
+[trance-theme] #zen-theme-picker-color > hbox {
+  display: none;
+}

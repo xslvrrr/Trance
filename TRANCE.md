@@ -129,9 +129,9 @@ It is deliberately not a "theme pack". It is a browser.
 
 *(updated 2026-08-24, after Phases 2 and 3 and the Phase 1 identity fixes)*
 
-- Brand **identity** is Trance; brand **artwork** is still Zen's, as a placeholder (ADR-008)
-- Phase 1 identity is complete apart from artwork. The profile directory and vendor were fixed
-  on 2026-08-24 after Phase 3 smoke-testing found the build still using Zen's — see ADR-014.
+- Phase 1 is complete, artwork included. The identity landed 2026-08-24 (the profile directory and
+  vendor were fixed the same day, after Phase 3 smoke-testing found the build still using Zen's —
+  ADR-014); the artwork landed 2026-08-27 (ADR-050), which closed ADR-008's placeholder.
 - No CI (Zen's workflows still reference `--brand release`/`twilight` and will fail — Phase 12),
   no signing, no update server (updates are off, ADR-009)
 - `npm run lc` fails on **115 upstream** files with no MPL header at the fork point, including
@@ -240,11 +240,18 @@ after the fact — modify the upstream module directly and record it in `UPSTREA
 New Icons, Context Menu Icons, Zen Context Menu, and Nova UI each ship their own SVG set, often
 as data-URIs inlined into CSS. Same glyph, four copies, four parses.
 
-**Design rule:** one Trance icon set, shipped as real files in the chrome jar, referenced by
-`chrome://browser/content/trance-icons/<pack>/*.svg`. (Phase 2 wrote `chrome://browser/skin/`
-here; Phase 5 landed it under `content/` instead, because `skin/` is packaged from
-`browser/themes/jar.mn` and would have cost an upstream touchpoint for nothing — Trance's CSS
-already ships from `content/browser/trance-styles/`.)
+**Design rule:** Trance ships no icon set. Phase 5 built three, ADR-039 removed them: the browser
+already draws these glyphs, the preinstalled "New Icons" mod redraws them for anyone who wants that
+(ADR-024), and a Trance pack could only win by disabling Zen's own icon sheet wholesale. The
+duplication this rule was written against is now answered by not participating in it.
+
+What remains under `chrome://browser/content/trance-icons/*.svg` is not a set: the handful of
+glyphs Trance's own UI needs and the browser has none of, as real files in the chrome jar, one copy
+each, never inlined as data URIs. (Phase 2 wrote `chrome://browser/skin/` here; Phase 5 landed it
+under `content/` instead, because `skin/` is packaged from `browser/themes/jar.mn` and would have
+cost an upstream touchpoint for nothing.) Icon *size* is a preference —
+`trance.chrome.icons.scale`, a percentage of the browser's own — and it reaches whichever glyph is
+on screen through Zen's `--zen-toolbar-button-size` rather than by supplying one.
 
 ---
 
@@ -630,7 +637,11 @@ license change for a Firefox fork, it conflicts with parts of the Firefox tree t
 GPL-compatible in practice, and it is not what this project wants.
 
 **Therefore: no GPL-3.0 mod code enters this repository. Ever.**
-Nebula and Zen Folder Tree Connectors are reimplemented clean-room.
+Nebula is reimplemented clean-room. Zen Folder Tree Connectors was too, in Phase 4, and that was
+withdrawn: what it ships is a drawing, and a clean-room reimplementation of a drawing is an
+approximation of it. Trance preinstalls the author's own distribution instead — installing a mod is
+not copying it, nothing from it enters this tree, and there is one owner for the lines again
+(ADR-027). That is the same answer §7.3 already reached for the "New Icons" set (ADR-024).
 
 ### 7.3 The unlicensed problem
 
@@ -686,24 +697,27 @@ Legend for **Verdict**:
 - `ADAPT` — permissive license, may port code with attribution
 - `ZEN` — Zen already does this; configure rather than build
 - `DEFER` — post-1.0
+- `PREINSTALL` — Trance installs the author's own distribution instead of reimplementing it, either
+  because the licence forbids reproducing what it ships (ADR-024, ADR-027) or because a rewrite
+  would remove no conflict and cost what the original costs (ADR-030, ADR-033)
 
 Machine-readable version: `docs/trance/mods-inventory.json`.
 
 | # | Mod | Ver | Store | Source | License | Verdict | Phase |
 |---|---|---|---|---|---|---|---|
 | 1 | Advanced Tab Groups | 3.5.1 | Sine | `Vertex-Mods/Advanced-Tab-Groups` | MIT | ADAPT | 4 |
-| 2 | Better New Tab Button | 1.0.6 | neither | `themaster5209/zen-better-new-tab-button` | none | NATIVE | 5 |
+| 2 | Better New Tab button | 1.0.6 | neither | `themaster5209/zen-better-new-tab-button` | none | PREINSTALL (ADR-049) | — |
 | 3 | BetterZenGradientPicker | 1.7 | Sine | `JustAdumbPrsn/BetterZenGradientPicker` | none | NATIVE | 8 |
 | 4 | Context Menu Icons | 2.7.4.3 | Sine | `Starry-AXQG/Context-Menu-Icons` | MIT | ADAPT | 5 |
 | 5 | Customize Collapsed Sidebar | 1.0.5 | Sine | `Ciuriya/zen-themes` | none | NATIVE | 4 |
 | 6 | Deta Loading Bar | 2.0.4 | Sine | `rasyidrafi/zen-deta-loading-bar` | MIT | ADAPT | 6 |
 | 7 | Floating Status Bar | 1.0.0 | Zen | `AmirhBeigi/zen-floating-statusbar` | none | NATIVE | 6 |
 | 8 | Hide Extension Name | 1.0.0 | Zen | `ch4og/zenbrowser-themes` | MIT | ADAPT | 5 |
-| 9 | Live Calendar | 1.0.0 | Sine | `Vertex-Mods/Zen-Live-Calendar` | none | NATIVE | 7 |
+| 9 | Live Calendar | 1.0.0 | Sine | `Vertex-Mods/Zen-Live-Calendar` | none | PREINSTALL (ADR-030) | — |
 | 10 | **Nebula** | 3.3.3 | Sine | `JustADumbPrsn/Zen-Nebula` | **GPL-3.0** | NATIVE (clean-room) | 3 |
-| 11 | New Icons | 1.1 → 1.4 | Sine | `qumeqa/zen-icons` | none | NATIVE | 5 |
+| 11 | New Icons | 1.1 → 1.4 | Sine | `qumeqa/zen-icons` | none | PREINSTALL (ADR-024) | — |
 | 12 | Nova UI | 2.2 | Sine | `qumeqa/nova` | none | NATIVE | 5 |
-| 13 | Pimp your PiP | 1.0.0 | Zen | store-hosted, no homepage | unknown | NATIVE | 10 |
+| 13 | Pimp your PiP | 1.0.0 | Zen | store-hosted, no homepage | none | PREINSTALL (ADR-033) | — |
 | 14 | Render.js | 1.0 | Sine | `SehajveerSingh2005/render.js` | none | NATIVE | 6 |
 | 15 | SuperPins | 1.7.2 | both | `CosmoCreeper/Zen-Themes/SuperPins` | MIT | ADAPT | 4 |
 | 16 | Tab Closing Bubble Animation | 1.3 | Sine | `Zylaah/bubble-pop-deleting` | none | NATIVE | 6 |
@@ -712,8 +726,8 @@ Machine-readable version: `docs/trance/mods-inventory.json`.
 | 19 | Zen Compact Transparent Mode | 2.0.0 | Sine | `rasyidrafi/zen-compact-transparent-mode` | Apache-2.0 | ADAPT | 3 |
 | 20 | Zen Context Menu | 3.1 | Zen | `KiKaraage/ZenMods` | MIT | ADAPT | 5 |
 | 21 | Zen Custom URL Bar | 2.0.3 | Sine | `rasyidrafi/zen-custom-urlbar` | Apache-2.0 | ADAPT | 5 |
-| 22 | Zen Folder Tree Connectors | 2.1 | Sine | `JustAdumbPrsn/ZenFolderTreeConnectors` | **GPL-3.0** | NATIVE (clean-room) | 4 |
-| 23 | **Zen Library** | 1.0.0 | Sine | `12th-devs/Zen-Library` | none | NATIVE | 7 |
+| 22 | Zen Folder Tree Connectors | 2.1 | Sine | `JustAdumbPrsn/ZenFolderTreeConnectors` | **GPL-3.0** | PREINSTALL (ADR-027) | — |
+| 23 | **Zen Library** | 1.0.0 | Sine | `12th-devs/Zen-Library` | none | PREINSTALL (ADR-030) | — |
 
 ### 8.1 Overlap and merge notes
 
@@ -730,8 +744,9 @@ SuperPins (15) + Advanced Tab Groups (1) + Zen Folder Tree Connectors (22) +
 Customize Collapsed Sidebar (5) + Unloaded Tabs (18).
 All five touch `#tabbrowser-tabs` and Zen's `ZenFolders` / `ZenPinnedTabManager`. Today: five
 observers, conflicting selectors on the same elements. In Trance: one rendering path for the tab
-strip that owns pinned tabs, groups, folder connector lines, collapsed-state layout, and the
-unloaded-tab visual state.
+strip that owns pinned tabs, groups, collapsed-state layout, and the unloaded-tab visual state.
+Folder connector lines were in that list and are not any more: the mod is preinstalled rather than
+reimplemented, so it owns them (ADR-027).
 
 > Note: Zen already ships `folders/`, `live-folders/`, and essentials/pinned-tab handling.
 > Extend Zen's implementations; do not build a parallel tab system.
@@ -751,8 +766,10 @@ All four are animation-driven; all four currently hold their own timers. In Tran
 subscribers to `TranceScheduler`, and every keyframe lives in `trance-motion.css`.
 
 **Standalone larger features**
-Zen Library (23) and Live Calendar (9) are real applications, not restyles. They get their own
-phases and their own custom elements.
+Zen Library (23) and Live Calendar (9) are real applications, not restyles — which is exactly why
+Trance ends up installing them rather than rewriting them. They open surfaces of their own and own
+no element any Trance feature owns, so there is no conflict for a rewrite to remove, and the cost
+audit in their investigation docs comes out at what a rewrite would have cost anyway (ADR-030).
 
 ### 8.2 Per-mod investigation checklist (do this before implementing any of them)
 
@@ -831,8 +848,12 @@ Instead ship `distribution/policies.json`:
 ```
 
 Properties of this approach:
-- `normal_installed` = installed automatically, **user can disable or remove it**. (`force_installed`
-  would lock them in — rejected; this is a browser for a person, not a fleet.)
+- `normal_installed` = installed automatically, **user can disable it**. (`force_installed` would
+  also forbid disabling — rejected; this is a browser for a person, not a fleet.)
+  *Correction, Phase 9:* `normal_installed` does **not** permit uninstalling. `Policies.sys.mjs`
+  calls `disallowFeature("uninstall-extension:<id>")` for both modes and only leaves *disable* alone
+  for `normal_installed`. Removing one for good means removing its entry from `policies.json`
+  (ADR-032).
 - Extensions auto-update from AMO like any other add-on.
 - No redistribution of third-party binaries → no licensing entanglement.
 - Requires network on first run. Ship a first-run panel that reports install status and offers a
@@ -843,17 +864,27 @@ Properties of this approach:
 - Linux: `<install>/distribution/policies.json`
 - Windows: `<install>\distribution\policies.json`
 
-The existing `build/AppDir/distribution/policies.json` already carries update policies for Linux —
-merge into it, do not create a second file.
+~~The existing `build/AppDir/distribution/policies.json` already carries update policies for Linux —
+merge into it, do not create a second file.~~
+**Superseded by ADR-032.** That file reaches only the Linux AppImage, so merging into it would have
+shipped the extensions on one platform. The single file is `src/zen/trance/distribution/policies.json`,
+installed on all three platforms by `FINAL_TARGET_FILES.distribution` in `src/zen/trance/moz.build`
+— the mechanism `browser/app/distribution` uses for `distribution.ini` — and the AppDir copy is
+deleted.
 
 ### 9.2 Companion prefs (`prefs/trance/extensions.yaml`)
 
 ```yaml
-- name: extensions.autoDisableScopes
-  value: 0                      # do not auto-disable policy-installed add-ons
 - name: extensions.postDownloadThirdPartyPrompt
   value: false
 ```
+
+~~`extensions.autoDisableScopes: 0`~~ — **not set (ADR-032).** It does not do what the line above it
+claimed. `XPIDatabase.updateMetadata` reads it only under `isDetectedInstall && foreignInstall`, so
+it governs add-ons *found in a scanned directory*, never a policy install — which goes through
+`AddonManager.getInstallForURL(...).install()` and is enabled the moment it finishes. Setting it to
+0 would change nothing for the seven and would remove the protection that stops another program
+dropping an XPI into the system add-ons directory and having it enable itself.
 
 Do **not** set `xpinstall.signatures.required: false`. AMO builds are signed; keep verification on.
 
@@ -911,6 +942,47 @@ Note the repo's own `.git` is ~3 GB once Zen's full history is fetched.
 | Firefox patches (`src/**/*.patch`) | `npm run import && npm run build` |
 
 `npm run build:ui` is the fast path — use it constantly. Full builds are for structural changes only.
+
+#### Sine is not part of the build, and every build removes it
+
+`scripts/trance-cosine.py` writes `config.js` and `defaults/pref/config-prefs.js` into the built
+app bundle. Both are packaging outputs as far as the build system is concerned, so **any build —
+including `build:ui` — deletes them**, and the browser then starts with no Sine, no preinstalled
+mods, and no `sineMods` pane. Nothing warns you; the browser just quietly loses half of what
+ADR-018 promised.
+
+So the loop is:
+
+```bash
+npm run import && npm run build:ui
+python3 scripts/trance-cosine.py --profile "<your profile>"   # after every build
+npm start
+```
+
+**And the reverse, for tests.** With Sine provisioned, `npm run test` crashes the test browser at
+startup: mochitest forbids non-local connections and kills the process on the first one, and Sine
+fetches its marketplace at init. The crash reason names the URL, so it is at least legible when it
+happens:
+
+```
+Attempting to connect to non-local address! … uri is [https://raw.githubusercontent.com/…]
+```
+
+It is not always that legible. Since Phase 7 added two script mods to `PREINSTALLED_MODS`, the
+failure observed instead is that Marionette never comes up at all — the run ends with
+
+```
+TimeoutError: Timed out waiting for connection on 127.0.0.1:2828!
+ERROR Automation Error: Received unexpected exception while running application
+```
+
+and a crash stack whose top frame is `trance + 0x898`, which names nothing. Zero tests run. If a
+test run dies before the first assertion, check for `config.js` in the app bundle *first*; it looks
+exactly like a Trance regression and is not one.
+
+Run tests from a build that has not been provisioned, or move `config.js` and
+`defaults/pref/config-prefs.js` aside for the run. `--uninstall` does it, and re-provisioning
+afterwards is one command.
 
 ### 10.3 Debugging the chrome UI
 
@@ -1007,26 +1079,58 @@ in a Trance-owned file.
 
 ### 12.1 Budgets (these are acceptance gates, not aspirations)
 
+Budgets are unchanged since Phase 0. Two of the *instruments* changed in Phase 11, because what was
+written down could not be read off a running browser — see ADR-034. The rows marked † say what is
+actually measured.
+
 | Metric | Budget | How to measure |
 |---|---|---|
-| Chrome compositor layers, idle | ≤ 6 | `layers.draw-borders=true`, count |
-| `backdrop-filter` surfaces, per window | ≤ 3 (sidebar, toolbar, overlay) — never nested | Grep `trance-surfaces.css`; visual check |
-| Idle CPU, 1 tab, focused, no media | < 0.5% | `powermetrics`, 30 s sample |
-| Idle CPU, window occluded | ~0% | `powermetrics` with window covered |
-| GPU frames while occluded | 0 | Profiler `Composite` markers |
-| Style flush on tab switch | < 2 ms | Profiler `Styles` marker |
-| MutationObserver callbacks per tab open | ≤ 2 | Instrument `TranceObserverHub` under `trance.debug` |
-| Active timers at idle | 0 from Trance | `about:performance`, profiler timer markers |
-| Cold start delta vs stock Zen | < 100 ms | `MOZ_LOG` startup timeline / `about:startup` |
+| † Chrome compositor **surfaces**, idle | ≤ 6 | Count chrome elements whose computed style forces a compositor surface: non-`none` `backdrop-filter` or `filter`, `will-change` naming transform/opacity/filter, 3D transform. WebRender has no layers and `layers.draw-borders` is a debug overlay, not a count |
+| `backdrop-filter` surfaces, per window | ≤ 3 (sidebar, toolbar, overlay) — never nested | Same query, `backdrop-filter` only. "Never nested" is asserted with `Node.contains` in `browser_trance_perf.js` |
+| Idle CPU, 1 tab, focused, no media | < 0.5% | `ChromeUtils.requestProcInfo()` `cpuTime` delta over a 60 s idle window. No sudo; `--powermetrics` cross-checks it when available |
+| † Idle CPU, window **minimised** | ~0% | Same. Occlusion cannot be scripted from inside the process — minimise is the proxy, and the scorecard labels it as one |
+| GPU frames while minimised | 0 | Profiler `Composite` markers on the Renderer/Compositor thread, between the `TrancePerf:Minimize{Start,End}` markers the harness stamps |
+| Style flush on tab switch | < 2 ms | Longest profiler `Styles`/`RestyleDocument` marker within 250 ms of a `TabSelect` |
+| Style flush on space switch | < 2 ms | Longest `Styles`/`RestyleDocument` marker between the `TrancePerf:SpaceSwitch{Start,End}` markers. Added in Phase 11 with ADR-038, alongside a recorded row for the *total* style time across the same window — the total is what moves when a per-frame restyle stops happening, the worst frame is the DOM work at the start of the switch |
+| Space cross-fade layers on the compositor | 2 of 2 | `Animation.isRunningOnCompositor`, sampled per frame across the switches. `nsIDOMWindowUtils.getOMTAStyle` cannot be used: under WebRender it returns `""` for an animation that is demonstrably compositing (ADR-038) |
+| MutationObserver callbacks per tab open | ≤ 2 | `TranceLog` `observer.mutation.callbacks` delta ÷ tabs opened, under `trance.debug` |
+| Active timers at idle | 0 from Trance | `TranceScheduler.timerCount` + `frameSubscriberCount` |
+| Resident memory, 1 tab / 20 tabs | recorded, no budget | Sum of `residentUniqueSize` across all processes. Added in Phase 11: the memory question needed a number and §12.1 had none |
+| Cold start delta vs stock Zen | < 100 ms | Same binary, `trance.enabled` true vs false, N=10, median. A true stock-Zen figure needs a second build — measure it once, do not gate on it |
+
+**On the build you measure.** A plain `npm run build` from this tree *is* optimised — Gecko defaults
+`MOZ_OPTIMIZE` on and `MOZ_DEBUG` off, and the objdir confirms `-O3` with `NDEBUG`. The
+`--enable-optimize` inside `if test "$ZEN_RELEASE"` in `configs/common/mozconfig` is restating the
+default, not supplying it. What a dev build lacks is LTO, PGO and `MOZILLA_OFFICIAL`; only the last
+changes behaviour (`zen.workspaces.debug` defaults true), and the harness profile sets it false.
+`scripts/trance-perf.py` records the provenance on every run and refuses only an `--enable-debug`
+build.
 
 ### 12.2 Regression harness (Phase 11 deliverable)
 
-`scripts/trance-perf.py`:
-- Launches a fresh profile build with a scripted workload (open 20 tabs, switch spaces 10×,
-  resize, idle 60 s, occlude 60 s)
-- Captures a Gecko profile + `powermetrics` output
-- Emits a JSON scorecard against §12.1 and diffs against a stored baseline
+`scripts/trance-perf.py` — self-contained, stdlib only, no mach virtualenv:
+- Launches the packaged build against a fresh **real** profile, so the enterprise policy, the seven
+  preinstalled extensions and Cosine are all present. A mochitest profile has none of them, and they
+  are the largest thing Trance adds to a Zen window
+- Drives the §12.2 workload over Marionette in chrome context — 20 tabs, 10 space switches, resize,
+  scroll, 60 s idle, 60 s minimised — through a ~80-line client written against the wire protocol,
+  because `marionette_driver` wants mozrunner/mozversion/psutil from mach's venv. The space switches
+  create the second space a fresh profile lacks; before ADR-038 they silently did not run at all
+- Captures a Gecko profile via `MOZ_PROFILER_STARTUP`/`MOZ_PROFILER_SHUTDOWN` and parses it offline;
+  `--powermetrics` adds `sudo -n powermetrics` when it is available, and is never required
+- Emits a JSON scorecard against §12.1 and diffs against `docs/trance/perf-baseline.json`
+- `--extensions none` and `--disable-trance` are the two ablations: what the add-ons cost, and what
+  Trance itself costs
 - Runs in CI on every PR touching `src/zen/trance/**`
+
+`src/zen/tests/trance/browser_trance_perf.js` covers what the harness cannot: the surface and
+`backdrop-filter` counts in-process, the reset layer still matching Zen's `will-change` selectors
+after a rebase, zero Trance timers at idle, that `TranceScheduler` suspends on
+`occlusionstatechange`, and the mechanism the space cross-fade depends on — `motion.animateMini`
+with a `pseudoElement`, `opacity` keyframes rather than a custom property, the spring sampled into a
+`linear()` easing, and `--zen-background-opacity` still driving both layers at rest. It proves
+wiring and mechanism, not platform behaviour: occlusion needs a second application and compositing
+needs a painted frame, so both of those are the harness's job. See ADR-034 and ADR-038.
 
 ### 12.3 Standing rules
 
@@ -1042,6 +1146,11 @@ in a Trance-owned file.
 
 Phases are sequential. Each is a mergeable milestone. Do not start a phase before its predecessor's
 acceptance criteria pass.
+
+One exception, taken deliberately: **Phase 13 (Onboarding) landed before Phase 12 (Release
+infrastructure)**, on 2026-08-27, at the user's request. The numbering and the dependency disagree —
+Phase 12 is what puts a build in front of another person, and the first thing that person sees is
+the onboarding flow. Phase 11's performance work is still the open item.
 
 ---
 
@@ -1105,15 +1214,18 @@ acceptance criteria pass.
 - [x] `MOZ_APP_PROFILE`, `MOZ_APP_VENDOR`, distribution-id default and the Linux user appdir moved
       off Zen's values, in `src/toolkit/moz-configure.patch` and the new
       `src/browser/moz-configure.patch` (ADR-014)
-- [ ] **Original icon artwork** — outstanding, blocks Phase 12 (ADR-008).
-      *User decision, 2026-08-24: keep Zen's raster set as the placeholder until a real logo
-      exists. Not a defect; a scheduled task.*
+- [x] **Original icon artwork** — landed 2026-08-27 (ADR-050). The mark is a quatrefoil knot;
+      `scripts/trance-branding.py` generates the whole shipped set from `docs/trance/brand/
+      mark-{black,white}.png` — eleven raster sizes, the `.icns`, five `.ico`s, the Windows tiles
+      and installer bitmap, the `about:` art, and two real SVG paths traced out of the source.
+      Every application icon is the white mark on a `#0D0F14` superellipse plate, because a
+      monochrome mark on transparency disappears into whichever desktop theme matches it.
 
 **Acceptance:** build shows Trance branding everywhere; no Zen wordmark or logo ships;
 profile directory is Trance-specific; a fresh profile is created on first run.
 
-*Result: met for names, wordmarks, vendor, profile directory and bundle identity. Not met for
-iconography — Zen's logo raster set is still in place as a deliberate placeholder.*
+*Result: met. Names, wordmarks, vendor, profile directory and bundle identity landed 2026-08-24;
+iconography landed 2026-08-27 with ADR-050. Nothing Zen drew ships any more.*
 
 **⚠️ One-way door:** `appId` and `MOZ_APP_PROFILE` orphan any existing profile. Done once, here.
 
@@ -1303,28 +1415,28 @@ Investigation docs: `docs/trance/mods/{context-menu-icons,zen-context-menu,new-i
 better-new-tab-button,hide-extension-name,zen-custom-urlbar}.md`.
 
 **Deliverables**
-- [x] One Trance SVG icon set, **two packs** — 137 Fluent glyphs and 147 Zen glyphs, real files
-      under `chrome://browser/content/trance-icons/<pack>/`, switched by
-      `trance.chrome.icons.pack`. Fluent is the default, per the user's request
-- [x] Context-menu, toolbar and panel icons — ~267 assignments, adapted from Context Menu Icons
-      (MIT) by `scripts/trance-icons.py`, which strips every `!important` and rewrites the URLs
+- [x] ~~One Trance SVG icon set, three packs~~ — built, then **withdrawn by ADR-039**. Trance
+      ships no icon pack: the browser draws these glyphs and the preinstalled "New Icons" mod
+      redraws them (ADR-024), so a Trance pack was a second owner that could only win by disabling
+      Zen's icon sheet. What is left is `trance.chrome.icons.scale`, a percentage of the browser's
+      own size, applied through `--zen-toolbar-button-size`
+- [x] The Trance mark on the app-menu button, opt-out (`trance.chrome.logo-menu-button`, ADR-039)
 - [x] New Tab button treatment; address-bar focus dim; extension-name hiding; menu and panel
       spacing, radius, edges and scrollbars from the existing tokens
-- [x] `TranceChrome.mjs`, six prefs; `prefs/trance/chrome.yaml`; a **Chrome** section in
+- [x] `TranceChrome.mjs`, eleven prefs; `prefs/trance/chrome.yaml`; a **Chrome** section in
       `about:preferences#trance`
 - [x] Browser mochitests at `src/zen/tests/trance/browser_trance_chrome.js`
 
 **Three decisions worth recording:**
 
-- **One sheet per pack, loaded exclusively.** Gating both packs on a root attribute inside one
-  stylesheet would keep ~530 rules in the style set to use half of them. `TranceStyles` loads by
-  URL and ref-counts, so switching the pack unloads one file and loads the other — the pack you
-  are not using costs nothing, which is the same guarantee a disabled feature gets (§6.5).
-- **The mapping is generated, not hand-maintained.** Re-running `scripts/trance-icons.py` against
-  a newer release of the upstream mod produces a diff to review rather than a merge to resolve.
-- **macOS context menus stay native** (ADR-020). The icons cannot reach an AppKit menu, and
-  turning `widget.macos.native-context-menus` off to get them costs the platform menu's
-  behaviour. That is offered as an opt-in pref, off by default, rather than taken silently.
+- **~~One sheet per pack, loaded exclusively.~~** Correct, and beside the point: the cheapest pack
+  is the one that does not exist. ADR-039 removed all three.
+- **~~The mapping is generated, not hand-maintained.~~** Removed with the packs.
+- **~~macOS context menus stay native~~** (ADR-020). The trade disappeared with the packs: there
+  is no longer anything that needed an AppKit menu replaced in order to be visible.
+- **Icon size goes through the browser's own variable.** `--zen-toolbar-button-size` is what
+  Firefox's toolbar-button rule multiplies into the icon box, so scaling it is geometry rather
+  than the image — it applies to whichever glyph is there and owns none of them (ADR-039).
 
 **Fifty-odd preferences became six.** Zen Context Menu alone ships thirty-two "hide this menu
 item" toggles; all thirty-two were dropped under §8.2, along with Better New Tab Button's
@@ -1386,65 +1498,318 @@ plainly, which is what it is for.
 
 ---
 
-### Phase 7 — Zen Library and Live Calendar
+### Phase 7 — Zen Library and Live Calendar ✅ *complete (2026-08-26); nothing was built*
 
-Mods 23 and 9. Both clean-room, both ship in full (Library is non-negotiable).
+Mods 23 and 9. Both investigations changed the verdict `NATIVE` → `PREINSTALL` (ADR-030), so this
+phase ships two mods and no Trance code.
+
+The reimplementation argument in this project is *ownership* — two stylesheets over one element,
+winner decided by load order (§3.1). Neither mod is in that position: each opens a surface of its
+own and restyles nothing Zen or Trance owns. With no conflict to remove, only cost is left, and
+both audits came back at or under what a rewrite would have achieved: Zen Library holds no
+interval, no `MutationObserver` and no infinite animation across 7,500 lines, and Live Calendar's
+one always-armed timer is a 60-second refresh — the exact budget this phase set for its own
+replacement.
 
 **Deliverables**
-- `TranceLibrary` — custom element + data layer + its own settings section
-- `TranceCalendar` — `onWallClock`-driven, one wakeup per minute maximum
-- Investigation docs first (`docs/trance/mods/zen-library.md`, `live-calendar.md`)
+- ~~`TranceLibrary`~~, ~~`TranceCalendar`~~ — not written
+- `zen-library` and `zen-live-calendar` added to `PREINSTALLED_MODS` in `scripts/trance-cosine.py`,
+  pinned, staged into the app so a fresh profile gets them
+- Investigation docs (`docs/trance/mods/zen-library.md`, `live-calendar.md`) and ADR-030
+- Mod-guard cards moved `planned` → `shipped`, each naming what it costs
 
-**Acceptance:** feature parity with the originals as documented in the investigation docs;
-calendar costs ≤ 1 timer wakeup/minute; library adds < 20 ms to startup when enabled and 0 when
-disabled.
+**Acceptance:** met by the mods rather than by Trance code. Calendar costs 1 timer wakeup/minute,
+measured on what ships. Library adds nothing to startup when the mod is disabled in Sine, and one
+promoted compositor layer when it is not.
 
 ---
 
-### Phase 8 — Theming and gradient picker
+### Phase 8 — Theming and gradient picker ✅ *complete (2026-08-26)*
 
-Mod 3, plus Trance's own colour system.
+Mod 3, plus Trance's own colour system. Clean-room: BetterZenGradientPicker is unlicensed, so no
+source was read (§7.3).
+
+Zen already ships a gradient picker with a colour wheel, harmony algorithms, a translucency slider
+and a grain knob. Trance does not replace it — replacing it would mean owning Zen's gradient engine
+and its per-workspace theme format for the sake of four extra controls. `TranceTheme` **extends the
+panel in place**: it appends its own controls to the existing `#PanelUI-zen-gradient-generator` and
+wraps three methods on `gZenThemePicker`, so Zen keeps owning the dots, the harmonies and the
+saving, and Trance owns exactly the things it adds (ADR-031). With the pref off, the panel is
+stock Zen's again, node for node.
 
 **Deliverables**
-- Enhanced gradient picker (clean-room) built on Zen's existing gradient engine
-- Custom colour support, presets, export/import of a Trance theme
-- Ties `--trance-accent` to the chosen gradient
+- `TranceTheme` — lightness slider, gradient-angle knob (live only while the theme *is* a
+  gradient), eight palettes, saved themes, exact hex entry, and an in-panel toast that names what
+  each button just did
+- `trance-theme.css` and the picker's tokens
+- Ties `--trance-accent` to the chosen gradient — already true through `--zen-primary-color`, and
+  now true of the lightness and palette controls too
+- Investigation doc (`docs/trance/mods/better-zen-gradient-picker.md`) and ADR-031
 
-**Acceptance:** theme changes apply without restart, without artifact, and without invalidating
-the whole chrome stylesheet.
+**Acceptance:** theme changes apply without restart, without artifact, and without invalidating the
+whole chrome stylesheet — every control writes through Zen's own `updateCurrentWorkspace`, which
+already had that property. No upstream touchpoint added.
 
 ---
 
-### Phase 9 — Extensions and first run
+### Phase 9 — Extensions and first run ✅ *complete (2026-08-26)*
 
 **Deliverables**
-- `policies.json` per §9, on all three platforms
-- `prefs/trance/extensions.yaml`
-- First-run panel: reports extension install status, offers retry, explains that Trance's
-  built-ins replace the corresponding Zen/Sine mods
-- Sensible default extension configuration only where it is Trance-specific (nothing for uBO)
+- `src/zen/trance/distribution/policies.json` — one file, all three platforms, installed by
+  `FINAL_TARGET_FILES.distribution` in the first `moz.build` this tree has ever had. It carries the
+  update policies the Linux AppImage used to carry alone, and the AppDir copy is deleted (ADR-032)
+- `prefs/trance/extensions.yaml` — one pref, not two. `extensions.autoDisableScopes` was examined
+  and not set: it governs sideloads, not policy installs, and setting it would only have weakened
+  the sideload prompt (§9.2, ADR-032)
+- `TranceFirstRun` — a panel, once, naming each of the seven and its state, with a retry that calls
+  the policy engine's own `installAddonFromURL`. The extension list comes from
+  `Services.policies.getActivePolicies()`, so `policies.json` stays the one owner of it
+- Settings section, and "Show it again" for the panel
+- Nothing configured on anyone else's behalf: no filter list, no Dark Reader theme, no SponsorBlock
+  categories (§9.3)
 
-**Acceptance:** fresh profile on a networked machine → all 7 extensions present and enabled;
-offline first run degrades visibly and recoverably, not silently.
+One thing shipping a real policy broke, and it broke everything: Gecko ignores a local
+`policies.json` under automation only on Nightly channels, so with `trance` as the channel every
+mochitest in the tree started by dialling AMO and the harness killed the browser before a single
+test ran. One pref in the mochitest profile — `toolkit.policies.perUserDir` — points the reader at a
+directory nothing writes a policy into (ADR-032).
+
+**Acceptance:** met. A fresh profile on a networked machine gets all seven, installed and enabled,
+and the panel says so. Offline, the same panel says which ones failed and offers to try again — the
+"visibly and recoverably" half — and a build whose `distribution/` folder never arrived is told
+that, in as many words, instead of showing seven empty rows.
 
 ---
 
-### Phase 10 — Picture-in-Picture
+### Phase 10 — Picture-in-Picture ✅ *complete (2026-08-26); nothing was built*
 
-Mod 13, clean-room.
+Mod 13, and the third phase to ship by not writing code (ADR-033).
 
-**Acceptance:** PiP window restyle survives Firefox's PiP updates; no effect on PiP performance.
+The investigation applied Phase 7's test and the mod passed both halves of it more clearly than
+either of Phase 7's did. *Ownership*: every Trance stylesheet is loaded into `browser.xhtml`, and
+the one exception is a user sheet aimed at `about:` pages — the PiP player is neither, so no Trance
+rule names any element this mod touches and there is no second owner to remove. *Cost*: 88 lines of
+CSS, no script, no timer, no observer, no blur, no infinite animation, in a window that exists only
+while PiP is open.
+
+**Deliverables**
+- The mod added to `PREINSTALLED_MODS`, and with it a second install path in
+  `scripts/trance-cosine.py`: this is the first mod Trance installs from the **Zen theme store**
+  rather than the Sine store, which is a different shape — one folder of `zen-browser/theme-store`,
+  with the empty `homepage` that tells Sine's updater where its updates come from
+- Investigation doc (`docs/trance/mods/pimp-your-pip.md`) and ADR-033
+- Mod-guard card moved `planned` → `shipped`
+
+**Acceptance:** "no effect on PiP performance" is met by construction. "Survives Firefox's PiP
+updates" is no longer Trance's to meet, and that is the honest outcome rather than a dodge: the
+player's markup is not a stable API, a Trance rewrite would have carried the same breakage, and when
+it breaks the player simply looks like Firefox's again.
 
 ---
 
-### Phase 11 — Performance hardening
+### Phase 11 — Performance hardening *(in progress, 2026-08-26)*
 
 **Deliverables**
-- `scripts/trance-perf.py` harness (§12.2) + stored baseline
-- CI job running it on PRs touching `src/zen/trance/**`
-- Fix every §12.1 budget violation found
+- [x] `scripts/trance-perf.py` — Marionette-driven harness against a real profile (§12.2)
+- [x] `src/zen/tests/trance/browser_trance_perf.js` — the budgets that do not need a real profile,
+      plus the occlusion-wiring assertion the harness cannot reach (ADR-034)
+- [x] Tier A: the defects confirmed by reading rather than by measuring (ADR-035)
+- [x] Stored baseline — `docs/trance/perf-baseline.json`
+- [ ] CI job on PRs touching `src/zen/trance/**` (needs Phase 12's matrix)
+- [x] Tier B1 — the workspace cross-fade, moved onto the compositor and measured (ADR-038)
+- [x] Tier B2 — occlusion on a translucent macOS window, answered (ADR-037)
+- [ ] Tier B3–B6: the rest of the measurement-gated work, reported before anything lands
 
-**Acceptance:** all §12.1 budgets green; scorecard committed.
+**The committed baseline.** Twelve of the thirteen rows carry a number. Dev build, no LTO/PGO, one
+20-tab workload with the seven extensions installed — `docs/trance/perf-baseline.json`:
+
+| Row | Measured | Budget | |
+|---|---|---|---|
+| Compositor surfaces, idle | 5 | ≤ 6 | pass |
+| `backdrop-filter` surfaces | 0 | ≤ 3 | pass |
+| MutationObserver callbacks per tab open | 0.1 | ≤ 2 | pass |
+| Trance timers at idle | 0 | 0 | pass |
+| Space cross-fade layers on the compositor | 2 of 2 | 2 | pass |
+| Idle CPU, focused, 1 tab | 14.9% of one core | < 0.5% | **fail** |
+| Idle CPU, minimised | 15.8% | ~0% | **fail** |
+| Style flush on tab switch | 5.0 ms | < 2 ms | **fail** |
+| Style flush on space switch | 13.0 ms | < 2 ms | **fail** |
+| Total style time across the space switches | 225.0 ms | recorded | — |
+| GPU frames while minimised | *unmeasured* | 0 | — |
+| Resident, 1 tab / 20 tabs | 1153 MB / 1441 MB | recorded | — |
+
+The three space rows are new with ADR-038, and were absent from the first run for a reason worth
+naming: `PROBE_SWITCH_SPACES` asked `gZenWorkspaces` for `_workspaces()`, which does not exist, so
+every run reported "fewer than two spaces in a fresh profile" and skipped — the single most relevant
+workload in this phase, silently never executed. It now calls `getWorkspaces()` and creates the
+second space a fresh profile lacks.
+
+The idle-CPU and tab-switch rows moved a few points against the first run (13.0 → 14.9, 16.8 → 5.0).
+That is run-to-run noise on this machine, not a change: nothing in Tier A or B1 touches either path.
+It is also why the baseline is one whole run rather than the best row from several — a scorecard
+stitched together from different browsers is not an observation of any of them.
+
+Trance's own rows are green, and comfortably. Everything red is about the browser as a whole,
+which is what §12.1 was always asking about.
+
+Three things the first runs settled that guesswork had not:
+
+- **Occlusion works** (ADR-037). Tier B2's premise is false — `isFullyOccluded` goes true whenever
+  another window covers Trance, even while the window still has focus. The suspend path is live.
+  The idle-CPU numbers therefore need a different explanation.
+- **The idle CPU is diffuse, not a hot spot.** Per-process attribution shows no single offender:
+  browser 1.4%, GPU 1.0%, extension 1.0%, and seven more between 0.7% and 0.8% each — including
+  three `preallocated` content processes that should be doing nothing at all. A browser that never
+  reaches quiescence is what the harness observed directly: the settle phase watched CPU decay from
+  205% to ~6% over two minutes and never saw two consecutive samples under 5%.
+- **Memory is dominated by three processes**: browser 388 MB, GPU 378 MB, extension 224 MB. The GPU
+  process being the same size as the parent is the surprise, and it is not something the extension
+  ablation will explain.
+
+Two findings that were not in the plan and are worth naming:
+
+- `#TabsToolbar` and `#toolbar-menubar` carry `will-change: opacity` from **Firefox's own**
+  `browser-shared.css`, gated on `:root[customtitlebar]` — not from Zen. They are two of the five
+  compositor surfaces counted above. The reset layer could take them back for zero touchpoints, but
+  they exist for the titlebar fade, so that is a Tier B measurement question, not a confirmed defect.
+- The tab-switch style flush was read as "probably the same mechanism as the workspace cross-fade".
+  It is not. B1 landed, the space rows moved by a third, and the tab-switch row did not move with
+  them — it varies between 5 ms and 17 ms run to run on its own. Two red rows that looked like one
+  finding are two findings, and the second one is still open.
+
+**Outstanding in the harness:** the profile contains no `Composite` markers on any thread even with
+`MOZ_PROFILER_STARTUP_FILTERS` set, so the "GPU frames while minimised" row is reported as
+*unmeasured* rather than as a zero. A green row with nothing behind it is the one outcome this
+phase exists to prevent, so the row stays blank until the markers are captured.
+
+**What the investigation closed before it started.** Two popular explanations for Zen's idle CPU do
+not hold in this tree, and ruling them out cheaply was worth more than chasing them. All five
+upstream `infinite` chrome animations are gated — `#zen-loading-progress-bar` is *removed from the
+DOM* when idle (`ZenProgressBar.sys.mjs`), and `zen-back-and-forth-text` only runs under `&:hover`.
+And `:has()` is not a problem: twelve occurrences upstream, eleven in Trance, all scoped to small
+subtrees. Neither is the answer.
+
+**Tier A, landed.** Three fixes, one upstream touchpoint between them — see ADR-035 for why four of
+five needed none:
+- Zen's four static `will-change` declarations, taken back in `trance-reset.css`. The reset layer
+  existed for exactly this and was empty until now. Two of the four are deliberately left: one is
+  correctly scoped to an animation, and one names only layout properties and is therefore inert.
+- Zen's loading indicator, claimed and released with `TranceFeedback` on the *default* pref branch,
+  refcounted across windows. Two bars animated on every page load before this — the §3.1 two-owners
+  problem, reached from inside the project rather than from a mod.
+- `ZenMediaController`'s 1 Hz position ticker, parked while the window is minimised or occluded.
+
+**Two Tier A items were dropped on inspection, not deferred.** Compact mode's
+`background-attachment: fixed !important` aligns the toolbar overlay's gradient to the window — a
+visual requirement, and the repaint hazard `fixed` carries belongs to scrolling content, which a
+chrome overlay is not. `zen.session-store.log` defaulting true is twenty-eight `console.debug` calls
+on the startup path: microseconds, against a permanent rebase surface.
+
+**Tier B1, landed (ADR-038).** The workspace cross-fade animated the `--zen-background-opacity`
+custom property, which `zen-browser-ui.css` read back as `opacity` on two pseudo-elements. A custom
+property cannot be compositor-animated in Gecko, so every frame was a main-thread restyle;
+`opacity: var()` is not compositable either, so both window-sized layers repainted; each paints up
+to four stacked gradients under `background-blend-mode: screen`; a 30 KB grain PNG sits on top; and
+Motion falls back to its JS driver for custom properties, so the value was written from script per
+frame on top of all of it. Five compounding costs on one interaction, and the strongest
+mechanism-level match in the tree for the "~30 fps space switch on an M3" reports.
+
+It now animates `opacity` on the pseudo-elements directly through `motion.animateMini`, Motion's
+WAAPI-only entry point — the only one that takes `pseudoElement`, and the only one with no JS driver
+to fall back to. The variable stays, because the swipe gesture and the theme picker write it
+directly; the switch hands the layers back to it and cancels the animations when it ends. One
+upstream touchpoint, and `zen-browser-ui.css` untouched. Medians of three runs a side, ten switches
+each, same build, same harness:
+
+| | before | after | |
+|---|---|---|---|
+| Total main-thread style time across the switches | 182.3 ms | 124.3 ms | **−32%** |
+| Worst single style flush during a switch | 9.67 ms | 4.11 ms | **−57%** (budget < 2 ms: still red) |
+| Cross-fade layers running on the compositor | 0 of 2 | **2 of 2** | |
+
+The instrument was nearly wrong twice, which is worth recording as loudly as the result.
+`getOMTAStyle` returns `""` under WebRender for an animation that is demonstrably compositing — it
+would have reported the fix as a failure, and was only caught by running a plain element through it
+as a control. And `Animation.isRunningOnCompositor` stays false in a mochitest window, because an
+animation is not handed to the compositor until a painted frame has carried it, so that assertion
+lives in the harness and the mochitest asserts the mechanism instead.
+
+**Tier B2, closed by measurement (ADR-037).** Occlusion does fire on a translucent macOS window, so
+the premise was false: `isFullyOccluded` goes true whenever another window covers Trance, even while
+it still has focus, and `TranceScheduler`'s suspend path is live. A negative result, and it means
+the idle-CPU numbers still need a different explanation.
+
+**Tier B, outstanding — in priority order.**
+3. Content-area clip and shadow on `.browserSidebarContainer`, which wraps every remote browser.
+4. Static gradient composition: two window-sized layers under a screen blend, at rest.
+5. Extension ablation — seven add-ons ship `normal_installed`, and that is the largest memory lever
+   Trance actually controls. Report only; no defaults change without a decision.
+6. A small, individually-measured Gecko pref pass. No Betterfox blob.
+
+**Declined, with reasons, so they are not re-argued:** `ZenCompactMode`'s nine-site rAF chain (large,
+permanent rebase cost, one interaction); lazy-loading the eighteen preloaded modules (declined on
+*risk* — `nsZenPreloadedFeature` binds `init()` in its constructor, so deferring the import defers
+the registration); replacing the vendored Motion library wholesale (item 1 above is the one slice
+carrying most of the gain); `:has()` reduction (nothing to win); and the Speedometer gap, which is
+SpiderMonkey versus V8 and not addressable in a fork that does not touch `js/src`.
+
+**Acceptance:** all §12.1 budgets green or individually explained in `DECISIONS.md`; scorecard and
+baseline committed. A red row with a recorded reason is a legitimate outcome. A green row with no
+measurement behind it is not — which is the whole reason this phase exists.
+
+---
+
+### The settings pass *(2026-08-27)*
+
+Not a phase. A batch of work that cuts across Phases 3 to 6 and belongs to none of them: fifteen
+changes driven by using the browser rather than by a roadmap, recorded here so the next session can
+tell which of them were decisions and which were defects.
+
+**Removed.**
+- The `content` region — a translucent backdrop for websites — with its two prefs, its attribute,
+  its rule and the three `--trance-content-*` tokens (ADR-042). There are no surface regions left.
+
+**Added.**
+- **The empty-tab mark**: a picture over the content pane while the selected tab is empty, with a
+  file picker, a size and an opacity. Same control as the background image; the settings page's
+  picker is now one method over two prefs rather than two copies of one (ADR-042).
+- **The active tab glow**, opt in, three-valued: `none`, the space's accent, or the tab's own
+  favicon blurred past recognition behind it. Nebula's behaviour, reimplemented from its
+  description — the mod is GPL-3.0 (§7.2). Drawn on the tab rather than on `.tab-background`,
+  because Zen clips the latter to exactly the box the glow exists to escape.
+- **The animation pack**: a tab arriving from 90% out of a blur, and the address bar settling down
+  to its size — the same gesture with the scale the other side of 1. Both are Web Animations
+  through `TranceMotion`, so both are nothing at motion level 0 without either knowing that motion
+  levels exist.
+- **The loading bar's geometry**: four edges rather than two, a length as a share of that edge, an
+  inset from it, and a finish flourish. A full-width hairline flush against the window is the least
+  legible version of a progress bar available.
+- **Tab fills as tokens**: pinned, default, hover and selected, as a neutral veil at four strengths
+  rather than a tint. `--trance-shadow-color` with them, which is a *light* edge on a light chrome
+  and a shadow on a dark one.
+- **The top of the sidebar**, hidden until reached for. `opacity` and `transform` rather than
+  `display`, so that the pointer landing on a hidden button is still inside the strip that reveals
+  them — which is the only part of this that is hard.
+
+**Fixed.**
+- The app-menu mark was drawn at a few pixels across. `about-logo.svg` is a 1024×1024 branding
+  canvas with the mark inset inside it, so as a `list-style-image` the *canvas* was what got scaled
+  into the icon box. It is a `mask-image` at `mask-size: contain` now, in `currentColor`, which also
+  makes it follow the theme.
+- The first-run panel's primary button read as disabled: it used `--trance-content-bg`, a page
+  *backdrop* carrying the content region's alpha, as a label colour. `--trance-fg-on-accent` is the
+  token that should always have existed.
+- Toggling anything transparency-related left an open settings tab with the wrong background until
+  restart. `#releaseTransparentBrowser` strips `transparent="true"` from live browsers and nothing
+  put it back, because `tabbrowser` only reads the pref when it *creates* one.
+- The settings search field was transparent over a transparent page, so the window showed through
+  what was typed into it. It is a card now, in the same palette as every other card on the page.
+
+**Changed.**
+- The mod guard warns on *likelihood* as well as on the 23 mods it has read (ADR-043).
+- Four browser defaults Trance disagrees with (ADR-044): the sidebar-and-toolbar layout, an
+  always-floating address bar, search suggestions on, and history remembered. Three cost a
+  touchpoint each and one did not, and §5.5 is the reason which is which.
 
 ---
 
@@ -1463,6 +1828,41 @@ build on at least macOS arm64.
 
 ---
 
+### Phase 13 — Onboarding ✅ *complete (2026-08-27)*
+
+*Taken out of order, ahead of Phase 12, at the user's request. The dependency runs the other way
+round from the numbering: Phase 12 ships a build to other people, and the first thing another
+person sees is this flow.*
+
+**Deliverables**
+- [x] `TranceOnboarding` — a ten-page first-run flow that **replaces** Zen's welcome rather than
+      running before or after it. Two full-window takeovers cannot share a window (ADR-051)
+- [x] Five Trance pages, ahead of Zen's: Zen feature set (stable/twilight), mod-manager channel
+      (Cosine/Sine), processor (Apple Silicon/Intel), edgeless, and Zen Internet setup
+- [x] Five Zen pages rebuilt against Zen's own `browser/zen-welcome.ftl` — import and default
+      browser, search engine, essentials, workspace colours, finish — so they stay translated
+- [x] `prefs/trance/onboarding.yaml`: `enabled`, `completed`, `onboarding.channel`,
+      `mods.channel`, `perf.arch`
+- [x] Touchpoint 23 — one `if` in `ZenStartup.#checkForWelcomePage`. Nothing else upstream
+- [x] `TranceFirstRun` waits on whichever flow is actually running, not on Zen's specifically
+- [x] Settings: a "First run" group with the three settings the flow asks about and a
+      "Run it again" button, so none of the five answers is a one-time-only decision
+- [x] `scripts/trance-env.sh` gains `TRANCE_ARCH`. `configs/macos/mozconfig` has always branched on
+      `SURFER_COMPAT` and nothing has ever set it, so every build was arm64 whatever the machine
+      was — the architecture page would otherwise have been asking a question the build could not
+      honour
+- [x] `browser_trance_onboarding.js` — nine tasks, the first of which is that turning the feature
+      off mid-flow gives the window back
+
+**Acceptance:** a fresh profile runs Trance's flow rather than Zen's; every answer is a pref that is
+still reachable in Settings afterwards; turning the feature off restores Zen's welcome exactly;
+and disabling it mid-flow leaves a whole browser window.
+
+*Known gap: the five Trance pages are English. Trance has no locale pipeline of its own, and
+building one for ten strings is a Phase 12 decision — see §16.*
+
+---
+
 ## 14. Repository conventions
 
 ### 14.1 Directories owned by Trance
@@ -1473,7 +1873,13 @@ prefs/trance/*.yaml        # all Trance prefs
 configs/branding/trance/** # brand assets
 docs/trance/**             # all Trance docs
 scripts/trance-*.py        # Trance tooling
+scripts/trance-env.sh      # toolchain and build-target pinning
+docs/trance/brand/**       # brand *source* art, not shipped assets
 ```
+
+`docs/trance/brand/` is deliberately not under `configs/branding/trance/`: surfer's branding patch
+copies every non-`content` entry of that directory with `copyFileSync`, which throws on a
+subdirectory, so source art there would break `npm run import` rather than be ignored (ADR-050).
 
 Anything outside these is an upstream touchpoint and must be in `UPSTREAM-TOUCHPOINTS.md`.
 
@@ -1488,7 +1894,7 @@ Anything outside these is an upstream touchpoint and must be in `UPSTREAM-TOUCHP
 | Custom elements | `<trance-*>` | `<trance-library>` |
 | Chrome URLs | `chrome://browser/content/trance-components/…` | |
 | | `chrome://browser/content/trance-styles/…` | |
-| | `chrome://browser/content/trance-icons/<pack>/…` | |
+| | `chrome://browser/content/trance-icons/…` | |
 | Branches | `feat/trance-<feature>`, `fix/<short>`, `chore/<short>` | |
 
 ### 14.3 Commits
@@ -1597,10 +2003,16 @@ Decide these with the user; record answers in `docs/trance/DECISIONS.md`.
 9. **Platform priority.** macOS arm64 only for v1.0, or Linux too?
 10. **Telemetry.** Zen inherits Firefox telemetry prefs. Trance default: off? (Recommend: off,
     and say so in the README.)
+11. **Localisation.** Trance ships no strings of its own in any language but English. The
+    onboarding flow made this visible for the first time — its five Zen-derived pages are
+    translated because they reuse `browser/zen-welcome.ftl`, and its five Trance pages are not
+    (ADR-051). The settings pane, the first-run panel and the mod guard have the same gap and
+    always have. Does Trance grow a `.ftl` of its own and a locale pipeline in Phase 12, or ship
+    English-only and say so?
 
 ---
 
-*Last updated: 2026-08-25 — Phases 2 through 6 complete. Fork at `ed0a6fd`.
+*Last updated: 2026-08-26 — Phases 2 through 10 complete. Fork at `ed0a6fd`.
 
 Phase 3's surface layer was **reworked** the same day it was tested: frosting is now translucency
 of Zen's own background layers rather than a tint Trance paints, which is what made it a black box
@@ -1626,8 +2038,39 @@ assertions had been silently throwing rather than checking anything. The fourth 
 observer hub returns to *zero* subscriptions, which stopped being true the moment Phase 4 added a
 permanent one. All four now assert what they meant to.
 
+Phase 7 landed by **not building anything**: both of its mods had their verdict changed to
+PREINSTALL by their investigations (ADR-030). Neither owns an element any Trance feature owns, so a
+rewrite would have removed no conflict, and both cost audits came back at or under what the rewrite
+was going to be held to — Zen Library holds no interval, no `MutationObserver` and no infinite
+animation across 7,500 lines, and Live Calendar's one always-armed timer is the 60-second refresh
+that was this phase's own acceptance criterion. Four mods are preinstalled now, on two admissible
+arguments rather than one.
+
+Phase 8 landed the theme picker as `TranceTheme`, and it extends Zen's panel rather than replacing
+it (ADR-031): five method wraps on `gZenThemePicker` and a row of controls appended to the panel
+Zen already ships. Of the seven behaviours the mod contributes, six are additions and one — a
+translucency slider — was deliberately not built, because Zen's picker already has that slider and
+a second one is the two-owners problem. The phase added **no upstream touchpoint**; the list is
+still at 14.
+
+Phase 9 gave Trance its first `moz.build`. The seven extensions are installed by one
+`policies.json` on all three platforms rather than by the Linux AppImage's copy, which is deleted
+(ADR-032) — and two of §9's own instructions turned out to be wrong when read against the engine:
+`extensions.autoDisableScopes` governs sideloads and not policy installs, so it is not set, and
+`normal_installed` permits disabling but not uninstalling. `TranceFirstRun` reports what the policy
+actually did, takes its list from the policy rather than from a copy of it, and retries through the
+policy engine's own function.
+
+Phase 10 shipped nothing again, and for a third distinct reason: Pimp your PiP is 88 lines of CSS
+over a window no Trance stylesheet reaches, so there was neither a conflict to remove nor a cost to
+cut (ADR-033). Five of the twenty-three mods now ship as their authors publish them, and the
+provisioner learned to install from the Zen theme store to do it.
+
 Outstanding: original icon artwork (ADR-008, deliberately deferred by the user); deleting
 `xslvrrr/trance-browser`, which needs a `delete_repo` OAuth scope the CLI does not have; visual
-sign-off on Phases 3 to 6, which no test can assert; and the 115 pre-existing upstream `lc`
-failures, which must be fixed or excluded before `lc` can be a CI gate.
-Next: Phase 7 (Zen Library and Live Calendar). Its investigation docs come first: mods 23 and 9.*
+sign-off on Phases 3 to 9, which no test can assert; the 115 pre-existing upstream `lc` failures,
+which must be fixed or excluded before `lc` can be a CI gate; and five mochitest assertions that
+fail as of 2026-08-26 and predate Phase 9 — a flaky burst-scatter check in the feedback suite, the
+settings pane's search-strip assertion, the surfaces suite's edgeless gradient comparison, and two
+translucency-range assertions in the theme suite. 612 of 617 pass.
+Next: Phase 11 (performance hardening).*

@@ -27,6 +27,12 @@ class ZenMediaCard {
   #updateInterval = null;
   #tabTimeout = null;
   #controllerListeners = null;
+  // >>> TRANCE
+  /** Wall-clock ms at which the position ticker was parked, or null. */
+  #tickerStoppedAt = null;
+  /** The bound `sizemodechange`/`occlusionstatechange` handler, or null. */
+  #visibilityListener = null;
+  // <<< TRANCE
 
   static supportedKeys = ["playpause", "previoustrack", "nexttrack"];
 
@@ -44,6 +50,13 @@ class ZenMediaCard {
     this.focusButton = element.querySelector(".zen-media-focus-button");
 
     this.#initListeners();
+
+    // >>> TRANCE
+    this.#visibilityListener = () => this.#syncTickerToVisibility();
+    const win = element.ownerGlobal;
+    win.addEventListener("sizemodechange", this.#visibilityListener);
+    win.addEventListener("occlusionstatechange", this.#visibilityListener);
+    // <<< TRANCE
 
     if (controller) {
       // Queried before anything is wired up: it throws if the controller
@@ -252,12 +265,58 @@ class ZenMediaCard {
     this.updatePosition();
   }
 
+  // >>> TRANCE
+  /**
+   * Starts and stops the position ticker with the window's visibility.
+   *
+   * The ticker below is a 1 Hz `setInterval` that runs for the whole duration
+   * of every media session, whether or not anyone can see the number it is
+   * writing. Timer wakeups are what keep an Apple Silicon CPU out of its deep
+   * idle states, so a minimised or fully occluded window paying for one every
+   * second is the exact cost TRANCE.md §3.6 is about — and it is paid by the
+   * most ordinary thing a browser does, which is play music in the background.
+   *
+   * Nothing is lost by stopping: `position` is re-derived from elapsed wall
+   * time on resume, so the readout is correct the moment it is visible again
+   * rather than merely continuous while it is not. `updatePositionState` also
+   * keeps arriving from the media session itself and supersedes both.
+   *
+   * Refs: TRANCE.md §3.6, §12.1, §13 Phase 11
+   */
+  #syncTickerToVisibility() {
+    const win = this.element.ownerGlobal;
+    const hidden =
+      win.isFullyOccluded || win.windowState === win.STATE_MINIMIZED;
+
+    if (hidden) {
+      if (this.#updateInterval) {
+        win.clearInterval(this.#updateInterval);
+        this.#updateInterval = null;
+        this.#tickerStoppedAt = Date.now();
+      }
+      return;
+    }
+
+    if (this.#tickerStoppedAt !== null) {
+      const elapsed = (Date.now() - this.#tickerStoppedAt) / 1000;
+      this.#tickerStoppedAt = null;
+      if (this.controller?.isPlaying) {
+        this.position = Math.min(
+          this.duration,
+          this.position + elapsed * this.playbackRate
+        );
+      }
+      // Re-arms the interval and repaints the readout in one step.
+      this.updatePosition();
+    }
+  }
+  // <<< TRANCE
+
   updatePosition() {
     if (this.#updateInterval) {
       clearInterval(this.#updateInterval);
       this.#updateInterval = null;
     }
-
     if (this.duration >= 900_000) {
       this.element.setAttribute("media-position-hidden", "true");
       return;
@@ -271,6 +330,18 @@ class ZenMediaCard {
     this.currentTimeEl.textContent = this.formatSecondsToTime(this.position);
     this.durationEl.textContent = this.formatSecondsToTime(this.duration);
     this.progressBar.value = (this.position / this.duration) * 100;
+
+    // >>> TRANCE
+    // The readout above is now correct; the ticker below only keeps it that
+    // way, and there is no "that way" to keep while nobody can see it. See
+    // `#syncTickerToVisibility`.
+    this.#tickerStoppedAt = null;
+    const win = this.element.ownerGlobal;
+    if (win.isFullyOccluded || win.windowState === win.STATE_MINIMIZED) {
+      this.#tickerStoppedAt = Date.now();
+      return;
+    }
+    // <<< TRANCE
 
     this.#updateInterval = setInterval(() => {
       if (this.controller?.isPlaying) {
@@ -437,6 +508,15 @@ class ZenMediaCard {
       clearTimeout(this.#tabTimeout);
       this.#tabTimeout = null;
     }
+    // >>> TRANCE
+    if (this.#visibilityListener) {
+      const win = this.element.ownerGlobal;
+      win.removeEventListener("sizemodechange", this.#visibilityListener);
+      win.removeEventListener("occlusionstatechange", this.#visibilityListener);
+      this.#visibilityListener = null;
+    }
+    this.#tickerStoppedAt = null;
+    // <<< TRANCE
 
     const { element } = this;
     if (element.hidden) {

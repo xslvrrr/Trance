@@ -14,9 +14,54 @@
  * merely *set* a Trance token belong in trance-tokens.css, not here — this file
  * must never write a `--trance-*` custom property.
  *
- * Nothing needs neutralising yet: the foundation layer adds behaviour, it does
- * not replace any. Phase 3 onwards fills this in as features take ownership of
- * regions Zen currently styles.
- *
- * Refs: TRANCE.md §3.1, §6.2
+ * Refs: TRANCE.md §3.1, §3.5, §6.2, §13 Phase 11
  */
+
+/* ── Static will-change (TRANCE.md §3.5) ────────────────────────────────────
+ *
+ * Zen declares `will-change` statically on four elements. §3.5 is the rule
+ * against exactly this, and the Trance stylelint plugin enforces it inside
+ * Trance's own CSS — but these are upstream sheets, so the reset layer is where
+ * the rule reaches them. `will-change: auto` is the initial value; the plugin
+ * allows it in this file and nowhere else.
+ *
+ * Every selector here is Zen's own, verbatim, so it wins on load order rather
+ * than on an escalated specificity — which is the whole point of §6.2 rule 7.
+ * When one of them stops matching after an upstream rebase, the rule below
+ * silently stops applying: `npm run lint` cannot catch that, so the Phase 11
+ * compositor-surface count in `scripts/trance-perf.py` is what catches it.
+ *
+ * Two of Zen's four are deliberately left alone:
+ *
+ *   - `zen-glance.css:127` `will-change: transform` is scoped to
+ *     `:not([has-finished-animation="true"])` — added for an animation and
+ *     dropped after it. That is the correct pattern, not a violation of it.
+ *   - `zen-selector.css:221` `will-change: left, top, width, height` names only
+ *     layout properties. None of them creates a stacking context, none is
+ *     compositable, and the Boosts hover overlay it sits on does not exist
+ *     unless the element picker is open. The declaration is inert, so removing
+ *     it would buy nothing — worth stating once so it is not "fixed" later.
+ */
+
+/* Two window-sized layers behind the whole browser. `background-color` does not
+ * create a stacking context, so this is a display-list and active-layer hint
+ * rather than a guaranteed promotion — but it is a hint Gecko cannot act on
+ * usefully, because background-color is not compositable either. */
+.zen-browser-generic-background::after,
+.zen-browser-generic-background::before {
+  will-change: auto;
+}
+
+/* Present for as long as the media controls are, which is for as long as
+ * anything is playing. `will-change: opacity` does create a stacking context
+ * and does promote — for a 0.8s fade. */
+/* trance-specificity: Zen's own selector, matched verbatim so this wins on load order rather than by escalating past it. */
+#zen-media-controls-toolbar .zen-media-card .zen-media-focus-button::after {
+  will-change: auto;
+}
+
+/* Same again: a permanent stacking context and layer on a container that is
+ * present for the whole life of a Glance overlay. */
+.zen-glance-sidebar-container {
+  will-change: auto;
+}

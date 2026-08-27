@@ -1,0 +1,22 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: keep the icon set in the repository.
+#
+# The macOS section of most people's global gitignore contains `Icon?` — the
+# pattern for Finder's custom-icon resource files, `Icon\r`. It has no slash, so
+# it matches any *path component* of that shape, and git on macOS defaults to
+# `core.ignorecase=true` on an APFS volume. `icons` is five characters starting
+# with "icon". So the whole `src/zen/trance/icons/` tree was ignored, git never
+# descended into it, and none of the three packs — several hundred SVG files —
+# was ever committed. Nothing reported this: `git status` was clean because the
+# files were ignored, and local builds worked because the files were on disk.
+#
+# A repository `.gitignore` outranks the user's global excludes file, so one
+# negation here is enough. It has to name the directory as well as its contents:
+# git does not look inside an excluded directory, so un-ignoring only the files
+# would never be reached.
+
+!icons/
+!icons/**

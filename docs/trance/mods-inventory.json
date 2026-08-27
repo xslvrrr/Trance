@@ -1,15 +1,17 @@
 {
-  "$comment": "Machine-readable source of truth for the mods Trance reimplements. See TRANCE.md section 8. Verified 2026-08-24 against sineorg/store marketplace.json and zen-browser.github.io/theme-store/themes.json. Phase 3 (surfaces) landed 2026-08-24; Phase 4 (sidebar-tabs) 2026-08-25; Phases 5 (chrome-furniture + icons) and 6 (motion-feedback) 2026-08-25. Two verdicts were changed by their investigations: mod 7 NATIVE->ZEN, mod 14 NATIVE->DEFER. See investigationDoc fields.",
+  "$comment": "Machine-readable source of truth for the mods Trance reimplements. See TRANCE.md section 8. Verified 2026-08-24 against sineorg/store marketplace.json and zen-browser.github.io/theme-store/themes.json. Phase 3 (surfaces) landed 2026-08-24; Phase 4 (sidebar-tabs) 2026-08-25; Phases 5 (chrome-furniture + icons) and 6 (motion-feedback) 2026-08-25. Two verdicts were changed by their investigations: mod 7 NATIVE->ZEN, mod 14 NATIVE->DEFER. See investigationDoc fields. Phase 7 (2026-08-26) preinstalled mods 9 and 23 rather than reimplementing them (ADR-030), changing two more verdicts NATIVE->PREINSTALL; phase 8 (2026-08-26) landed mod 3 as TranceTheme (ADR-031); phase 10 (2026-08-26) preinstalled mod 13 rather than reimplementing it (ADR-033), changing a fifth verdict NATIVE->PREINSTALL and making it the first mod Trance installs from the Zen theme store rather than the Sine store. Phase 9 (2026-08-26) installed the seven extensions below through src/zen/trance/distribution/policies.json (ADR-032); their installUrl fields mirror that file and it is the one owner of the list. Mod 2 was moved NATIVE->PREINSTALL on 2026-08-27 (ADR-049) and is the first mod Trance installs straight from an author's repository rather than from either marketplace.",
   "generatedAt": "2026-08-24",
   "verdictLegend": {
     "NATIVE": "Clean-room reimplementation. No code copied.",
     "ADAPT": "Permissive license (MIT/Apache-2.0). Code may be ported with attribution and license retention.",
     "ZEN": "Stock Zen already provides this; configure rather than build.",
-    "DEFER": "Post-1.0."
+    "DEFER": "Post-1.0.",
+    "PREINSTALL": "Trance installs the author's own distribution rather than reimplementing it. Used where a reimplementation could only ever approximate someone else's drawing and the licence forbids copying it (ADR-024, ADR-027), and where the mod owns no element Trance owns, so reimplementing it would remove no conflict and cost what the original costs (ADR-030), and where the mod owns nothing Trance owns and costs almost nothing, so there is neither a conflict to remove nor a cost to cut (ADR-033)."
   },
   "stores": {
     "sine": "https://raw.githubusercontent.com/sineorg/store/main/marketplace.json",
-    "zen": "https://zen-browser.github.io/theme-store/themes.json"
+    "zen": "https://zen-browser.github.io/theme-store/themes.json",
+    "github": "the author's own repository, installed by path rather than from a marketplace index"
   },
   "mods": [
     {
@@ -30,19 +32,19 @@
     },
     {
       "n": 2,
-      "name": "Better New Tab Button",
+      "name": "Better New Tab button",
       "userVersion": "1.0.6",
-      "store": "none",
-      "storeId": null,
+      "store": "github",
+      "storeId": "bada16c1-3b14-483b",
       "source": "https://github.com/themaster5209/zen-better-new-tab-button",
       "license": "NONE",
-      "verdict": "NATIVE",
+      "verdict": "PREINSTALL",
       "phase": 5,
       "cluster": "chrome-furniture",
-      "notes": "Unlabelled centred plus, and a press rotation owned by trance.motion.level rather than by a pref of its own. Its per-component radius sliders were dropped: Trance has one radius scale and the anti-conflict design rests on one owner per value.",
+      "notes": "Verdict changed NATIVE->PREINSTALL (ADR-049). Trance kept only B1, the unlabelled centred plus, and dropped the radius sliders most people install it for - which left the button with two owners and a user with a third of a mod. Trance preinstalls the author's own distribution instead and ships no new-tab-button rules at all. Published to neither marketplace: the provisioner installs it straight from the repository, as Sine does.",
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/better-new-tab-button.md",
-      "implemented": "phase-5"
+      "implemented": "preinstalled"
     },
     {
       "n": 3,
@@ -55,7 +57,10 @@
       "verdict": "NATIVE",
       "phase": 8,
       "cluster": "theming",
-      "notes": "Builds on Zen's own gradient engine (zen.theme.gradient.*)."
+      "notes": "Builds on Zen's own gradient engine (zen.theme.gradient.*). Clean-room: unlicensed, so no source was read. TranceTheme extends Zen's picker in place - lightness slider, gradient-angle knob, palettes, saved themes and hex entry - by wrapping methods on gZenThemePicker rather than editing it, so phase 8 adds no upstream touchpoint (ADR-031).",
+      "investigated": "2026-08-26",
+      "investigationDoc": "docs/trance/mods/better-zen-gradient-picker.md",
+      "implemented": "phase-8"
     },
     {
       "n": 4,
@@ -68,7 +73,7 @@
       "verdict": "ADAPT",
       "phase": 5,
       "cluster": "icons",
-      "notes": "The icon cluster's source. MIT, so both packs are copied verbatim and the ~270-selector mapping is adapted by scripts/trance-icons.py with every !important stripped. Its item-hiding, fold-menu script and bookmark-bar extras were dropped.",
+      "notes": "Was the icon cluster's source: MIT, both packs copied verbatim and the ~270-selector mapping adapted with every !important stripped. ADR-039 removed all of it \u2014 Trance ships no icon pack, so nothing from this mod is in the tree. Its item-hiding, fold-menu script and bookmark-bar extras were dropped earlier.",
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/context-menu-icons.md",
       "implemented": "phase-5"
@@ -145,10 +150,13 @@
       "storeId": "zen-live-calendar",
       "source": "https://github.com/Vertex-Mods/Zen-Live-Calendar",
       "license": "NONE",
-      "verdict": "NATIVE",
+      "verdict": "PREINSTALL",
       "phase": 7,
       "cluster": "apps",
-      "notes": "Known offender: setInterval clock. Must use TranceScheduler.onWallClock."
+      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030). The one always-armed timer is a 60s ICS refresh, which is exactly the budget phase 7's own acceptance criterion set for a replacement; the 1Hz countdown lives only while a reminder popup is on screen. It owns no element Trance owns, so there is no second owner to remove.",
+      "investigated": "2026-08-26",
+      "investigationDoc": "docs/trance/mods/live-calendar.md",
+      "implemented": "preinstalled"
     },
     {
       "n": 10,
@@ -163,7 +171,7 @@
       "cluster": "surfaces",
       "nonNegotiable": true,
       "cleanRoomRequired": true,
-      "notes": "GPL-3.0 — absolutely no code copying. User requires it in full. Ships as the default surface preset.",
+      "notes": "GPL-3.0 \u2014 absolutely no code copying. User requires it in full. Ships as the default surface preset.",
       "investigated": "2026-08-24",
       "investigationDoc": "docs/trance/mods/nebula.md",
       "implemented": "phase-3"
@@ -177,13 +185,13 @@
       "storeId": "new-icons",
       "source": "https://github.com/qumeqa/zen-icons",
       "license": "NONE",
-      "verdict": "NATIVE",
+      "verdict": "PREINSTALL",
       "phase": 5,
       "cluster": "icons",
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/new-icons.md",
-      "implemented": "phase-5",
-      "notes": "Contributes a coverage requirement — the icon set must reach the toolbar, panels and the site-information panel — and no assets. Unlicensed, so nothing was taken; the glyphs come from Context Menu Icons' MIT packs."
+      "implemented": "preinstalled",
+      "notes": "Contributes a coverage requirement \u2014 the icon set must reach the toolbar, panels and the site-information panel \u2014 and no assets. Unlicensed, so nothing was taken; the glyphs come from Context Menu Icons' MIT packs."
     },
     {
       "n": 12,
@@ -207,12 +215,15 @@
       "userVersion": "1.0.0",
       "store": "zen",
       "storeId": "599a1599-e6ab-4749-ab22-de533860de2c",
-      "source": null,
-      "license": "UNKNOWN",
-      "verdict": "NATIVE",
+      "source": "https://github.com/zen-browser/theme-store/tree/main/themes/599a1599-e6ab-4749-ab22-de533860de2c",
+      "license": "NONE",
+      "verdict": "PREINSTALL",
       "phase": 10,
-      "cluster": "standalone",
-      "notes": "No homepage in the store index. Source lives inside zen-browser/theme-store (MIT repo) but per-mod terms unconfirmed."
+      "cluster": "picture-in-picture",
+      "notes": "88 lines of CSS over the Picture-in-Picture player, no script and no timer. Trance loads no stylesheet in that window, so there was no second owner to remove and no cost to cut; verdict changed NATIVE->PREINSTALL by the investigation (ADR-033). The theme-store repository is MIT but carries no per-theme licence, so the mod itself is unlicensed and is installed, not copied.",
+      "investigated": "2026-08-26",
+      "investigationDoc": "docs/trance/mods/pimp-your-pip.md",
+      "implemented": "preinstalled"
     },
     {
       "n": 14,
@@ -224,7 +235,7 @@
       "license": "NONE",
       "verdict": "DEFER",
       "cluster": "motion-feedback",
-      "notes": "Verdict changed from NATIVE to DEFER by investigation, answering TRANCE.md §16 Q8. Each of its five behaviours duplicates an owner Trance has already assigned — Zen's space animation, Phase 7's calendar, Phase 5's new-tab button, the tab strip — and 'ambient motion' cannot be specified, built or accepted.",
+      "notes": "Verdict changed from NATIVE to DEFER by investigation, answering TRANCE.md \u00a716 Q8. Each of its five behaviours duplicates an owner Trance has already assigned \u2014 Zen's space animation, Phase 7's calendar, Phase 5's new-tab button, the tab strip \u2014 and 'ambient motion' cannot be specified, built or accepted.",
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/render-js.md"
     },
@@ -272,7 +283,7 @@
       "verdict": "NATIVE",
       "phase": 3,
       "cluster": "surfaces",
-      "notes": "Same author as the Zen Internet extension. Chrome transparency only — Zen Internet owns content-area transparency.",
+      "notes": "Same author as the Zen Internet extension. Chrome transparency only \u2014 Zen Internet owns content-area transparency.",
       "investigated": "2026-08-24",
       "investigationDoc": "docs/trance/mods/transparent-zen.md",
       "implemented": "phase-3"
@@ -323,7 +334,7 @@
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/zen-context-menu.md",
       "implemented": "phase-5",
-      "notes": "Thirty-two hide-toggles dropped under §8.2; the workspace-colour menu tint kept. Its requirement that macOS native context menus be turned off became an opt-in pref that is off by default, because that trade is real (ADR-020)."
+      "notes": "Thirty-two hide-toggles dropped under \u00a78.2; the workspace-colour menu tint kept. Its requirement that macOS native context menus be turned off became an opt-in pref that is off by default, because that trade is real (ADR-020)."
     },
     {
       "n": 21,
@@ -349,14 +360,14 @@
       "storeId": "ZenFolderTreeConnectors",
       "source": "https://github.com/JustAdumbPrsn/ZenFolderTreeConnectors",
       "license": "GPL-3.0",
-      "verdict": "NATIVE",
+      "verdict": "PREINSTALL",
       "phase": 4,
       "cluster": "sidebar-tabs",
       "cleanRoomRequired": true,
-      "notes": "Clean-room, no source read. Trunk and elbows in CSS alone by styling .zen-tab-group-start, an anchor Zen puts in every folder container and never styles. The original ships a .uc.js.",
+      "notes": "Verdict changed NATIVE->PREINSTALL after the reimplementation landed (ADR-027). Trance did build it \u2014 trunk and elbows in CSS alone, by styling .zen-tab-group-start, with no script where the mod ships a .uc.js \u2014 and it could only ever be an approximation of someone else's line, because GPL-3.0 means no rule from it may be copied. Installing it is not copying it. Trance now draws no connectors of its own.",
       "investigated": "2026-08-25",
       "investigationDoc": "docs/trance/mods/zen-folder-tree-connectors.md",
-      "implemented": "phase-4"
+      "implemented": "preinstalled"
     },
     {
       "n": 23,
@@ -366,11 +377,13 @@
       "storeId": "zen-library",
       "source": "https://github.com/12th-devs/Zen-Library",
       "license": "NONE",
-      "verdict": "NATIVE",
+      "verdict": "PREINSTALL",
       "phase": 7,
       "cluster": "apps",
-      "nonNegotiable": true,
-      "notes": "Unlicensed and required in full. Highest-value target for relicensing outreach."
+      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030). Ships in full, as the author's own build rather than as a Trance rewrite of it: 7,500 lines with no interval, no MutationObserver, no backdrop-filter and no infinite animation, and one static will-change as the only section 3 offence in it. Still unlicensed, so nothing may be copied and nothing is.",
+      "investigated": "2026-08-26",
+      "investigationDoc": "docs/trance/mods/zen-library.md",
+      "implemented": "preinstalled"
     }
   ],
   "extensions": [
@@ -378,44 +391,58 @@
       "name": "uBlock Origin",
       "slug": "ublock-origin",
       "guid": "uBlock0@raymondhill.net",
-      "license": "GPL-3.0"
+      "license": "GPL-3.0",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
     },
     {
       "name": "SponsorBlock",
       "slug": "sponsorblock",
       "guid": "sponsorBlocker@ajay.app",
-      "license": "GPL-3.0"
+      "license": "GPL-3.0",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/sponsorblock/latest.xpi"
     },
     {
       "name": "Privacy Badger",
       "slug": "privacy-badger17",
       "guid": "jid1-MnnxcxisBPnSXQ@jetpack",
-      "license": "GPL-3.0"
+      "license": "GPL-3.0",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/privacy-badger17/latest.xpi"
     },
     {
       "name": "Dark Reader",
       "slug": "darkreader",
       "guid": "addon@darkreader.org",
-      "license": "MIT"
+      "license": "MIT",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/darkreader/latest.xpi"
     },
     {
       "name": "ClearURLs",
       "slug": "clearurls",
       "guid": "{74145f27-f039-47ce-a470-a662b129930a}",
-      "license": "LGPL-3.0"
+      "license": "LGPL-3.0",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/clearurls/latest.xpi"
     },
     {
       "name": "Return YouTube Dislike",
       "slug": "return-youtube-dislikes",
       "guid": "{762f9885-5a13-4abd-9c77-433dcd38b8fd}",
-      "license": "GPL-3.0"
+      "license": "GPL-3.0",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/return-youtube-dislikes/latest.xpi"
     },
     {
       "name": "Zen Internet",
       "slug": "zen-internet",
       "guid": "{91aa3897-2634-4a8a-9092-279db23a7689}",
       "license": "MIT",
-      "source": "https://github.com/sameerasw/my-internet"
+      "source": "https://github.com/sameerasw/my-internet",
+      "policy": "normal_installed",
+      "installUrl": "https://addons.mozilla.org/firefox/downloads/latest/zen-internet/latest.xpi"
     }
   ],
   "clusters": {

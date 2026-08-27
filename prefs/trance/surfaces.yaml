@@ -13,20 +13,38 @@
 #
 # Refs: TRANCE.md §3.3, §8.1, §13 Phase 3; docs/trance/mods/nebula.md
 
-# === Mark: Master switch ===
+# === Mark: Master switches ===
 
+# Frosting. One switch and one surface: the frost is a single layer over the
+# whole browser, with the web view painting over it, so there are no per-region
+# switches and no presets to choose between.
+#
+# The three region prefs and `trance.surface.preset` are gone. Every one of them
+# was a way of asking for *part* of one decision — "frost the sidebar but not the
+# toolbar" is two adjacent panes of glass with a seam between them, which is the
+# look this project exists to remove — and the presets only ever moved two
+# tokens the sliders below already own (ADR-041).
 - name: trance.surface.enabled
   value: true
 
-# === Mark: Preset ===
-
-# nebula  — frosted glass, the default; Nebula's design language
-# compact  — nebula geometry tightened for Zen's compact mode overlays
-# flat     — translucent but unblurred; Transparent Zen + Nova UI's geometry.
-#            The cheapest preset: zero backdrop-filter surfaces.
-# custom   — the sliders below are used as-is with no preset adjustments
-- name: trance.surface.preset
-  value: "nebula"
+# Transparency, which is a different question from frosting and now has its own
+# switch.
+#
+# Frosting is what Trance paints. Transparency is whether the *window* is
+# translucent at all, and that is not a Trance decision — it is a platform one,
+# behind a platform pref: `zen.widget.macos.window-vibrancy`,
+# `widget.windows.mica`, `zen.widget.linux.transparency`, and
+# `browser.tabs.allow_transparent_browser` for the content canvas. Every one of
+# them lives in about:config and none of them was reachable from the settings
+# page, so "make the browser transparent" meant editing four preferences by hand
+# and knowing which one your platform used.
+#
+# This claims whichever of them applies while it is on, and gives the user's
+# value back when it is off — the same arrangement `zen.theme.acrylic-elements`
+# already has (ADR-011). With it off, `--trance-surface-alpha` is not applied at
+# all: the chrome is opaque and Trance costs one attribute.
+- name: trance.surface.transparency
+  value: true
 
 # === Mark: Surface tuning ===
 
@@ -41,47 +59,238 @@
 # (macOS vibrancy, Windows Mica, transparent GTK) through, which is where
 # the frost comes from. Painting a translucent dark tint on top instead is
 # what made the first implementation look like a black box.
+#
+# 20, not 62 and not 35. A fresh profile has no gradient picked, so what
+# survives at 62% is a near-black sheet over the window's own frost and the
+# browser reads as a black box anyway — the second version of the same bug,
+# arrived at from the other direction. The sheen in trance-tokens.css is what
+# stops a low value reading as a hole, and at 20 the window's own material is
+# the thing you see rather than a wash over it.
+#
+# `trance.surface.internal.opacity` carries the same number on purpose: the
+# browser's own pages are the one large surface that is neither chrome nor a
+# website, and two different alphas over one continuous window is exactly the
+# "the page is a slightly different shade" seam edgeless exists to remove.
 - name: trance.surface.opacity
-  value: 62
+  value: 20
 
-# Percentage. Mirrored into --trance-surface-saturate.
+# Percentage. Mirrored into --trance-surface-saturate, and into
+# --trance-surface-saturate-fn as a filter function.
+#
+# It is the one value here with a paint cost attached: the filter it drives runs
+# over the whole window every time the workspace gradient is invalidated, which
+# measured ~6ms of a ~20ms colour change on an M4 at 1800x1131@2x. 100 is not a
+# weaker filter, it is no filter at all — the function token resolves to `none`
+# and the pass disappears.
 - name: trance.surface.saturation
   value: 130
 
-# === Mark: Regions ===
+# === Mark: Shape ===
 
-# The blur budget is one surface per region and at most three *blurred*
-# regions (TRANCE.md §3.3). These are the three.
+# Edgeless. One switch, because it is one decision made in four places.
 #
-# `sidebar` also owns the translucency of Zen's whole browser-area background,
-# which is why it covers the sidebar's outer edge, the splitter hairline, the
-# gutter around the content pane and the full window width when the sidebar is
-# collapsed — regions the old per-element tint kept missing.
-
-- name: trance.surface.region.sidebar
-  value: true
-
-- name: trance.surface.region.toolbar
-  value: true
-
-- name: trance.surface.region.overlay
-  value: true
-
-# The fourth region, and the only one that is not blurred: a blurred content
-# pane is the most expensive surface a browser can have (full window area, a
-# backdrop that changes on every scrolled frame) and the window's own
-# translucency already supplies the frost behind it. See ADR-019.
+# Stock Zen floats the web view: a gutter of `--zen-element-separation` around
+# it, a shadow under it, four rounded corners, and a background colour of its
+# own. That reads as a card sitting on the browser, and it is why the frosting
+# never looked like one material — the card was opaque, the gutter was frosted,
+# and the seam between them was the most visible edge in the window.
 #
-# Off by default. Every other region affects chrome only; this one can put a
-# workspace gradient behind body text.
-- name: trance.surface.region.content
-  value: false
+# On, the web view runs to the window edge, keeps exactly one rounded corner
+# (the one beside the sidebar's top, so the sidebar and the page still read as
+# two things), drops its shadow, and takes the same colour as everything around
+# it.
+#
+# The frost itself is a single layer either way — one surface on
+# `#zen-main-app-wrapper`, spanning the sidebar, the toolbar, the gutter and the
+# space around the page (ADR-025). What edgeless changes is whether the web view
+# is *part of* that surface or cropped out of it: on, the pane paints nothing
+# and the one layer runs edge to edge; off, the pane keeps its own opaque
+# backdrop and the frost stops at its border.
+- name: trance.surface.edgeless
+  value: true
 
-# Percentage. Mirrored into --trance-content-alpha. 100 is Zen's own opaque
-# page backdrop, so the region is a no-op at that value rather than a colour
-# change.
-- name: trance.surface.content.opacity
-  value: 85
+# === Mark: Background image ===
+
+# A picture behind the chrome — a texture, most usefully.
+#
+# It is a background *layer*, not a replacement: it is painted over the surface
+# sheen and under every piece of chrome, on the same single element the frost
+# uses, so it composites with the workspace gradient rather than covering it.
+# That is why a tileable texture at a low opacity is the thing to reach for and
+# a photograph is not: everything above it still has to be readable.
+#
+# The empty string is "no image", and at that value the layer is `none` and the
+# pseudo-element is not painted at all.
+#
+# Any URL CSS can load. The file picker on the settings page writes a `file://`
+# one, because a URL is what CSS takes and converting a path at every read is a
+# conversion that can only be got wrong in one place instead of none. The
+# default is a `chrome://` URL rather than the empty string, so a fresh profile
+# shows the browser this project actually intends rather than an empty picker —
+# the texture ships in `src/zen/trance/images/` (see jar.inc.mn for why it is
+# downscaled to 1600px).
+- name: trance.surface.image
+  value: "chrome://browser/content/trance-images/topo.png"
+
+# Percentage. How strongly the image reads. Low by construction: above about 30
+# it stops being a surface and starts being a picture with a browser on top of
+# it.
+- name: trance.surface.image.opacity
+  value: 15
+
+# Pixels. Softens the image without touching anything else on the surface: it is
+# a `filter` on the image's own layer, not the `backdrop-filter` the frost uses,
+# so it costs a pass only while there is an image to blur. 0 is no filter at all
+# rather than `blur(0px)`, which would still force one.
+- name: trance.surface.image.blur
+  value: 8
+
+# === Mark: Empty-tab mark ===
+
+# A mark on an otherwise empty tab — new tab, blank tab, home.
+#
+# Same shape as the background image above and for the same reasons: any URL CSS
+# can load, a file picker on the settings page, and the empty string meaning "no
+# mark" rather than a broken one. It is painted by the chrome, over the content
+# pane, and only while the selected tab is actually empty — so it costs one
+# attribute and one absolutely-positioned box, and nothing at all on a tab with
+# a page in it.
+#
+# The default is sameerasw's `wave-light.png` (docs/trance/THIRD-PARTY.md),
+# shipped rather than downloaded so a first run with no network still has it.
+- name: trance.surface.newtab.logo
+  value: "chrome://browser/content/trance-images/wave-light.png"
+
+# Pixels, longest edge. The mark is `contain`ed in a box this size, so a wide
+# image and a tall one at the same setting occupy the same square.
+#
+# 250, not 350. At 350 the square is wider than the new-tab page's own search
+# field on a laptop display, so the mark stopped reading as a watermark behind
+# an empty page and started reading as the page's content.
+- name: trance.surface.newtab.logo.size
+  value: 250
+
+# Percentage. 35 is a mark rather than a picture: it has to read as part of the
+# empty page instead of as content on it.
+- name: trance.surface.newtab.logo.opacity
+  value: 35
+
+# The three halves of "the mark is an object, not a sticker". All opt-out.
+#
+# Holographic is an iridescent sheen composited over the mark through its own
+# alpha — a `mask-image` of the same picture, so the sheen is exactly the shape
+# of the artwork and never a rectangle over it. Static, it is one extra
+# background layer on one element and costs a composite.
+#
+# Hover makes the effects react: `TranceSurfaces` tracks the pointer and writes
+# two numbers onto the mark, coalesced to one write per frame through
+# `TranceScheduler`. The listener exists only while an empty tab is selected and
+# either holographic or tilt is on — an empty tab is also the only time anything
+# is drawn to react (TRANCE.md §6.6).
+#
+# The sheen reads those same two numbers to slide its irregular, pastel ramp on
+# both axes while the pointer is over the mark. It stays reactive without tilt,
+# so disabling rotation does not turn holographic movement into a fixed film.
+#
+# Tilt rotates the mark in 3D about the pointer, and only while the pointer is
+# actually over the mark — it is an object on the page, so it answers to being
+# touched rather than to being near, and a mark that leaned because somebody
+# moved the mouse across the address bar was reacting to the wrong thing. It is
+# a `transform`, so it composites; it is not a `perspective` on an ancestor,
+# because that would establish a containing block for every fixed-position
+# descendant of the content pane.
+#
+# All three are motion in the sense TRANCE.md §3.5 means: the easing back to
+# rest is a token-timed `transition`, so at motion level 0 the mark snaps and
+# at level 1 it is instant, without any of this knowing motion levels exist.
+- name: trance.surface.newtab.logo.holographic
+  value: true
+
+- name: trance.surface.newtab.logo.hover
+  value: true
+
+- name: trance.surface.newtab.logo.tilt
+  value: true
+
+# === Mark: Page background — removed ===
+#
+# `trance.surface.region.content` and `trance.surface.content.opacity` are gone
+# (ADR-042).
+#
+# The region was a translucent backdrop for *websites*, and in the browser it
+# actually ships in it decided nothing: Zen Internet is preinstalled, it restyles
+# sites' own backgrounds, and a site that paints its background covers this
+# whichever way the switch is set. What was left it could reach — the pixels a
+# page leaves unpainted, the rounded corners, `about:` pages — the edgeless rule
+# and the internal-pages switch already own, and they own them at transparent
+# rather than at a percentage. So the two prefs were a slider over a value with
+# no consumer and a switch whose "on" state was indistinguishable from its "off"
+# one on every page anybody looked at.
+#
+# `browser.tabs.allow_transparent_browser` is still claimed — by the
+# internal-pages switch, which is the half of this that was doing the work.
+
+# === Mark: Internal pages ===
+
+# The browser's own pages — about:preferences, about:config, about:addons,
+# about:newtab — made translucent, so that opening settings does not put an
+# opaque slab in the middle of a frosted window.
+#
+# On by default, unlike the `content` region, because the trade-off is not the
+# same one. `content` can put a workspace gradient behind an arbitrary website's
+# body text, which Trance has no way to make legible. These pages are Trance's
+# own surface: their type scale, their contrast and their card backgrounds are
+# all things this tree controls, so the alpha can be tuned against them rather
+# than hoped for.
+#
+# It shares the `content` region's platform switch —
+# `browser.tabs.allow_transparent_browser` — because a translucent page needs an
+# alpha-composited canvas either way, and it reaches pages through a registered
+# user sheet rather than through the chrome, since an `about:` page is a content
+# document and no chrome stylesheet is in scope there (ADR-023).
+- name: trance.surface.internal-pages
+  value: true
+
+# Percentage. How much of the page's own background survives. Mirrored into
+# `--trance-internal-alpha` inside the registered user sheet — the token layer
+# cannot reach an `about:` document, so this one value travels as a generated
+# one-line sheet rather than as an inline custom property.
+#
+# The same 20 as `trance.surface.opacity`, and that is the point rather than a
+# coincidence: in an edgeless window the page is not a card on the browser, it
+# is part of the same continuous surface, and a page tinted at 55% inside chrome
+# tinted at 20% is a rectangle you can see the edges of. The two sliders stay
+# separate because a person may want exactly that; the *defaults* agree.
+#
+# Writing this value is the one Trance slider that cannot be an inline custom
+# property, so it costs an `nsIStyleSheetService` swap — which invalidates every
+# document in the application. `TranceSurfaces` therefore coalesces the write to
+# one idle callback rather than doing it per pref notification; without that, a
+# drag across the slider registered and unregistered a hundred sheets and the
+# whole browser stalled (ADR-046).
+- name: trance.surface.internal.opacity
+  value: 20
+
+# The frost behind those pages, rather than plain translucency.
+#
+# A translucent page over an unblurred backdrop reads as a washed-out slab: the
+# workspace gradient's grain shows straight through the type. Blurring the
+# backdrop is what turns it into glass, and it is the same `backdrop-filter` the
+# chrome regions use, on the one element that holds an `about:` page.
+#
+# It is not a fourth chrome region and does not spend the chrome blur budget:
+# the page paints over the edgeless layer, so the two never sample each other,
+# and the pass is only taken while a browser is actually showing such a page
+# (ADR-026).
+#
+# Gated on the switch above — blurring what is behind an opaque page is a pass
+# spent on something nobody can see — and inert where the window is translucent
+# in its own right (macOS vibrancy, Windows Mica, transparent GTK), because
+# there the operating system has already produced the frost and asking Gecko to
+# blur it again replaces it with a flat rectangle. The settings page swaps the
+# switch for a note on exactly that condition.
+- name: trance.surface.internal.blur
+  value: true
 
 # === Mark: Power ===
 
@@ -91,3 +300,19 @@
 # when it regains it — the largest single idle-power win available.
 - name: trance.surface.suspend-when-unfocused
   value: true
+
+# The opt-out from all of that, for people who keep two windows side by side and
+# want both to look the same.
+#
+# Zen's own `zen.view.grey-out-inactive-windows` puts the macOS window material
+# in NSVisualEffectStateFollowsWindowActiveState, so an unfocused window loses
+# its frost at the widget level — below anything a Trance pref could reach.
+# TranceSurfaces claims that pref while this is on (and gives the user's value
+# back when it is turned off), and ignores the suspend switch above for the same
+# window: they are one question, and answering it in two places is how a browser
+# ends up with two owners for one behaviour.
+#
+# Off by default because it is the more expensive answer: a frosted background
+# window keeps the window server resolving a blur it could otherwise skip.
+- name: trance.surface.keep-transparent-unfocused
+  value: false

@@ -38,7 +38,36 @@ const TRANCE_XHTML_NS = "http://www.w3.org/1999/xhtml";
  * `status`— "native" if Trance already ships the behaviour, "partial" if only
  *           some of it has landed, "planned" if the phase that owns it has
  *           not landed yet, "dropped" if investigation decided Trance will
- *           never build it (a DEFER verdict in the inventory).
+ *           never build it (a DEFER verdict in the inventory), and "shipped"
+ *           if Trance installs the mod itself rather than reimplementing it.
+ *
+ *           "shipped" is not a warning and is not coloured like one. Six mods
+ *           are in that category, for four different reasons.
+ *
+ *           Two are a licence question, from opposite ends of the spectrum: an
+ *           unlicensed icon set whose *look* Trance may not reproduce
+ *           (ADR-024), and a GPL-3.0 tree-connector mod whose rules Trance may
+ *           not copy (ADR-027). In both cases a clean-room reimplementation
+ *           could only ever approximate someone else's drawing.
+ *
+ *           Two are a value question: Zen Library and Live Calendar each open a
+ *           surface of their own and own no element Trance owns, so
+ *           reimplementing them would remove no conflict and would arrive at
+ *           the same runtime cost as the original (ADR-030).
+ *
+ *           One had nothing on either side of the trade: Pimp your PiP is 88
+ *           lines of CSS over a window no Trance stylesheet reaches, so there
+ *           was no conflict to remove and no cost to cut (ADR-039).
+ *
+ *           And one was a third of a mod: Trance kept Better New Tab button's
+ *           unlabelled plus and refused its radius sliders, which left the
+ *           button with two owners and a user with part of what they installed.
+ *           Shipping the author's own distribution ends both (ADR-049).
+ *
+ *           In all six cases anyone — including this provisioner — may install
+ *           the author's own distribution. The banner is there so that the
+ *           reason it is preinstalled, and what turning it off costs, are
+ *           visible where the mod is.
  *
  * This table has to be updated when a phase lands. Nothing joins it to
  * mods-inventory.json at build time, so the inventory's `implemented` field is
@@ -50,12 +79,12 @@ const TRANCE_REPLACED_MODS = [
     names: ["Nebula", "Zen Nebula"],
     status: "native",
     owner: "Trance surfaces",
-    pref: "trance.surface.preset",
+    pref: "trance.surface.enabled",
     detail:
-      "Trance ships Nebula's surface treatment natively as the default " +
-      "'nebula' surface preset — one blur stack, one token layer, suspended " +
-      "when the window loses focus. Running the mod on top adds a second " +
-      "blur pass over the same elements.",
+      "Trance ships Nebula's surface treatment natively — one blurred " +
+      "surface for the whole browser, one token layer, suspended when the " +
+      "window loses focus. Running the mod on top adds a second blur pass " +
+      "over the same elements.",
   },
   {
     keys: ["642854b5-88b4-4c40-b256-e035532109df"],
@@ -73,10 +102,11 @@ const TRANCE_REPLACED_MODS = [
     names: ["Zen Compact Transparent Mode"],
     status: "native",
     owner: "Trance surfaces",
-    pref: "trance.surface.preset",
+    pref: "trance.surface.enabled",
     detail:
-      "This is the 'compact' surface preset in Trance. Pick it in Trance " +
-      "settings instead of stacking a second blur stack on the first.",
+      "Trance's own surface layer already frosts compact mode's overlays, " +
+      "from the same single surface as everything else. Running this on top " +
+      "stacks a second blur pass on the first.",
   },
   {
     keys: ["nova"],
@@ -137,12 +167,16 @@ const TRANCE_REPLACED_MODS = [
   {
     keys: ["zenfoldertreeconnectors"],
     names: ["Zen Folder Tree Connectors", "ZenFolderTreeConnectors"],
-    status: "native",
+    status: "shipped",
     owner: "Trance tab strip",
-    pref: "trance.tabstrip.connectors",
     detail:
-      "Trance draws the trunk and elbows in CSS alone. The mod ships a " +
-      ".uc.js that walks the tab strip on every mutation to do the same job.",
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes. It used to reimplement the connectors in CSS instead, and " +
+      "that could only ever be an approximation of someone else's drawing — " +
+      "the mod is GPL-3.0, so its own rules may not be copied. Installing it " +
+      "is not copying it, and it puts the tree lines back under one owner. " +
+      "Trance now draws none of its own; uninstalling this leaves folders " +
+      "with no connectors at all (ADR-027).",
   },
   {
     keys: ["c9ee0d97-d2d6-40fd-8f85-549fe000b868"],
@@ -196,11 +230,12 @@ const TRANCE_REPLACED_MODS = [
     names: ["Context Menu Icons"],
     status: "native",
     owner: "Trance icons",
-    pref: "trance.chrome.icons.enabled",
+    pref: "trance.chrome.icons.scale",
     detail:
-      "This mod is the icon cluster's source. Its MIT packs are copied " +
-      "verbatim and its ~270-selector mapping is adapted with every " +
-      "!important stripped. Running it as a mod puts those !importants back.",
+      "This mod was the icon cluster's source. Trance no longer ships packs " +
+      "of its own (ADR-039), so what is left of the cluster is the size " +
+      "control — running the mod puts back the ~270 !important declarations " +
+      "the mapping needed and gives every menu glyph a second owner.",
   },
   {
     keys: ["81fcd6b3-f014-4796-988f-6c3cb3874db8"],
@@ -209,21 +244,23 @@ const TRANCE_REPLACED_MODS = [
     owner: "Trance icons and menus",
     pref: "trance.chrome.menus.tint",
     detail:
-      "Merged with Context Menu Icons into one canonical Trance icon set. " +
       "The workspace-colour menu tint is kept; its thirty-two hide-toggles " +
-      "were dropped. Turning off macOS native context menus is an opt-in " +
-      "pref here, off by default (ADR-020).",
+      "were dropped, and so was the icon half — Trance ships no icon packs, " +
+      "so there is nothing left that needed macOS's native context menus " +
+      "turned off to be visible (ADR-020, ADR-039).",
   },
   {
     keys: ["new-icons"],
     names: ["New Icons", "Zen Icons"],
-    status: "native",
+    status: "shipped",
     owner: "Trance icons",
-    pref: "trance.chrome.icons.pack",
+    pref: "trance.chrome.icons.scale",
     detail:
-      "Trance ships two icon packs and loads exactly one at a time. This " +
-      "mod contributed the coverage requirement — toolbar, panels and the " +
-      "site-information panel — and no assets.",
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes, so the icons are the ones the mod's author draws rather " +
+      "than an approximation of them. Trance ships no packs of its own to " +
+      "argue with it (ADR-039); uninstalling it here is supported, and the " +
+      "browser's own glyphs are what you get back (ADR-024).",
   },
   {
     keys: ["cb15abdb-0514-4e09-8ce5-722cf1f4a20f"],
@@ -247,49 +284,233 @@ const TRANCE_REPLACED_MODS = [
       "region, so the mod and Trance would fight over the same urlbar.",
   },
   {
-    keys: [],
-    names: ["Better New Tab Button", "Zen Better New Tab Button"],
-    status: "native",
+    keys: ["bada16c1-3b14-483b"],
+    names: ["Better New Tab button", "Better New Tab Button"],
+    status: "shipped",
     owner: "Trance chrome",
-    pref: "trance.chrome.newtab.compact",
     detail:
-      "Unlabelled centred plus, with its press rotation owned by " +
-      "trance.motion.level rather than a pref of its own. Its per-component " +
-      "radius sliders were dropped: Trance has one radius scale, and one " +
-      "owner per value is the whole anti-conflict design.",
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes. Trance used to reimplement one behaviour of it — the " +
+      "unlabelled centred plus — and drop the rest; shipping the mod gives " +
+      "the button one owner again, and it is the author's, radius sliders " +
+      "included. Uninstalling it here is supported and leaves the browser's " +
+      "own labelled button behind (ADR-049).",
   },
   {
     keys: ["betterzengradientpicker"],
     names: ["BetterZenGradientPicker", "Better Zen Gradient Picker"],
-    status: "planned",
-    owner: "Trance theming (phase 8)",
+    status: "native",
+    owner: "Trance theming",
+    pref: "trance.theme.enabled",
     detail:
-      "Trance builds on Zen's own gradient engine in phase 8, wired to " +
-      "--trance-accent.",
+      "Trance extends Zen's own picker in place: a lightness slider, a " +
+      "gradient-angle knob, eight palettes, saved themes and exact hex " +
+      "entry, all in the same panel. Both this mod and Trance rebuild the " +
+      "same panel's controls, so running both means two owners for one " +
+      "surface and a layout that depends on which loaded last.",
   },
   {
     keys: ["zen-live-calendar"],
     names: ["Live Calendar", "Zen Live Calendar"],
-    status: "planned",
-    owner: "Trance apps (phase 7)",
+    status: "shipped",
+    owner: "Trance apps",
     detail:
-      "Known offender: a setInterval clock. Trance rebuilds it on " +
-      "TranceScheduler.onWallClock in phase 7.",
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes. It was scheduled for a clean-room rebuild on " +
+      "TranceScheduler.onWallClock; the investigation found its one " +
+      "always-armed timer is already a 60-second refresh, which is the exact " +
+      "budget that rebuild was going to be held to, and it owns no element " +
+      "Trance owns. Uninstalling it here is supported and leaves nothing " +
+      "behind — Trance builds no calendar of its own (ADR-030).",
   },
   {
     keys: ["zen-library"],
     names: ["Zen Library"],
-    status: "planned",
-    owner: "Trance apps (phase 7)",
-    detail: "Reimplemented natively in phase 7.",
+    status: "shipped",
+    owner: "Trance apps",
+    detail:
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes. 7,500 lines with no interval, no MutationObserver and no " +
+      "infinite animation, opening a surface of its own that nothing in " +
+      "Trance competes for — so a reimplementation would have removed no " +
+      "conflict and cost what the original costs. Uninstalling it here is " +
+      "supported and leaves nothing behind (ADR-030).",
   },
   {
     keys: ["599a1599-e6ab-4749-ab22-de533860de2c"],
     names: ["Pimp your PiP"],
-    status: "planned",
-    owner: "Trance picture-in-picture (phase 10)",
-    detail: "Reimplemented clean-room in phase 10.",
+    status: "shipped",
+    owner: "Trance picture-in-picture",
+    detail:
+      "Trance provisions this mod itself, at the version its author " +
+      "publishes. It was scheduled for a clean-room rebuild in phase 10; the " +
+      "investigation found 88 lines of CSS, no script and no timer, over a " +
+      "Picture-in-Picture player that no Trance stylesheet reaches — so a " +
+      "rewrite would have removed no conflict and cut no cost. Uninstalling " +
+      "it here is supported and leaves nothing behind: the player goes back " +
+      "to looking like Firefox's (ADR-039).",
   },
+];
+
+/* ── Everything that is not in the table above ───────────────────────────────
+ *
+ * The table names 23 mods exactly, and that was the whole of this feature: a mod
+ * Trance had investigated got a precise banner, and every other mod in a store
+ * of hundreds got nothing — including the ones that restyle the same six
+ * elements from the same six selectors, which is the failure this project is
+ * about. Naming the mods Trance happens to have looked at is not the same
+ * promise as warning about mods that can clash.
+ *
+ * So the table is now the *precise* half and this is the general one. A card
+ * with no entry is matched on what it says it does — its title and its own
+ * description, which is the only thing about an uninstalled mod that is
+ * readable from here — against the surfaces Trance owns. A hit gets a banner
+ * naming the feature it will be arguing with and the setting that configures
+ * it; a miss gets nothing at all, which is most of the store and is the point.
+ *
+ * Two things this deliberately is not:
+ *
+ *   - It is not a block, and it is not a claim that the mod *will* break. Two
+ *     stylesheets over one element is a conflict whoever wins; two stylesheets
+ *     over two different elements is a browser with a mod in it. This says which
+ *     of those a mod is likely to be, from the only evidence available before
+ *     installing it.
+ *   - It is not a scan of the mod's CSS. Sine has not downloaded an uninstalled
+ *     mod yet, so there is nothing to read; and a guard that only worked after
+ *     installation would be warning about a conflict that had already happened.
+ *
+ * `exclude` is what keeps the small ones quiet. A mod about the
+ * Picture-in-Picture window, a clock, a calendar or the profile switcher owns a
+ * surface Trance has no opinion about — several are preinstalled *by* Trance for
+ * exactly that reason (ADR-030, ADR-039) — and a warning on one of those trains
+ * people to ignore the warnings on the rest.
+ */
+const TRANCE_CLASH_AREAS = [
+  {
+    id: "surfaces",
+    owner: "Trance surfaces",
+    pref: "trance.surface.enabled",
+    match: [
+      "transparent",
+      "transparency",
+      "translucent",
+      "blur",
+      "acrylic",
+      "frost",
+      "glass",
+      "mica",
+      "vibrancy",
+      "backdrop",
+      "opacity",
+    ],
+    detail:
+      "Trance owns one frosted surface for the whole browser, with a blur " +
+      "budget of one pass and blur dropped when the window is not visible. A " +
+      "mod that adds transparency or blur adds a second surface over the same " +
+      "elements, which is both a second owner and a second full-window pass.",
+  },
+  {
+    id: "tabstrip",
+    owner: "Trance tab strip",
+    pref: "trance.tabstrip.enabled",
+    match: [
+      "tab strip",
+      "tabstrip",
+      "sidebar",
+      "pinned",
+      "pin ",
+      "workspace",
+      "folder",
+      "essentials",
+      "vertical tabs",
+      "tab group",
+    ],
+    detail:
+      "Trance holds a single subscription for the whole tab strip and owns " +
+      "pinned tabs, folder colour, the collapsed rail, the tab fills and the " +
+      "active-tab glow. A mod over the same rows means two owners for one " +
+      "element, and which one wins depends on load order.",
+  },
+  {
+    id: "chrome",
+    owner: "Trance chrome",
+    pref: "trance.chrome.enabled",
+    match: [
+      "urlbar",
+      "url bar",
+      "address bar",
+      "toolbar",
+      "context menu",
+      "menu",
+      "panel",
+      "icon",
+      "new tab button",
+      "window controls",
+    ],
+    detail:
+      "Trance owns the menus, the panels, the address bar's page-recede, the " +
+      "new-tab button, the app-menu mark and the top of the sidebar. Seven " +
+      "mods used to argue over those same selectors with `!important`; " +
+      "installing one of them puts the argument back.",
+  },
+  {
+    id: "motion",
+    owner: "Trance motion",
+    pref: "trance.motion.level",
+    match: [
+      "animation",
+      "animate",
+      "transition",
+      "motion",
+      "fade",
+      "bounce",
+      "easing",
+      "keyframe",
+    ],
+    detail:
+      "Trance owns every animation in the chrome through one motion level and " +
+      "one scheduler, so that reduced motion is honoured everywhere and " +
+      "nothing keeps the refresh driver awake in a hidden window. A mod's own " +
+      "animations answer to neither.",
+  },
+  {
+    id: "theme",
+    owner: "Trance theming",
+    pref: "trance.theme.enabled",
+    match: [
+      "gradient",
+      "theme picker",
+      "colour picker",
+      "color picker",
+      "accent",
+      "palette",
+    ],
+    detail:
+      "Trance extends Zen's own gradient picker in place — a lightness " +
+      "slider, an angle knob, palettes, saved themes and hex entry. A mod that " +
+      "rebuilds the same panel's controls means two owners for one surface.",
+  },
+];
+
+/**
+ * Mods whose surface Trance has no opinion about. Checked first, so a calendar
+ * that mentions "animation" in its description stays quiet.
+ */
+const TRANCE_CLASH_EXCLUDE = [
+  "picture-in-picture",
+  "picture in picture",
+  "pip",
+  "calendar",
+  "clock",
+  "weather",
+  "library",
+  "translate",
+  "reader mode",
+  "screenshot",
+  "bookmark",
+  "download",
+  "profile switcher",
+  "keyboard shortcut",
 ];
 
 const TRANCE_STATUS_LABEL = {
@@ -297,6 +518,8 @@ const TRANCE_STATUS_LABEL = {
   partial: "Partly replaced by Trance",
   planned: "Trance will replace this",
   dropped: "Trance will not replace this",
+  shipped: "Installed by Trance",
+  clash: "May clash with Trance",
 };
 
 var gTranceModGuard = {
@@ -310,6 +533,9 @@ var gTranceModGuard = {
 
   /** @type {object | null} */
   _hub: null,
+
+  /** Whether `_hub` is this object's to destroy. See `init`. */
+  _ownsHub: false,
 
   _stylesheetAdded: false,
 
@@ -337,15 +563,29 @@ var gTranceModGuard = {
       }
     }
 
-    const { TranceScheduler } = ChromeUtils.importESModule(
-      "chrome://browser/content/trance-components/TranceScheduler.mjs"
-    );
-    const { TranceObserverHub } = ChromeUtils.importESModule(
-      "chrome://browser/content/trance-components/TranceObserverHub.mjs"
-    );
+    // trance-settings.js already owns a scheduler and an observer hub for this
+    // document — it needs one for the combobox — so this borrows them rather
+    // than installing a second MutationObserver over the same subtree, which is
+    // the exact multiplication TranceObserverHub exists to prevent (TRANCE.md
+    // §3.2). The fallback is here because that file is loaded by the same
+    // include and could in principle be absent from a partial build; a mod
+    // guard that silently did nothing would be worse than one that costs an
+    // observer.
+    if (window.gTrancePage?.hub) {
+      this._hub = window.gTrancePage.hub;
+      this._ownsHub = false;
+    } else {
+      const { TranceScheduler } = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceScheduler.mjs"
+      );
+      const { TranceObserverHub } = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceObserverHub.mjs"
+      );
+      this._scheduler = new TranceScheduler(window);
+      this._hub = new TranceObserverHub(window, this._scheduler);
+      this._ownsHub = true;
+    }
 
-    this._scheduler = new TranceScheduler(window);
-    this._hub = new TranceObserverHub(window, this._scheduler);
     this._hub.observeMutations(
       "#sineModsList, #sineInstallationList",
       () => this.decorate(),
@@ -359,8 +599,12 @@ var gTranceModGuard = {
   },
 
   destroy() {
-    this._hub?.destroy();
-    this._scheduler?.destroy();
+    // Only the hub this object built. A borrowed one belongs to gTrancePage,
+    // which tears it down on the same `unload`.
+    if (this._ownsHub) {
+      this._hub?.destroy();
+      this._scheduler?.destroy();
+    }
     this._hub = null;
     this._scheduler = null;
   },
@@ -435,11 +679,62 @@ var gTranceModGuard = {
     }
   },
 
+  /**
+   * What a card says about itself, as one lower-case string.
+   *
+   * The card's whole `textContent` rather than a description element by class
+   * name: Sine renders the marketplace and the installed list from two different
+   * templates, it has renamed those classes before, and a classifier that
+   * silently reads nothing is worse than one that also reads the word
+   * "Install". None of the keywords below is a button label.
+   *
+   * @param {Element} item
+   * @returns {string}
+   */
+  _cardText(item) {
+    return (item.textContent ?? "").toLowerCase();
+  },
+
+  /**
+   * The general half of the guard: what is this mod likely to be arguing with?
+   *
+   * First match wins, and the order of `TRANCE_CLASH_AREAS` is therefore the
+   * order of confidence — a mod that mentions both the sidebar and an animation
+   * is a tab-strip mod that animates, not an animation mod.
+   *
+   * @param {string} text
+   * @returns {object | null} An entry shaped like the curated ones.
+   */
+  _classify(text) {
+    if (!text) {
+      return null;
+    }
+    if (TRANCE_CLASH_EXCLUDE.some(word => text.includes(word))) {
+      return null;
+    }
+    const area = TRANCE_CLASH_AREAS.find(candidate =>
+      candidate.match.some(word => text.includes(word))
+    );
+    if (!area) {
+      return null;
+    }
+    return {
+      status: "clash",
+      owner: area.owner,
+      pref: area.pref,
+      detail: area.detail,
+    };
+  },
+
   _apply(item, identity) {
     if (item.querySelector(":scope > .trance-mod-warning")) {
       return;
     }
-    const entry = this._lookup(identity);
+    // The curated table first, always: it names the exact feature, the exact
+    // pref and what was actually decided about that mod, and a general note
+    // would be a worse answer to a question this file already knows.
+    const entry =
+      this._lookup(identity) ?? this._classify(this._cardText(item));
     if (!entry) {
       return;
     }

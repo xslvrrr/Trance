@@ -9,10 +9,8 @@
  * Behaviour inspired by "Context Menu Icons" (Starry, MIT), "Zen Context Menu"
  * (KiKaraage, MIT), "Hide Extension Name" (ch4og, MIT), "Zen Custom URL Bar"
  * (rasyidrafi, Apache-2.0), "Better New Tab Button" (themaster5209), "New Icons"
- * and "Nova UI" (qumeqa). The icon packs and their selector mapping are adapted
- * from Context Menu Icons under MIT; the two generated `trance-icons-*.css`
- * files carry that attribution. Everything in this file is written for Trance —
- * three of those seven mods carry no licence at all (TRANCE.md §7.3).
+ * and "Nova UI" (qumeqa). Everything in this file is written for Trance — three
+ * of those seven mods carry no licence at all (TRANCE.md §7.3).
  *
  * ── Why there is no `!important` here either ──────────────────────────────
  *
@@ -30,45 +28,255 @@
  */
 
 :root[trance="true"][trance-chrome="true"] {
-  /* ── Icon plumbing ───────────────────────────────────────────────────────
+  /* ── Icon size ───────────────────────────────────────────────────────────
    *
-   * The generated pack sheets assign `list-style-image` and `--menu-image`.
-   * This is everything those assignments need in order to render: the context
-   * properties that make a `context-fill` SVG take the current text colour, the
-   * size, and the background plumbing for checkable rows.
+   * The one thing about icons that is a preference rather than a second
+   * implementation of somebody else's glyphs. There are no Trance icon packs
+   * any more (ADR-039): the browser draws its own icons, the preinstalled "New
+   * Icons" mod redraws them if it is installed, and this scales whichever of
+   * the two is on screen.
    *
-   * It lives here rather than in the generated files because it is identical
-   * for both packs and because it is hand-written — the generator's output
-   * should be nothing but the mapping.
+   * The scale reaches the toolbar through `--zen-toolbar-button-size`, which is
+   * declared in trance-tokens.css with the rest of the token layer — see there
+   * for why it is that variable and not a rule of Trance's own.
    */
 
-  &[trance-chrome-icons="true"] {
-    & :is(menuitem, menu, .subviewbutton, .toolbarbutton-1) {
-      -moz-context-properties: fill, fill-opacity;
-      fill: currentColor;
+  /* Menu and subview rows size their icon box directly rather than through
+   * that variable, so the same number reaches them as a length. */
+  & :is(menuitem, menu) > .menu-icon,
+  & .subviewbutton > .toolbarbutton-icon {
+    width: var(--trance-menu-icon-size);
+    height: var(--trance-menu-icon-size);
+  }
+
+  /* ── Hover, arriving ─────────────────────────────────────────────────────
+   *
+   * Firefox switches a hover fill on and off with no transition anywhere, so
+   * moving the pointer across a toolbar or a menu is a row of rectangles
+   * blinking. One duration token, shared with the tab strip
+   * (`--trance-hover-dur`), makes the whole browser agree about how long a
+   * hover takes to arrive — which is the thing seven mods each answered
+   * separately and differently.
+   *
+   * Two selectors because Firefox paints the fill in two places: on the element
+   * for menu and subview rows, and on `.toolbarbutton-icon` /
+   * `.toolbarbutton-text` / `.toolbarbutton-badge-stack` for toolbar buttons
+   * (`toolbar .toolbarbutton-1:hover > :is(…)` in toolbarbuttons.css). A
+   * transition on the button alone would animate nothing at all.
+   *
+   * Motion, and therefore owned by `trance.motion.level`: at level 0 the token
+   * is 0ms and every one of these is back to switching instantly, with no
+   * second switch to find (TRANCE.md §6.2). */
+  & :is(.subviewbutton, menuitem, menu, .toolbaritem-combined-buttons),
+  & .toolbarbutton-1
+    > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
+    transition: background-color var(--trance-hover-dur) var(--trance-ease-standard);
+  }
+
+  /* ── The app-menu button ─────────────────────────────────────────────────
+   *
+   * Trance's own mark where the browser draws three dots. Opt-out.
+   *
+   * Zen's icon sheet declares `list-style-image: url("menu.svg") !important` on
+   * `#PanelUI-menu-button`, and Trance may not answer an `!important` with one
+   * of its own (TRANCE.md §6.2 rule 1). It does not need to: the
+   * `<image class="toolbarbutton-icon">` inside the button is what paints the
+   * glyph, and a normal declaration on that child beats a value it merely
+   * inherited — importance does not travel down the tree.
+   *
+   * ── Why this is a mask and not a `list-style-image` ───────────────────────
+   *
+   * It was a `list-style-image`, and the result was a mark two or three pixels
+   * across in the middle of a toolbar button. The branding artwork is a
+   * 1024×1024 canvas with the mark inset well inside it and no `width`/`height`
+   * of its own. As a `list-style-image` the whole canvas is scaled into the
+   * icon box, so what actually lands in a 16px box is the mark at whatever
+   * fraction of 1024 it occupies — which is the "extremely small logo" exactly,
+   * and no amount of sizing the *box* changes it, because the box was never
+   * what was too small.
+   *
+   * `mask-image` sizes the artwork rather than framing it: `mask-size: contain`
+   * fits the drawing to the box, and the box is the browser's own icon size, so
+   * the mark is the same size as every glyph beside it. The colour then comes
+   * from `background-color: currentColor`, which is the toolbar's text colour —
+   * so the mark is dark on a light chrome and light on a dark one without a
+   * second asset, a media query, or a Trance colour token for something that is
+   * really just "whatever the icons next to it are".
+   *
+   * That is a deliberate change from what this used to promise. The full-colour
+   * mark was a good idea and it is not one at 16px: one hue at that size on a
+   * toolbar of monochrome glyphs reads as a mis-rendered icon rather than as
+   * branding. `about:` pages still draw the mark in its own colours, at a size
+   * where the colours are worth having.
+   *
+   * ── Why the size has to be stated ─────────────────────────────────────────
+   *
+   * The first version of this rule was the four mask declarations and
+   * `list-style-image: none`, and it rendered *nothing at all* — the button went
+   * back to looking like an empty square and the mark was reported as gone.
+   *
+   * `.toolbarbutton-icon` is a XUL `<image>`, and a XUL `<image>` with no image
+   * has no intrinsic size. Every pixel of the box it normally occupies comes
+   * from the picture inside it, so taking the picture away with
+   * `list-style-image: none` collapses the element to 0×0 — and a mask on a
+   * zero-sized box paints a zero-sized mark. Nothing in the rule was wrong; it
+   * was drawing correctly, into no space.
+   *
+   * ── Why the size is the toolbar's and not the menu's ──────────────────────
+   *
+   * It was `--trance-menu-icon-size`, which is 16px times the icon-scale pref —
+   * the size a *menu row's* icon box is, and menu rows are not what this sits
+   * beside. `toolbar .toolbarbutton-1 > .toolbarbutton-icon` is
+   * `calc(2 * var(--toolbarbutton-padding-inner) + var(--zen-toolbar-button-size))`
+   * with `padding: var(--toolbarbutton-padding-inner)`, so a toolbar glyph is
+   * `--zen-toolbar-button-size` (17px on macOS) inside a larger box. Sixteen
+   * pixels with no padding against seventeen with padding is already a step
+   * down, and it was the smaller of the two problems.
+   *
+   * ── Why the artwork is not the application icon ───────────────────────────
+   *
+   * This masked `chrome://branding/content/about-logo.svg` until Phase 1's
+   * artwork landed (ADR-050), and it cannot any more: the real Trance icon is a
+   * white mark on an opaque plate, and a mask reads *alpha*. A plate that fills
+   * its canvas is a mask that is opaque everywhere, so the button would paint a
+   * solid rounded square in the toolbar's text colour — the mark's own shape
+   * carries no alpha information at all once there is something behind it.
+   *
+   * `trance-icons/trance-mark.svg` is the same mark with neither plate nor
+   * margin: `scripts/trance-branding.py` traces it out of the source artwork
+   * into a viewBox the glyph fills. That fixes both halves of the old problem
+   * at once — the mask is the mark rather than the icon, and there is no inset
+   * left for `--trance-logo-mask-scale` to compensate for, which is why that
+   * token is now 100%.
+   *
+   * So the box is the browser's own and the mask matches it. `mask-origin` and
+   * `background-clip` are pinned to the content box so that both the mask and
+   * the colour it cuts are measured against the 17px glyph area rather than
+   * against the padded box around it; without that the mark would be sized
+   * against one rectangle and its siblings against another.
+   */
+
+  &[trance-chrome-logo="true"] #PanelUI-menu-button .toolbarbutton-icon {
+    list-style-image: none;
+    width: calc(
+      2 * var(--toolbarbutton-padding-inner, 0px) +
+        var(--zen-toolbar-button-size, 16px)
+    );
+    height: calc(
+      2 * var(--toolbarbutton-padding-inner, 0px) +
+        var(--zen-toolbar-button-size, 16px)
+    );
+    /* The half of the box the two `calc()`s above were already assuming, and
+     * leaving it out is what made the mark enormous rather than merely wrong.
+     * Firefox's own rule is `width/height: calc(2 * padding-inner + button-size)`
+     * *with* `padding: var(--toolbarbutton-padding-inner)`, and the elements are
+     * `border-box` — so upstream's content box is `--zen-toolbar-button-size` and
+     * the padding is what the outer size is padding out to. Without this
+     * declaration the content box was the whole padded box, and every
+     * content-box measurement below — the mask origin, the mask size, the clip —
+     * was taken against a rectangle a third larger than the glyph beside it.
+     * Then `--trance-logo-mask-scale` multiplied that. */
+    padding: var(--toolbarbutton-padding-inner, 0);
+    background-color: currentColor;
+    background-clip: content-box;
+    mask-image: url("chrome://browser/content/trance-icons/trance-mark.svg");
+    mask-origin: content-box;
+    mask-clip: content-box;
+    mask-size: var(--trance-logo-mask-scale);
+    mask-position: center;
+    mask-repeat: no-repeat;
+  }
+
+  /* ── The top of the sidebar ──────────────────────────────────────────────
+   *
+   * The window buttons and the compact-mode toggle, out of the way until the
+   * pointer is near them.
+   *
+   * ── Why `opacity` rather than `display` ──────────────────────────────────
+   *
+   * Three reasons, and the third is the whole feature. `display: none` collapses
+   * the box, so everything below it jumps by the height of a toolbar row every
+   * time the pointer crosses the strip. `visibility: hidden` keeps the space but
+   * takes the element out of hit-testing. And both of them mean the pointer
+   * moving *onto* a revealed button lands on an element that is no longer there
+   * — the strip un-hovers, the buttons go away, and they go away exactly as you
+   * reach for them.
+   *
+   * With `opacity` the buttons are always present and always hit-testable, and
+   * the hover that reveals them is on the strip they live inside, so a pointer
+   * on a button is still inside the strip by construction. `:focus-within` is
+   * the same guarantee for the keyboard.
+   *
+   * ── Why the reveal is an attribute and not `:hover` ──────────────────────
+   *
+   * On macOS the window buttons are not Gecko's. The widget layer positions the
+   * real `NSWindow` traffic lights over the box this strip reserves for them, so
+   * the moment the pointer crosses onto one, the Gecko view gets a mouse *exit*
+   * — `:hover` clears on the strip and on every ancestor of it at once. The
+   * buttons then slid back up underneath the cursor that had just arrived on
+   * them, which is the same failure the `opacity` choice above was made to
+   * avoid, arriving from a direction CSS cannot see.
+   *
+   * So the state is `TranceChrome`'s: it watches the pointer while it is in the
+   * sidebar and sets the attribute while it is in the band this strip occupies,
+   * and a leave whose last coordinates are inside the strip is read as "into the
+   * platform's buttons" rather than "away". A band and not the whole sidebar,
+   * because reaching for a tab is not reaching for a window button — and the
+   * content shift below is far too much motion to spend on it.
+   * `:focus-within` stays alongside it, because the keyboard path never had
+   * either problem.
+   *
+   * ── Why the strip collapses rather than merely fading ────────────────────
+   *
+   * An empty toolbar row at the top of the sidebar is a toolbar row of nothing,
+   * and it pushed the tab list down by its own height for the whole session.
+   * The negative `margin-block-end` gives that height back to the tabs while the
+   * strip has nothing in it, and returns it as the buttons arrive — so the
+   * sidebar's content rides up when the pointer is away and settles back down
+   * when it comes near. The box keeps its size and its hit-testing throughout;
+   * it is the *following* content that moves, which is the one thing `display:
+   * none` could never do smoothly.
+   *
+   * Motion is owned by `trance.motion.level`, as everywhere else: at level 0 the
+   * duration token is 0ms and the buttons appear rather than sliding.
+   */
+
+  &[trance-chrome-topbuttons="true"] {
+    /* trance-specificity: one ID and two classes, plus the root's two
+       attributes. The class is Firefox's own container for the window controls
+       and the ID is Zen's for the toolbar item — there is no shorter way to
+       name "the two things at the top of the sidebar" without naming everything
+       else in that strip as well. */
+    & #zen-sidebar-top-buttons .titlebar-buttonbox-container,
+    & #zen-toggle-compact-mode {
+      opacity: 0;
+      transform: translateY(calc(-1 * var(--trance-gap-sm)));
+      transition:
+        opacity var(--trance-dur-base) var(--trance-ease-standard),
+        transform var(--trance-dur-base) var(--trance-ease-emphasis);
     }
 
-    & :is(menuitem, menu) > .menu-icon,
-    & .subviewbutton > .toolbarbutton-icon {
-      width: var(--trance-menu-icon-size);
-      height: var(--trance-menu-icon-size);
-      opacity: var(--trance-menu-icon-opacity);
+    & #zen-sidebar-top-buttons {
+      margin-block-end: calc(-1 * var(--trance-topbuttons-shift));
+      transition: margin-block-end var(--trance-dur-base)
+        var(--trance-ease-emphasis);
     }
 
-    /* A checkable row's icon slot is taken by the platform tick, so its glyph
-     * has to be painted as a background instead. `--menu-image` is the
-     * indirection the upstream mapping already uses for exactly these rows;
-     * keeping the name means the generated sheets need no special case. */
-    & menuitem:is([type="checkbox"], [type="radio"]):not([checked]) {
-      background-image: var(--menu-image, none);
-      background-repeat: no-repeat;
-      background-position: left var(--trance-gap-lg) center;
-      background-size: var(--trance-menu-icon-size);
+    /* trance-specificity: two IDs on the second selector, and they are the
+       relationship rather than a way of winning one — "the toggle, while the
+       strip it lives in holds focus" cannot be written with one. Both IDs are
+       Zen's. */
+    &[trance-chrome-topbuttons-near="true"] #zen-sidebar-top-buttons .titlebar-buttonbox-container,
+    &[trance-chrome-topbuttons-near="true"] #zen-toggle-compact-mode,
+    & #zen-sidebar-top-buttons:focus-within .titlebar-buttonbox-container,
+    & #zen-sidebar-top-buttons:focus-within #zen-toggle-compact-mode {
+      opacity: 1;
+      transform: none;
     }
 
-    /* Nested popups must not inherit the parent row's glyph. */
-    & menupopup menupopup {
-      --menu-image: none;
+    &[trance-chrome-topbuttons-near="true"] #zen-sidebar-top-buttons,
+    & #zen-sidebar-top-buttons:focus-within {
+      margin-block-end: 0;
     }
   }
 
@@ -88,8 +296,8 @@
 
   &[trance-chrome-panels="true"] {
     /* Firefox draws a panel's frame in its shadow tree, on `::part(content)`,
-     * from these four variables. Setting the variables rather than the part is
-     * both shorter and the documented extension point — and it means the
+     * from these variables. Setting the variables rather than the part is both
+     * shorter and the documented extension point — and it means the
      * rounded-corner clipping, which upstream already applies to that part, is
      * not something Trance has to reproduce. Nova UI's "bleeding corners fix"
      * is therefore not needed here: the artifact it patched belongs to an older
@@ -98,6 +306,25 @@
       --panel-border-radius: var(--trance-radius-md);
       --panel-border-color: var(--trance-surface-border);
       --panel-padding: var(--trance-gap-sm) 0;
+
+      /* The row geometry, and the reason this switch was reported as doing
+       * nothing.
+       *
+       * The four declarations above change the frame — a 10px corner where the
+       * platform already draws something close to it, on a popup most people
+       * see for half a second. Nothing about the *rows* moved, and the rows are
+       * what a menu looks like. Upstream keeps them behind three variables
+       * (toolkit/themes/shared/menu.css), so the fix is to declare those rather
+       * than to fight `menupopup > menuitem` with a longer selector: an inset,
+       * rounded, taller row is the whole visible difference between a Firefox
+       * menu and the one this sub-feature promises.
+       *
+       * `--menuitem-margin` is inline-only. Adding block margin here would
+       * double up with `--panel-padding` above and leave a menu that grows a
+       * little every time someone touches one of the two. */
+      --menuitem-border-radius: var(--trance-radius-sm);
+      --menuitem-margin: 0 var(--trance-gap-sm);
+      --menuitem-padding: var(--trance-gap-sm) var(--trance-gap-md);
     }
 
     & .panel-subview-body {
@@ -107,6 +334,18 @@
     & :is(.subviewbutton, menuitem, menu) {
       border-radius: var(--trance-radius-sm);
       min-height: var(--trance-menu-item-height);
+    }
+
+    /* Subview rows are not `menuitem`s and take none of the variables above,
+     * so the inset that makes a menu row read as a pill has to be stated once
+     * more here. Same two values, so the two kinds of row line up. */
+    & .subviewbutton {
+      margin-inline: var(--trance-gap-sm);
+      padding-block: var(--trance-gap-sm);
+    }
+
+    & :is(panel, menupopup) menuseparator {
+      margin-inline: var(--trance-gap-sm);
     }
 
     /* Thumb only. A custom-drawn scrollbar is a maintenance surface; a
@@ -136,31 +375,17 @@
 
   /* ── New tab button ──────────────────────────────────────────────────────
    *
-   * Unlabelled, centred plus. The collapsed rail already draws it this way, so
-   * today the expanded sidebar is the inconsistent one.
+   * Not here any more, and deliberately not replaced by anything.
+   *
+   * Trance used to draw the unlabelled centred plus itself, behind
+   * `trance.chrome.newtab.compact`, and drop the rest of the mod it came from.
+   * Trance now preinstalls "Better New Tab button" (scripts/trance-cosine.py,
+   * ADR-049), which puts the button under one owner again — the mod's — and
+   * gives a user the whole mod rather than the third of it Trance had picked.
+   *
+   * Nothing in this file may style `#tabs-newtab-button` or
+   * `#vertical-tabs-newtab-button`. That is the mod's surface now.
    */
-
-  &[trance-chrome-newtab="true"] {
-    & #tabs-newtab-button .toolbarbutton-text,
-    & #vertical-tabs-newtab-button .toolbarbutton-text {
-      display: none;
-    }
-
-    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button) {
-      justify-content: center;
-    }
-
-    /* Motion, and therefore owned by `trance.motion.level`: at level 0 the
-     * duration token is 0ms and the button simply does not turn. There is no
-     * second switch to find (TRANCE.md §6.2). */
-    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button) .toolbarbutton-icon {
-      transition: transform var(--trance-dur-fast) var(--trance-ease-emphasis);
-    }
-
-    & :is(#tabs-newtab-button, #vertical-tabs-newtab-button):active .toolbarbutton-icon {
-      transform: rotate(90deg);
-    }
-  }
 
   /* ── Address bar ─────────────────────────────────────────────────────────*/
 
@@ -181,15 +406,43 @@
    *
    * This is `filter`, not `backdrop-filter` — a different tool, and the correct
    * one. It costs nothing against the blur budget (TRANCE.md §3.3) and it only
-   * runs while the bar is open, which is also why the blur radius is allowed to
-   * be the same token the rest of the browser uses.
+   * runs while the bar is open.
    *
    * The `:has()` is scoped to the toolbox rather than to `:root`, so the
    * invalidation it creates is local to the sidebar's subtree instead of
    * hanging off the root element for the whole session.
+   *
+   * ── Three things this got wrong ─────────────────────────────────────────
+   *
+   *   1. The blur escaped the tab window. A `filter: blur()` samples outside
+   *      the element's box and paints outside it too, so the dimmed page bled a
+   *      soft halo over the sidebar and the gutter — the effect looked like it
+   *      belonged to the window rather than to the page. `clip-path` runs after
+   *      `filter` in the rendering order, so an inset clip at the content
+   *      pane's own radius is exactly "within the tab window bounds", and it
+   *      needs no `overflow` change on anything that has to scroll.
+   *   2. It borrowed `--trance-surface-blur`. That token is the *surface*
+   *      blur — a `backdrop-filter` radius for frosted chrome — and 24px of it
+   *      on the page is a smear, not a recede. The two effects only looked
+   *      related; now the address bar has its own radius and its own switch.
+   *   3. Dim and blur were one pref. `filter` takes a single list, so a rule
+   *      per half would overwrite rather than compose. Naming each half as a
+   *      function (see trance-tokens.css) lets one declaration carry both and
+   *      lets either resolve to an identity.
    */
-  &[trance-chrome-urlbar-dim="true"] {
+  &:is([trance-chrome-urlbar-dim="true"], [trance-chrome-urlbar-blur="true"]) {
     & #zen-tabbox-wrapper {
+      /* The pane's four corners, not a radius of this rule's own. The clip used
+       * to read `--zen-webview-border-radius` directly, which is Zen's number
+       * for a floating card — so an edgeless window squared the pane and this
+       * rounded it straight back, and the corners the edgeless rule had already
+       * decided about were decided a second time here. One source, two
+       * consumers (see trance-tokens.css). */
+      clip-path: inset(
+        0 round var(--trance-webview-radius-tl) var(--trance-webview-radius-tr)
+          var(--trance-webview-radius-br) var(--trance-webview-radius-bl)
+      );
+
       transition:
         filter var(--trance-dur-base) var(--trance-ease-standard),
         transform var(--trance-dur-base) var(--trance-ease-standard);
@@ -200,7 +453,15 @@
      * ids are Firefox's or Zen's, not Trance's. */
     & #navigator-toolbox:has(#urlbar[breakout-extend]:focus-within) ~ * #zen-tabbox-wrapper,
     & #zen-appcontent-wrapper:has(#urlbar[breakout-extend]:focus-within) #zen-tabbox-wrapper {
-      filter: blur(var(--trance-surface-blur)) brightness(var(--trance-urlbar-dim));
+      filter: var(--trance-urlbar-blur-fn) var(--trance-urlbar-dim-fn);
     }
+  }
+
+  &[trance-chrome-urlbar-dim="true"] #zen-tabbox-wrapper {
+    --trance-urlbar-dim-fn: brightness(var(--trance-urlbar-dim));
+  }
+
+  &[trance-chrome-urlbar-blur="true"] #zen-tabbox-wrapper {
+    --trance-urlbar-blur-fn: blur(var(--trance-urlbar-blur));
   }
 }

@@ -150,3 +150,21 @@ the user set it.
 ## 8. Open questions for the user
 
 - None. Grid scope confirmed 2026-08-25 ("drop the grid").
+
+---
+
+## 8. Revision — 2026-08-25
+
+B4's sticky treatment painted a grey band under the space name on a profile with
+no pinned tabs.
+
+`[hide-separator]` was the wrong test for "empty": Zen only sets it in some of
+the empty cases, so the section — containing nothing but its own 22px
+separator — was still styled as though it held something. The gate is now
+`:has(tab)`, which asks the question the rule actually means. An occluder with
+nothing to occlude is a stripe, not a feature.
+
+`--trance-sticky-bg` also stopped being two hardcoded greys and is now derived
+from `--zen-main-browser-background`. A near-opaque slab is unavoidable — that is
+what an occluder is — but a slab in the chrome's own colour reads as part of the
+sidebar where `rgb(28 30 36)` read as a foreign stripe laid on it.

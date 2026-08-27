@@ -1,0 +1,177 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Trance: the first-run panel.
+ *
+ * Loaded only while the panel exists — `TranceFirstRun` is a TranceFeature, so
+ * a browser whose first run is over has none of this in its style set.
+ *
+ * The status colours come from Firefox's own primitives (`--color-green-50`
+ * and friends, from chrome://global/skin/design-system/tokens-platform.css,
+ * which global.css imports into every chrome document). That is the same
+ * argument trance-mod-guard.css makes: "installed" versus "failed" is a status,
+ * the platform already has a palette for statuses, and a Trance token for green
+ * would be a second owner of a decision Firefox has already made.
+ *
+ * Refs: TRANCE.md §6.2, §13 Phase 9
+ */
+
+#trance-firstrun-panel {
+  --trance-firstrun-width: 22em;
+
+  max-width: var(--trance-firstrun-width);
+  padding: var(--trance-gap-lg);
+  font: message-box;
+}
+
+#trance-firstrun-panel .trance-firstrun-title {
+  margin: 0 0 var(--trance-gap-xs);
+  font-size: 1.25em;
+  font-weight: 600;
+}
+
+#trance-firstrun-panel .trance-firstrun-subtitle {
+  margin: var(--trance-gap-lg) 0 var(--trance-gap-sm);
+  font-size: 1em;
+  font-weight: 600;
+}
+
+#trance-firstrun-panel .trance-firstrun-text {
+  margin: 0;
+  opacity: 0.8;
+}
+
+#trance-firstrun-panel .trance-firstrun-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trance-gap-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#trance-firstrun-panel .trance-firstrun-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--trance-gap-md);
+  padding: var(--trance-gap-xs) var(--trance-gap-sm);
+  border-radius: var(--trance-radius-sm);
+  background-color: var(--trance-surface-tint);
+}
+
+#trance-firstrun-panel .trance-firstrun-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One element, five values, and the transition is on `color` alone: a status
+ * that changes while the panel is open should read as the same row saying
+ * something new, not as a row being replaced. */
+#trance-firstrun-panel .trance-firstrun-status {
+  flex: none;
+  font-size: 0.9em;
+  color: var(--trance-firstrun-state, currentColor);
+  transition: color var(--trance-dur-fast) var(--trance-ease-standard);
+}
+
+/* Each state names a colour once, as a variable, and the rule above consumes
+ * it — the shape `trance-mod-guard.css` uses, and the one Mozilla's own
+ * `no-base-design-tokens` rule asks for: a base token may be mapped to a
+ * semantic variable, not applied directly to a property. */
+#trance-firstrun-panel .trance-firstrun-status[state="installed"] {
+  --trance-firstrun-state: var(--color-green-50);
+}
+
+#trance-firstrun-panel .trance-firstrun-status[state="installing"] {
+  --trance-firstrun-state: var(--color-blue-50);
+}
+
+#trance-firstrun-panel .trance-firstrun-status[state="disabled"] {
+  --trance-firstrun-state: var(--color-gray-50);
+}
+
+#trance-firstrun-panel .trance-firstrun-status[state="missing"] {
+  --trance-firstrun-state: var(--color-orange-50);
+}
+
+#trance-firstrun-panel .trance-firstrun-status[state="failed"] {
+  --trance-firstrun-state: var(--color-red-50);
+}
+
+#trance-firstrun-panel .trance-firstrun-empty {
+  padding: var(--trance-gap-sm);
+  border-radius: var(--trance-radius-sm);
+  background-color: var(--trance-surface-tint);
+}
+
+/* Three buttons in a 22em panel.
+ *
+ * A XUL `button` sizes itself to its label and does not shrink below it, so
+ * three of them in a `flex` row added up to more than the panel and the widest
+ * one — "Open Trance settings" — pushed its own text out through the panel's
+ * edge. Widening the panel alone does not fix it either: the row has to be
+ * allowed to wrap, and each button has to be allowed to be narrower than its
+ * label, or the next long label does the same thing again.
+ *
+ * `flex-wrap` plus `min-width: 0` is the whole fix; the label then ellipsises
+ * inside its button instead of escaping it, and a row that will not fit becomes
+ * two rows. The primary action stays last, where it was.
+ */
+#trance-firstrun-panel .trance-firstrun-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--trance-gap-sm);
+  margin-top: var(--trance-gap-lg);
+}
+
+#trance-firstrun-panel .trance-firstrun-button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#trance-firstrun-panel .trance-firstrun-button .button-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Why the two right-hand buttons looked switched off ─────────────────────
+ *
+ * "Try again" and "Done" both read as disabled next to "Settings", for two
+ * different reasons that happened to look the same.
+ *
+ * "Done" carried `color: var(--trance-content-bg)`. That token is a *page
+ * backdrop*: it is `--trance-content-base` mixed with `transparent` by the
+ * content region's alpha, so using it as a foreground painted the label at 85%
+ * opacity — which is exactly what a disabled XUL button looks like. A
+ * foreground has no surface alpha to inherit, so it takes
+ * `--trance-fg-on-accent`, which is a colour and nothing else. The fill moves
+ * to `--trance-accent-vivid` at the same time: the raw accent is
+ * `--zen-primary-color`, and on a profile with no gradient picked that is a
+ * near-black — a "primary" button in the same colour as the panel behind it.
+ *
+ * "Try again" was genuinely disabled, and correctly so — there is nothing to
+ * retry until something has failed. What was wrong is that a XUL button's
+ * disabled state is drawn by lowering the *whole button's* opacity, so a button
+ * that is off looks like a button that is broken. Dimming the label alone says
+ * the same thing without making the control look like a rendering fault.
+ */
+
+#trance-firstrun-panel .trance-firstrun-primary {
+  background-color: var(--trance-accent-vivid);
+  color: var(--trance-fg-on-accent);
+}
+
+/* trance-specificity: one ID and two classes. The attribute selector is the
+   state being styled and the ID is the panel this file exists for. */
+#trance-firstrun-panel .trance-firstrun-button[disabled="true"] {
+  opacity: 1;
+}
+
+#trance-firstrun-panel .trance-firstrun-button[disabled="true"] .button-text {
+  opacity: 0.5;
+}

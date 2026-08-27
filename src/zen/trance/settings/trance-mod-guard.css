@@ -21,7 +21,9 @@
   gap: 6px;
   margin-block: 8px;
   padding: 10px 12px;
-  border-radius: 6px;
+  /* The page's one control radius, from the palette block in
+   * trance-settings.css. Same shape as every other box on the page. */
+  border-radius: var(--trance-ui-radius);
   border-inline-start: 3px solid var(--trance-mod-warning-accent);
   background-color: var(--trance-mod-warning-background);
   font-size: 0.9em;
@@ -54,6 +56,32 @@
   --trance-mod-warning-background: color-mix(
     in srgb,
     var(--color-gray-50) 12%,
+    transparent
+  );
+}
+
+/* Not a warning. This mod is here because Trance put it here, so the banner
+ * says so in the affirmative colour rather than in the "you have two owners for
+ * one surface" one. */
+.trance-mod-warning[data-trance-status="shipped"] {
+  --trance-mod-warning-accent: var(--color-green-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-green-50) 10%,
+    transparent
+  );
+}
+
+/* The general warning, for a mod that is not in the curated table but reads as
+ * touching something Trance owns. Yellow rather than red: "two owners for one
+ * element, decided by load order" is a certainty; "this mod says it restyles the
+ * tab strip" is a likelihood, and colouring the two the same would make the
+ * certain one mean less. */
+.trance-mod-warning[data-trance-status="clash"] {
+  --trance-mod-warning-accent: var(--color-yellow-50);
+  --trance-mod-warning-background: color-mix(
+    in srgb,
+    var(--color-yellow-50) 10%,
     transparent
   );
 }

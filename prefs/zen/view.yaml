@@ -16,8 +16,18 @@
   value: true
   condition: "defined(XP_MACOSX)"
 
+# >>> TRANCE
+# `false`, not Zen's `true`: Trance ships the sidebar-and-toolbar layout.
+#
+# Single-toolbar puts the address bar inside the sidebar's top strip, which is
+# also where the window buttons, the compact-mode toggle and the space switcher
+# live — four owners for one 36px row, and the row Trance's own top-buttons
+# reveal (`trance.chrome.topbuttons.reveal-on-hover`) is about. With a toolbar of
+# its own the address bar has room to be the thing it is, and the edgeless rules
+# in trance-surfaces.css already handle both layouts.
 - name: zen.view.use-single-toolbar
-  value: true
+  value: false
+# <<< TRANCE
 
 - name: zen.view.sidebar-expanded
   value: true
@@ -38,7 +48,7 @@
   type: static
 
 - name: zen.view.show-newtab-button-top
-  value: true
+  value: false
 
 - name: zen.view.window.scheme
   value: 2

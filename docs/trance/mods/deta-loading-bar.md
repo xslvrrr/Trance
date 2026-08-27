@@ -136,3 +136,19 @@ stylesheet.
 2. The bar shows real progress rather than pulsing. If you preferred the pulse
    as an aesthetic, say so — the indeterminate path exists anyway, and making it
    the default is one pref.
+
+---
+
+## 8. Revision — 2026-08-25
+
+Reported as "loading bar settings do nothing". The settings were fine and so was
+the bar: it drew a gradient in `--trance-accent`, which is
+`--zen-primary-color`, which on a space with no gradient picked is
+`rgb(47, 47, 47)` — a near-black three-pixel line on near-black chrome. Nothing
+that configures an invisible thing looks like it works.
+
+Marks that sit *on* the chrome now use `--trance-accent-vivid`, which mixes the
+accent toward the opposite end of the colour scheme so it reads on every theme.
+A saturated accent stays recognisably itself; a near-black or near-white one is
+lifted until it can be seen. `--trance-accent` stays raw for tints and fills,
+where the surface behind supplies the contrast.

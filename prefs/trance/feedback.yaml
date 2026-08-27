@@ -42,15 +42,78 @@
 - name: trance.feedback.loading.enabled
   value: true
 
-# Pixels. Mirrored into --trance-loading-thickness. The mod's default is 6,
-# which was sized for a pulsing blob; a real progress bar reads at 3.
+# Pixels. Mirrored into --trance-loading-thickness.
+#
+# 5, not 3. The bar is a track with a fill inside it now rather than a bare
+# stripe (ADR-045): at 3px the track and the fill are two pixels each once the
+# pill radius has taken its share, which is a hairline pretending to be a
+# control. 5 is the thickness at which "there is a bar, and this much of it is
+# filled" is legible without the bar becoming furniture.
 - name: trance.feedback.loading.thickness
-  value: 3
+  value: 5
 
-# top | bottom. The mod defaults to top; Zen's own status panel lives at the
-# bottom left, so bottom shares that edge.
+# top | bottom | left | right.
+#
+# The edge the bar runs along, and therefore also which axis it grows on: `top`
+# and `bottom` are horizontal and take their length from the pane's width,
+# `left` and `right` are vertical and take it from the pane's height. One pref,
+# because "which edge" and "which axis" are the same question and answering it
+# twice is how two settings end up disagreeing.
 - name: trance.feedback.loading.position
   value: "top"
+
+# Percentage of that edge the bar spans at 100% progress, 10 to 100.
+#
+# A full-width hairline pinned to the window edge is a browser chrome cliché and
+# it is the least legible version of the thing: at 25% the bar is a short,
+# obviously-moving object near the top of the page rather than a one-pixel
+# change along an edge nobody is looking at.
+- name: trance.feedback.loading.width
+  value: 25
+
+# Pixels of clearance between the bar and the edge it belongs to. The bar sits
+# *inside* the content pane rather than on its border, so it reads as belonging
+# to the page rather than to the window frame.
+- name: trance.feedback.loading.offset
+  value: 10
+
+# The finish flourish: on the last frame of a load the bar widens past its own
+# length and settles back before fading.
+#
+# It is a transition on `transform`, not a keyframe animation and not a timer:
+# the bar is driven to 100%, then to the overshoot, then released — so at motion
+# level 0 the duration tokens are zero and the bar simply arrives.
+- name: trance.feedback.loading.flourish
+  value: true
+
+# The page itself, while it is loading: pushed slightly towards the viewer and
+# softened, settling back as the load finishes.
+#
+# It is the same gesture the tab-switch animation makes, held for the length of
+# a load instead of played once — "the page you asked for is arriving" rather
+# than "here is a page". Two declarations on the selected pane, both transitions
+# on properties that composite, so nothing here is a keyframe loop and nothing
+# runs between loads.
+#
+# It is the most expensive thing in this file and it is the only one that says
+# so. A `filter: blur()` over the content pane cannot be cached while the thing
+# behind it is repainting, which during a page load is every frame — so this
+# costs a full-pane blur pass per painted frame for as long as the load takes.
+# That is why the default blur is small, why the effect is gated on its own
+# switch, and why the switch is here rather than folded into the loading bar's.
+- name: trance.feedback.loading.zoom
+  value: true
+
+# Percent *above* 100 that the pane is scaled to while loading. 3 is a shift you
+# notice at the edges of the page and cannot measure, which is the whole of the
+# effect; past about 8 the page's own text starts to resample visibly.
+- name: trance.feedback.loading.zoom.scale
+  value: 3
+
+# Pixels of blur over the pane while loading. Capped at 24 in the token binding:
+# past that the page stops being a page, and this is not a privacy screen.
+- name: trance.feedback.loading.zoom.blur
+  value: 4
 
 # The mod's other eleven prefs are gone. Colour follows --trance-accent, which
 # already tracks the space gradient, so the three colour prefs and the
@@ -76,4 +139,46 @@
 # Clamped to 3..16 in both the module and the token binding. Uncapped, this is
 # a way to schedule arbitrary work from about:config.
 - name: trance.feedback.bubbles.count
-  value: 8
+  value: 12
+
+# circle | line.
+#
+# Both are sampled from a normal distribution rather than stepped. The first
+# version placed bubble `i` at exactly `i / count` of a circle and sent every
+# one of them exactly the same distance, which is a ring expanding at a constant
+# rate: identical every time, in formation for the whole animation, and nothing
+# like a burst. Angle, distance and end size are now each an evenly-spaced mean
+# plus one clamped normal deviate — same element count, same duration, same
+# cleanup, so it costs nothing it did not already cost.
+#
+# `line` sends the same scatter out along the horizontal axis instead of around
+# a circle: the arm the tab occupied, rather than a ring around where it was.
+# It is the default because the tab strip is vertical: a ring expanding into the
+# rows above and below reads as the *neighbouring* tabs bursting, and an arm
+# along the row that just closed does not.
+- name: trance.feedback.bubbles.shape
+  value: "line"
+
+# === Mark: The animation pack ===
+#
+# Two gestures, one idea: the thing you just asked for arrives rather than
+# appearing. Both are Web Animations driven from TranceMotion, so both are
+# nothing at motion level 0 and shortened at level 1 — including when the level
+# comes from the system's own reduced-motion setting rather than from the pref.
+# There is no third switch to find.
+#
+# They are *transforms and filters on one element*, never layout: a scale and a
+# blur composite, and TranceMotion scopes `will-change` to the animation's own
+# lifetime rather than leaving a permanent compositor layer behind
+# (TRANCE.md §3.5).
+
+# Selecting a tab: the arriving page starts at 90% with a 15px blur and settles
+# to its own size and sharpness.
+- name: trance.feedback.animations.tab-switch
+  value: true
+
+# Opening the address bar: the inverse — the panel comes *down* to its own size
+# from slightly larger, so the two gestures read as opposites rather than as the
+# same effect twice.
+- name: trance.feedback.animations.search
+  value: true

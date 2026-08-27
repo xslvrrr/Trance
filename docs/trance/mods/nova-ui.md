@@ -197,3 +197,34 @@ Remove the `trance-chrome-panels` attribute.
    too, rather than only under `flat`.
 2. Relicensing outreach: qumeqa authors both this and New Icons (11). One
    request covers both (TRANCE.md §16 Q7).
+
+---
+
+## 9. Revision — 2026-08-25
+
+Reported as *"apply Trance's spacing and edges to menus and panels does
+nothing"*, and the report was fair.
+
+The switch set four `--panel-*` variables — a 10px corner where the platform
+already draws something close to it, on a popup most people see for half a
+second — and nothing about the *rows* moved. The rows are what a menu looks
+like.
+
+Upstream keeps the row geometry behind three variables in
+`toolkit/themes/shared/menu.css`, so the fix is to declare those rather than to
+fight `menupopup > menuitem` with a longer selector:
+
+```css
+--menuitem-border-radius: var(--trance-radius-sm);
+--menuitem-margin: 0 var(--trance-gap-sm);
+--menuitem-padding: var(--trance-gap-sm) var(--trance-gap-md);
+```
+
+An inset, rounded, taller row is the whole visible difference between a Firefox
+menu and the one this sub-feature promises. `.subviewbutton` is not a `menuitem`
+and takes none of those variables, so it repeats the same two values directly,
+which is what keeps the two kinds of row lined up.
+
+`--menuitem-margin` is inline-only on purpose: block margin here would double up
+with `--panel-padding` and leave a menu that grows a little every time someone
+touches one of the two.

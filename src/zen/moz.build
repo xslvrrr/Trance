@@ -23,4 +23,11 @@ DIRS += [
     "space-routing",
     "sync",
     "window-drag",
+    # >>> TRANCE
+    # Trance packages everything else through jar.inc.mn (ADR-012). This entry
+    # exists for one file the build has to place on disk instead:
+    # distribution/policies.json, the enterprise policy that installs the seven
+    # bundled extensions (ADR-032).
+    "trance",
+    # <<< TRANCE
 ]

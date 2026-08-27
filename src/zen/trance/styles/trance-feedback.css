@@ -13,11 +13,13 @@
  * ── What is not here ──────────────────────────────────────────────────────
  *
  * No `@keyframes`, no `animation`, no timer, and nothing that runs when the
- * browser is idle. The loading bar is a `transform: scaleX()` whose value is a
- * custom property written by the progress listener; between two progress events
- * a `transition` interpolates, and a transition is finite by construction. The
- * burst is Web Animations, driven from TranceMotion, which scopes `will-change`
- * to each animation's lifetime.
+ * browser is idle. The loading bar's fill is a `transform: scaleX()` whose value
+ * is a custom property written by the progress listener; between two progress
+ * events a `transition` interpolates, and a transition is finite by
+ * construction. The page's arrival gesture is two more transitions on the same
+ * pattern, driven by one attribute that exists only between STATE_START and
+ * STATE_STOP. The burst is Web Animations, driven from TranceMotion, which
+ * scopes `will-change` to each animation's lifetime.
  *
  * The MIT original animates `width` on an `infinite alternate` loop, which is a
  * reflow of the content pane on every frame at display rate, with a
@@ -37,46 +39,166 @@
    * changes no one's layout. Out of flow, so the XUL box does not measure it.
    */
 
+  /* ── Why the bar is a short object rather than an edge ───────────────────
+   *
+   * A full-width hairline flush against the window is what every browser draws
+   * and it is the least legible answer available: it is a one-pixel change along
+   * a line nobody looks at, in the corner of the eye furthest from the page.
+   * A quarter-width bar, inset a few pixels *into* the content pane, is visibly
+   * an object — it has ends, it is near the thing that is loading, and it
+   * belongs to the page rather than to the window frame.
+   *
+   * Both numbers are prefs, and so is the edge: `top`, `bottom`, `left` and
+   * `right`. The last two are not a rotation of the first two — a vertical bar
+   * spans the pane's *height* and grows downwards — which is why the length,
+   * the thickness and the gradient are all stated per axis below rather than
+   * once with a rotation on top.
+   */
+
+  /* ── A track and a fill, not a bare stripe ───────────────────────────────
+   *
+   * The bar used to be one element whose scale *was* the progress, which meant
+   * there was nothing on screen for the fill to be a fraction of: a load
+   * started and a quarter of a bar appeared out of nowhere, unanchored, and
+   * grew off to one side. A progress bar is two objects — the distance to be
+   * covered, and how much of it has been — and drawing only the second is why
+   * this read as a glitch rather than as progress (ADR-045).
+   *
+   * So `#trance-loading-bar` is the track: full length, faint, present for the
+   * whole load. `#trance-loading-fill` is the part that moves, and it grows out
+   * of the track's **centre** in both directions rather than from one end,
+   * because the track is a short centred object and a fill anchored to its left
+   * edge makes the whole thing look off-centre until the moment it completes.
+   *
+   * Still a `transform`, still no `width`: a scale composites, a width reflows
+   * the content pane. That is the difference between a composite per progress
+   * event and a layout pass per frame.
+   */
+
   & #trance-loading-bar {
     position: absolute;
-    inset-inline: 0;
-    height: var(--trance-loading-thickness);
     border-radius: var(--trance-radius-pill);
-    background: linear-gradient(
-      to right,
-      var(--trance-accent-muted),
-      var(--trance-accent)
-    );
+    background-color: var(--trance-loading-track);
     box-shadow: var(--trance-elev-1);
     pointer-events: none;
+    /* The fill is a rounded pill inside a rounded pill; without this its square
+     * corners show through the track's arcs at low progress. */
+    overflow: clip;
     z-index: 1;
-
-    /* The bar is one element scaled horizontally rather than one element
-     * resized: `scaleX` composites, `width` reflows. That single choice is the
-     * difference between a bar that costs a composite per progress event and
-     * one that costs a layout pass per frame. */
-    transform: scaleX(var(--trance-loading-progress, 0));
-    transform-origin: left center;
     opacity: 0;
+    transition: opacity var(--trance-dur-fast) var(--trance-ease-standard);
+  }
 
-    transition:
-      transform var(--trance-dur-base) var(--trance-ease-standard),
-      opacity var(--trance-dur-fast) var(--trance-ease-standard);
+  & #trance-loading-fill {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--trance-radius-pill);
+    /* `--trance-accent-vivid`, not `--trance-accent`.
+     *
+     * The raw accent is `--zen-primary-color`, and on a space with no gradient
+     * picked that is `rgb(47, 47, 47)`. The bar was drawing correctly the whole
+     * time — a near-black gradient on near-black chrome, three pixels tall.
+     * Every setting under it appeared to do nothing because the thing they
+     * configure could not be seen. See the token.
+     *
+     * The ramp is symmetric now, brightest in the middle: the fill grows from
+     * the centre outwards, so a one-way ramp would put its bright end at one
+     * edge and its dull end at the other while both edges are advancing. */
+    background-image: linear-gradient(
+      to right,
+      var(--trance-accent-muted),
+      var(--trance-accent-vivid) 50%,
+      var(--trance-accent-muted)
+    );
+    transform-origin: center center;
+    transition: transform var(--trance-dur-base) var(--trance-ease-standard);
+  }
+
+  /* Horizontal: the length is a share of the pane's width, centred on it. */
+  &:is([trance-feedback-loading="top"], [trance-feedback-loading="bottom"]) {
+    & #trance-loading-bar {
+      inset-inline-start: calc(50% - var(--trance-loading-span) / 2);
+      width: var(--trance-loading-span);
+      height: var(--trance-loading-thickness);
+    }
+
+    & #trance-loading-fill {
+      transform: scaleX(var(--trance-loading-progress, 0));
+    }
   }
 
   &[trance-feedback-loading="top"] #trance-loading-bar {
-    inset-block-start: 0;
+    inset-block-start: var(--trance-loading-offset);
   }
 
   &[trance-feedback-loading="bottom"] #trance-loading-bar {
-    inset-block-end: 0;
+    inset-block-end: var(--trance-loading-offset);
+  }
+
+  /* Vertical: the same object turned onto the other axis, including its
+   * gradient — a left-to-right ramp on a bar that grows downwards would put the
+   * bright part across the bar rather than along it. */
+  &:is([trance-feedback-loading="left"], [trance-feedback-loading="right"]) {
+    & #trance-loading-bar {
+      inset-block-start: calc(50% - var(--trance-loading-span) / 2);
+      height: var(--trance-loading-span);
+      width: var(--trance-loading-thickness);
+    }
+
+    & #trance-loading-fill {
+      background-image: linear-gradient(
+        to bottom,
+        var(--trance-accent-muted),
+        var(--trance-accent-vivid) 50%,
+        var(--trance-accent-muted)
+      );
+      transform: scaleY(var(--trance-loading-progress, 0));
+    }
+  }
+
+  &[trance-feedback-loading="left"] #trance-loading-bar {
+    inset-inline-start: var(--trance-loading-offset);
+  }
+
+  &[trance-feedback-loading="right"] #trance-loading-bar {
+    inset-inline-end: var(--trance-loading-offset);
   }
 
   /* `[active]` is set between STATE_START and STATE_STOP. On stop the bar is
    * driven to 100% first and only then fades, so a load is seen to finish
-   * rather than to disappear. */
+   * rather than to disappear. The track fades in with it, which is what makes
+   * the empty distance appear *before* anything has covered any of it. */
   & #trance-loading-bar[active] {
     opacity: 1;
+  }
+
+  /* ── The page, while it is loading ───────────────────────────────────────
+   *
+   * The pane the selected tab lives in, pushed towards the viewer and softened
+   * for the length of a load. Two transitions on the two properties that
+   * composite, so between loads there is no rule matching, no filter, and
+   * nothing on the frame path.
+   *
+   * `.browserSidebarContainer`, not `#zen-tabbox-wrapper`: the wrapper holds
+   * every tab's panel and the pane's own gutter, and it is the element
+   * trance-chrome.css already puts the address bar's recede filter on. Two
+   * `filter` declarations on one element would not compose — the second would
+   * replace the first — so the two effects go on the two different boxes they
+   * are actually about, and stack rather than argue.
+   *
+   * The blur is the expensive one and it is honest about that: see the pref's
+   * comment in prefs/trance/feedback.yaml. `--trance-loading-zoom-blur-fn`
+   * resolves to `none` at zero rather than to `blur(0px)`, so a window with the
+   * effect off pays for no pass at all. */
+  & #tabbrowser-tabpanels > .browserSidebarContainer {
+    transition:
+      transform var(--trance-dur-arrival) var(--trance-ease-standard),
+      filter var(--trance-dur-arrival) var(--trance-ease-standard);
+  }
+
+  &[trance-feedback-loading-page="true"] #tabbrowser-tabpanels > .browserSidebarContainer.deck-selected {
+    transform: scale(var(--trance-loading-zoom));
+    filter: var(--trance-loading-zoom-blur-fn);
   }
 
   /* ── Tab-close burst ─────────────────────────────────────────────────────
@@ -93,12 +215,16 @@
     z-index: 2;
   }
 
+  /* Same story as the bar: at `--trance-accent-muted`'s old definition these
+   * were 35%-alpha near-black circles on near-black chrome, which is why the
+   * burst was reported as missing rather than as too subtle. The animation, the
+   * measurement and the cleanup were all running. */
   & .trance-burst-bubble {
     position: absolute;
     width: var(--trance-bubble-size);
     height: var(--trance-bubble-size);
     border-radius: var(--trance-radius-pill);
-    background-color: var(--trance-accent-muted);
+    background-color: var(--trance-accent-vivid);
     pointer-events: none;
   }
 }

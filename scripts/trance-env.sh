@@ -51,6 +51,36 @@ if command -v rustup >/dev/null 2>&1 && [ -f "$_trance_root/.rust-toolchain" ]; 
   unset _trance_rust
 fi
 
+# --- Target architecture -----------------------------------------------------
+# `configs/macos/mozconfig` already branches on `SURFER_COMPAT`: set to
+# `x86_64` it targets `x86_64-apple-darwin` and enables the AVX wasm build,
+# otherwise it targets `aarch64-apple-darwin` with `-mcpu=apple-m1`. That switch
+# has always been there and has never been reachable — surfer does not set the
+# variable and nothing else in the tree does either, so every build was arm64
+# whatever the machine was.
+#
+# Phase 13 needs it reachable, because the onboarding flow asks which processor
+# the browser is running on and tunes blur against the answer (ADR-042). A
+# question the browser asks and the build system cannot honour is a question
+# worth not asking.
+#
+#   TRANCE_ARCH=x86_64 source scripts/trance-env.sh && npm run build
+#
+# Defaults to the machine's own architecture, so the common case needs nothing.
+_trance_arch="${TRANCE_ARCH:-$(uname -m)}"
+case "$_trance_arch" in
+  x86_64|x64|intel)
+    export SURFER_COMPAT=x86_64
+    ;;
+  arm64|aarch64|apple-silicon)
+    unset SURFER_COMPAT
+    ;;
+  *)
+    echo "trance-env: unknown TRANCE_ARCH '$_trance_arch' -> x86_64 | arm64" >&2
+    ;;
+esac
+unset _trance_arch
+
 # --- Native build dependencies ----------------------------------------------
 # surfer unpacks the Firefox tarball with GNU tar; macOS bsdtar is not enough
 # and the failure only surfaces minutes into `npm run download`.
@@ -78,10 +108,11 @@ fi
 unset _trance_brand_file
 
 # --- Report ------------------------------------------------------------------
-printf 'trance-env: python %s | node %s | rustc %s\n' \
+printf 'trance-env: python %s | node %s | rustc %s | target %s\n' \
   "$(python3 -V 2>&1 | awk '{print $2}')" \
   "$(node -v 2>/dev/null || echo '-')" \
-  "$(rustc -V 2>/dev/null | awk '{print $2}' || echo '-')"
+  "$(rustc -V 2>/dev/null | awk '{print $2}' || echo '-')" \
+  "${SURFER_COMPAT:-arm64}"
 
 unset _trance_root _trance_py311
 set +u

@@ -1952,6 +1952,12 @@ class nsZenWorkspaces {
       1000;
     this._animatingChange = true;
     const animations = [];
+    // >>> TRANCE (TRANCE.md §12.1, ADR-038)
+    // Tracked separately from `animations` because the two background cross-fades are
+    // WAAPI animations on pseudo-elements, and those have to be cancelled by hand once
+    // the switch is over. See the block that creates them, below.
+    const backgroundAnimations = [];
+    // <<< TRANCE
     const workspaces = this.getWorkspaces();
     const spaceLen = workspaces.length;
     const newWorkspaceIndex = workspaces.findIndex(
@@ -2011,19 +2017,48 @@ class nsZenWorkspaces {
           previousBackgroundOpacity
         );
       });
-      animations.push(
-        gZenUIManager.motion.animate(
+      // >>> TRANCE (TRANCE.md §3.5 and §12.1, ADR-038)
+      // Upstream animated the `--zen-background-opacity` custom property here and let
+      // `zen-browser-ui.css` read it back as `opacity` on the two pseudo-elements. Five
+      // costs compounded on every frame of every space switch:
+      //
+      //   1. A custom property cannot be run on the compositor in Gecko, so each frame
+      //      was a main-thread restyle of everything that inherits the variable.
+      //   2. `opacity: var(--x)` is not compositable either, so both window-sized layers
+      //      repainted rather than composited.
+      //   3. Each of those layers paints up to four stacked gradients under
+      //      `background-blend-mode: screen` — a per-pixel blend over the whole window.
+      //   4. A 30 KB grain PNG sits on top of them.
+      //   5. Motion has no WAAPI path for custom properties, so it fell back to its JS
+      //      driver and wrote the value from script once per frame on top of all of that.
+      //
+      // Animating `opacity` on the pseudo-elements directly is the same spring and the
+      // same pixels — `opacity` groups the element after its own background layers have
+      // blended, so a composited alpha and a painted one are identical — but it runs off
+      // the main thread. `animateMini` is Motion's WAAPI-only entry point: it is the only
+      // one that takes `pseudoElement`, and it has no JS fallback to silently drop back
+      // to, which is the property being bought here. `motion.spring` has to be passed as
+      // the function rather than as the string `"spring"`; `animateMini` rejects the
+      // string form and converts the function to a `linear()` easing instead.
+      const kBackgroundSpring = {
+        type: gZenUIManager.motion.spring,
+        bounce: 0,
+        duration: kGlobalAnimationDuration,
+      };
+      backgroundAnimations.push(
+        gZenUIManager.motion.animateMini(
           elements,
-          {
-            "--zen-background-opacity": [previousBackgroundOpacity, 1],
-          },
-          {
-            type: "spring",
-            bounce: 0,
-            duration: kGlobalAnimationDuration,
-          }
+          { opacity: [previousBackgroundOpacity, 1] },
+          { ...kBackgroundSpring, pseudoElement: "::after" }
+        ),
+        gZenUIManager.motion.animateMini(
+          elements,
+          { opacity: [1 - previousBackgroundOpacity, 0] },
+          { ...kBackgroundSpring, pseudoElement: "::before" }
         )
       );
+      animations.push(...backgroundAnimations);
+      // <<< TRANCE
     }
     for (const element of document.querySelectorAll("zen-workspace")) {
       if (element.classList.contains("zen-essentials-container")) {
@@ -2152,6 +2187,25 @@ class nsZenWorkspaces {
       console.error
     );
     this.#currentSpaceSwitchContext.animations = [];
+    // >>> TRANCE (ADR-038)
+    // Motion cannot commit styles to a pseudo-element, so it deliberately leaves a
+    // finished pseudo-element animation in place, filling its final value forever. Left
+    // alone it would outrank `--zen-background-opacity`, which both the swipe gesture and
+    // the theme picker still write directly. Hand the two layers back: set the variable to
+    // the value the animation is already showing, then cancel. Both happen in one turn, so
+    // there is a single style flush and no frame in between.
+    if (backgroundAnimations.length) {
+      for (const element of [
+        lazy.browserBackgroundElement,
+        lazy.toolbarBackgroundElement,
+      ]) {
+        element.style.setProperty("--zen-background-opacity", 1);
+      }
+      for (const animation of backgroundAnimations) {
+        animation.cancel();
+      }
+    }
+    // <<< TRANCE
     document.documentElement.removeAttribute("animating-background");
     if (shouldAnimate) {
       for (const data of essentialsAnimData) {

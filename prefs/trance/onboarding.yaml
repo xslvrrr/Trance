@@ -1,0 +1,95 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: the first-run onboarding flow.
+#
+# Trance replaces Zen's welcome flow rather than running after it. The two
+# cannot both own the first window — Zen's is a full-window takeover that hides
+# every child of `#browser` and restores them in `finish()` — and Trance has
+# five decisions to take before Zen's five, four of which change how the browser
+# is built rather than how it looks (ADR-051).
+#
+# The five Trance pages, in order, and what each one actually writes:
+#
+#   1. Zen feature set     `trance.onboarding.channel`, then the `zen.*` prefs
+#                          that upstream gates on the build-time `@IS_TWILIGHT@`
+#                          constant. Trance has one brand (ADR-006), so what
+#                          upstream decides at build time is a runtime choice
+#                          here.
+#   2. Mod manager         `trance.mods.channel`, and the engine's own
+#                          `engine.json` version, which is what Sine reads to
+#                          decide which channel to self-update along.
+#   3. Architecture        `trance.perf.arch`, then the surface prefs whose cost
+#                          is GPU blur — the one Trance setting where an Intel
+#                          Mac and an Apple Silicon Mac want different numbers.
+#   4. Edgeless            `trance.surface.edgeless`.
+#   5. Zen Internet        nothing. It reports the extension's state and opens
+#                          it, because it does nothing until it has been opened
+#                          once (TRANCE.md §9).
+#
+# Then Zen's own five: import, search engine, essentials, workspace colours and
+# a finish page, rebuilt against Zen's `browser/zen-welcome.ftl` so they stay
+# translated in every locale Zen ships.
+#
+# Refs: TRANCE.md §9, §13 Phase 13; ADR-051
+
+# === Mark: Master switch ===
+
+# Off, `TranceOnboarding` allocates nothing and Zen's own welcome flow runs
+# instead — the `ZenStartup` touchpoint is a single `if` around the existing
+# `loadSubScript` call, so turning this off restores upstream behaviour exactly
+# rather than leaving a browser with no first run at all.
+- name: trance.onboarding.enabled
+  value: true
+
+# State, not a setting: true once a window has taken ownership of the flow.
+#
+# Written when a window decides to start, not when the flow ends, for the same
+# reason `trance.firstrun.completed` is: it is what stops a second window
+# opening a second copy, and what stops the whole flow coming back if the
+# browser is killed halfway through it.
+#
+# The settings page surfaces it as a button ("Run it again"), not a checkbox.
+- name: trance.onboarding.completed
+  value: false
+
+# === Mark: What the flow decides ===
+
+# Which Zen feature set this profile runs: `stable` or `twilight`.
+#
+# Upstream Zen ships two brands and resolves `@IS_TWILIGHT@` at build time.
+# ADR-006 reduced Trance to one brand, which left every twilight-gated pref
+# resolved to the stable value with no way back. This is that way back, and it
+# is a pref rather than a build flag because a single-brand browser has no build
+# to switch to.
+#
+# `TranceOnboarding` applies it; nothing reads it continuously, so changing it
+# outside the flow does nothing until the settings page's "Apply" does.
+- name: trance.onboarding.channel
+  value: "stable"
+
+# Which channel the preinstalled mod manager follows: `cosine` (Sine's
+# pre-release channel, the shipped default — ADR-018) or `sine` (stable).
+#
+# `scripts/trance-cosine.py --channel` decides what a *build* is provisioned
+# with. This decides what the engine already in the profile updates itself to,
+# by rewriting the version in its own `engine.json` — which is the mechanism
+# Sine uses to pick a channel, not a workaround for it.
+- name: trance.mods.channel
+  value: "cosine"
+
+# The CPU architecture Trance tunes its surfaces for: `arm64` or `x86_64`.
+#
+# Not a description of the machine — Gecko already knows that, and the flow
+# fills this in from `Services.appinfo.XPCOMABI` before anyone touches it. It is
+# an override, for the case Gecko cannot see: a build running under Rosetta
+# reports the *build's* architecture, and a user who knows they are on Apple
+# Silicon should be able to say so.
+#
+# What it changes is blur, and only blur. Everything else Trance draws costs the
+# same on both; `backdrop-filter` at a 24px radius over a full window is the one
+# effect where an integrated Intel GPU and an Apple Silicon one are not in the
+# same class (TRANCE.md §3.3).
+- name: trance.perf.arch
+  value: "arm64"

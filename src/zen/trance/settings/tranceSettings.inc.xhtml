@@ -5,8 +5,20 @@
 # Trance: about:preferences#trance
 #
 # One page, grouped by the roadmap phases: Appearance · Sidebar & Tabs · Chrome ·
-# Motion & Feedback · Library · Advanced. Every `trance.*` pref appears here. If
-# a pref is not on this page, it should not exist (TRANCE.md §6.6).
+# Motion & Feedback · Advanced. Every `trance.*` pref appears here. If a pref is
+# not on this page, it should not exist (TRANCE.md §6.6).
+#
+# ── The shape of this file ─────────────────────────────────────────────────
+#
+# Every setting is one row, and every row is the same three pieces: a name, a
+# sentence saying what it does, and its control. That is the whole convention,
+# and it is worth stating because the previous version did not have one — a
+# checkbox carried its explanation in its own `label`, a slider carried none, and
+# a paragraph at the top of each group carried the rest. Reading the pane meant
+# reading prose to find out which line was a setting.
+#
+# `.trance-row-child` marks a row that only means something while the row above
+# it is on. It is indentation with a rule behind it, not decoration.
 #
 # Labels are literal text rather than `data-l10n-id`. Zen's own preference
 # strings live in its downloaded language packs, not in this tree, so there is
@@ -17,7 +29,21 @@
 
 <script type="text/javascript" src="chrome://browser/content/preferences/trance-settings.js"/>
 <script type="text/javascript" src="chrome://browser/content/preferences/trance-mod-guard.js"/>
-<link rel="stylesheet" href="chrome://browser/content/trance-styles/trance-settings.css"/>
+
+# `html:link`, not `link`. This file is included partway down preferences.xhtml,
+# where the default namespace in scope is XUL — so a bare `<link>` is a XUL
+# element with a `rel` attribute and no meaning, which is exactly what it was.
+# The sheet had never loaded in any build: `document.styleSheets` did not
+# contain it and the element's own `.sheet` was null. Everything in
+# trance-settings.css was dead, which is why the sliders never picked up the
+# layout it describes.
+<html:link rel="stylesheet" href="chrome://browser/content/trance-styles/trance-settings.css"/>
+
+# Sine's pane, in the same palette. Separate file because it is the one Trance
+# stylesheet that has to answer a third party's `!important` — see its header
+# and `SINE_SHEET_FILE` in the stylelint plugin. Loaded with the document rather
+# than with the Trance pane: Sine's pane is a sibling of it, not part of it.
+<html:link rel="stylesheet" href="chrome://browser/content/trance-styles/trance-sine.css"/>
 
 <html:template id="template-paneTrance">
 
@@ -25,458 +51,1491 @@
   <html:h1>Trance</html:h1>
 </hbox>
 
-<groupbox id="tranceGeneralGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Trance features</html:h2></label>
-  <description class="description-deemphasized">
-    Turning Trance off leaves stock Zen behaviour: no Trance stylesheet is loaded,
-    no observer is registered and no timer is armed. It takes effect immediately —
-    no restart.
-  </description>
-
-  <checkbox id="tranceEnabled"
-            label="Enable Trance"
-            preference="trance.enabled"/>
+<groupbox id="tranceGeneralGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceEnabled">Enable Trance</label>
+      <description>
+        Off, this is stock Zen: no Trance stylesheet is loaded, no observer is
+        registered and no timer is armed. It takes effect immediately — no
+        restart.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceEnabled" class="trance-switch" preference="trance.enabled"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
 <hbox id="tranceAppearanceCategory" class="subcategory" hidden="true" data-category="paneTrance">
   <html:h1>Appearance</html:h1>
 </hbox>
 
-<groupbox id="tranceSurfacesGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Surfaces</html:h2></label>
-  <description class="description-deemphasized">
-    Frosting works by letting the chrome get out of the way: Trance lowers the
-    opacity of the browser's own background so the window's native translucency
-    shows through, then blurs whatever the browser itself painted behind it.
-    Blur is expensive — each blurred region costs a full-screen filter pass every
-    frame — so Trance allows at most three and switches them off when the window
-    is not visible.
-  </description>
+<groupbox id="tranceShapeGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Shape</html:h2></label>
+    <description>
+      Whether the web view floats on the browser or is part of it.
+    </description>
+  </html:div>
 
-  <checkbox id="tranceSurfaceEnabled"
-            label="Frosted surfaces"
-            preference="trance.surface.enabled"/>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceEdgeless">Edgeless</label>
+      <description>
+        The page runs to the window edge, keeps one rounded corner beside the
+        sidebar instead of four, drops its shadow, and takes the colour of what
+        surrounds it. Frosting becomes a single layer over the whole browser
+        rather than one per region, which also costs a third as many blur
+        passes.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceEdgeless" class="trance-switch" preference="trance.surface.edgeless"/>
+    </html:div>
+  </html:div>
+</groupbox>
 
-  <vbox class="indent">
-    <hbox align="center">
-      <label id="tranceSurfacePresetLabel" control="tranceSurfacePreset">Style</label>
-      <menulist id="tranceSurfacePreset" preference="trance.surface.preset">
-        <menupopup>
-          <menuitem value="nebula" label="Nebula — frosted glass"/>
-          <menuitem value="compact" label="Compact — tighter overlays"/>
-          <menuitem value="flat" label="Flat — translucent, no blur"/>
-          <menuitem value="custom" label="Custom"/>
-        </menupopup>
-      </menulist>
-    </hbox>
+<groupbox id="tranceTransparencyGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Transparency</html:h2></label>
+    <description>
+      Whether the window itself is see-through. That is not something a
+      stylesheet can decide — it is a platform setting, behind a different
+      preference on every operating system (vibrancy on macOS, Mica on Windows,
+      a transparent GTK window on Linux, and a separate one again for web
+      pages). This is the one switch for all of them: on, Trance turns on
+      whichever applies to this machine; off, it puts your own values back and
+      the chrome is opaque.
+    </description>
+  </html:div>
 
-    <hbox align="center">
-      <label id="tranceSurfaceBlurLabel" control="tranceSurfaceBlur">Blur radius</label>
-      <html:input id="tranceSurfaceBlur"
-                  type="range"
-                  min="0" max="60" step="1"
-                  preference="trance.surface.blur.radius"/>
-      <label id="tranceSurfaceBlurValue" class="trance-range-value"/>
-    </hbox>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceTransparency">Transparent window</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceTransparency" class="trance-switch" preference="trance.surface.transparency"/>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceSurfaceOpacityLabel" control="tranceSurfaceOpacity">Chrome opacity</label>
+      <description>
+        How much of the browser's own background survives. Lower lets more of
+        the window through; 100% is stock Zen.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceSurfaceOpacity"
                   type="range"
                   min="0" max="100" step="1"
                   preference="trance.surface.opacity"/>
       <label id="tranceSurfaceOpacityValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
+</groupbox>
 
-    <hbox align="center">
+<groupbox id="tranceSurfacesGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Frosted surfaces</html:h2></label>
+    <description>
+      One switch, one surface. The frost is a single layer spanning the whole
+      browser — the sidebar, the toolbar and the space around the page — with
+      the web view painting over it, rather than a separate pane of glass per
+      region with a seam between them. Blur is expensive, so this is the only
+      one Trance spends, and it is dropped entirely when the window is not
+      visible.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceEnabled">Frosted surfaces</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceEnabled" class="trance-switch" preference="trance.surface.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div id="tranceSurfaceBlurRow" class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceSurfaceBlurLabel" control="tranceSurfaceBlur">Blur radius</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceSurfaceBlur"
+                  type="range"
+                  min="0" max="60" step="1"
+                  preference="trance.surface.blur.radius"/>
+      <label id="tranceSurfaceBlurValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <description id="tranceSurfaceBlurNote" class="trance-note">
+    On this system the frost is produced by the operating system, behind
+    everything the browser draws, so there is no blur radius to set — asking the
+    browser to blur it again would replace it with a flat rectangle rather than
+    soften it. Chrome opacity is the setting that changes how much of it you see.
+  </description>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceSurfaceSaturationLabel" control="tranceSurfaceSaturation">Surface saturation</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceSurfaceSaturation"
                   type="range"
                   min="0" max="300" step="5"
                   preference="trance.surface.saturation"/>
       <label id="tranceSurfaceSaturationValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <checkbox id="tranceSurfaceSidebar"
-              label="Frost the sidebar, its edges and the space around the page"
-              preference="trance.surface.region.sidebar"/>
-    <checkbox id="tranceSurfaceToolbar"
-              label="Frost the toolbar"
-              preference="trance.surface.region.toolbar"/>
-    <checkbox id="tranceSurfaceOverlay"
-              label="Frost the expanded address bar"
-              preference="trance.surface.region.overlay"/>
-    <checkbox id="tranceSurfaceSuspend"
-              label="Drop blur in unfocused and hidden windows (recommended)"
-              preference="trance.surface.suspend-when-unfocused"/>
-  </vbox>
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceSuspend">Drop blur in unfocused and hidden windows</label>
+      <description>Recommended. This is the largest single idle-power saving available.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceSuspend" class="trance-switch" preference="trance.surface.suspend-when-unfocused"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceKeepUnfocused">Keep windows translucent when they are not focused</label>
+      <description>
+        By default an unfocused window drops to a flat, opaque background — that
+        is the operating system's own behaviour, below anything a stylesheet can
+        reach, which is why an unfocused Trance window went black no matter what
+        the settings above said. This keeps every window frosted and overrides
+        the switch above for as long as it is on. It costs power: a background
+        window keeps a blur alive that could otherwise be skipped entirely.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceKeepUnfocused" class="trance-switch" preference="trance.surface.keep-transparent-unfocused"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
-<groupbox id="tranceContentSurfaceGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Page background</html:h2></label>
-  <description class="description-deemphasized">
-    Frosts the pane a page is drawn onto, so the workspace gradient shows behind
-    it. Separate from the rest because it is the only setting here that reaches
-    past the browser's own chrome. Trance never restyles a page, so a site that
-    paints its own background still covers this — what it changes is new tabs,
-    <html:code>about:</html:code> pages, rounded corners, and any site the Zen
-    Internet add-on has already made transparent.
-  </description>
+<groupbox id="tranceSurfaceImageGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Background image</html:h2></label>
+    <description>
+      A picture behind the chrome, painted over the frosted surface and under
+      everything else. A tileable texture at a low opacity is what this is for:
+      the toolbar, the tab strip and the sidebar all still have to be readable
+      on top of it, so a photograph at full strength is a browser you cannot
+      use. Websites are not affected.
+    </description>
+  </html:div>
 
-  <checkbox id="tranceSurfaceContent"
-            label="Frost the page background"
-            preference="trance.surface.region.content"/>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label id="tranceSurfaceImageLabel">Image</label>
+      <description id="tranceSurfaceImagePath" class="trance-path">No image</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <button id="tranceSurfaceImageChoose" label="Choose…"/>
+      <button id="tranceSurfaceImageClear" label="Remove"/>
+    </html:div>
+  </html:div>
 
-  <vbox class="indent">
-    <hbox align="center">
-      <label id="tranceContentOpacityLabel" control="tranceContentOpacity">Page backdrop opacity</label>
-      <html:input id="tranceContentOpacity"
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceSurfaceImageOpacityLabel" control="tranceSurfaceImageOpacity">Image opacity</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceSurfaceImageOpacity"
                   type="range"
                   min="0" max="100" step="1"
-                  preference="trance.surface.content.opacity"/>
-      <label id="tranceContentOpacityValue" class="trance-range-value"/>
-    </hbox>
-  </vbox>
+                  preference="trance.surface.image.opacity"/>
+      <label id="tranceSurfaceImageOpacityValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceSurfaceImageBlurLabel" control="tranceSurfaceImageBlur">Image blur</label>
+      <description>
+        Softens the picture without touching anything else on the surface. At 0
+        there is no filter at all rather than a blur of nothing.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceSurfaceImageBlur"
+                  type="range"
+                  min="0" max="40" step="1"
+                  preference="trance.surface.image.blur"/>
+      <label id="tranceSurfaceImageBlurValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<groupbox id="tranceInternalPagesGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>The browser's own pages</html:h2></label>
+    <description>
+      This page, <html:code>about:config</html:code>, the add-ons manager and the
+      new-tab page, made translucent so that opening settings does not put an
+      opaque slab in the middle of a frosted window. Websites are not affected.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceSurfaceInternal">Translucent internal pages</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceSurfaceInternal" class="trance-switch" preference="trance.surface.internal-pages"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceInternalOpacityLabel" control="tranceInternalOpacity">Page opacity</label>
+      <description>How much of the page's own background survives. Lower is more transparent.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceInternalOpacity"
+                  type="range"
+                  min="0" max="100" step="1"
+                  preference="trance.surface.internal.opacity"/>
+      <label id="tranceInternalOpacityValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div id="tranceInternalBlurRow" class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceInternalBlur">Frost the window behind them</label>
+      <description>
+        Blurs what is behind the page rather than only letting it through. A
+        translucent page over an unblurred backdrop reads as a washed-out slab,
+        because the workspace gradient's grain shows straight through the type;
+        blurring it is what makes the page read as glass. It uses the blur
+        radius set above, and costs a pass only while one of these pages is
+        actually on screen.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceInternalBlur" class="trance-switch" preference="trance.surface.internal.blur"/>
+    </html:div>
+  </html:div>
+
+  <description id="tranceInternalBlurNote" class="trance-note">
+    On this system the frost behind these pages is produced by the operating
+    system, behind everything the browser draws, so there is nothing for the
+    browser to blur — asking it to would replace the frost with a flat rectangle
+    rather than soften it. Page opacity is the setting that changes how much of
+    it you see.
+  </description>
+
+  <description class="trance-note">
+    A page is built with a transparent canvas or an opaque one and cannot be
+    switched afterwards, so turning this on reaches pages opened from now on.
+    Reload this page to see it here.
+  </description>
+</groupbox>
+
+# There is no "Page background" group any more.
+#
+# It was a translucent backdrop for websites, and it is removed (ADR-042): a
+# site that paints its own background covered it, the sites that do not are the
+# ones Zen Internet — preinstalled here — has already made transparent, and what
+# was left is owned by Edgeless and by the group above. A switch whose on and
+# off states look identical on every page anybody opens is not a setting.
+
+<groupbox id="tranceNewTabGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Empty tabs</html:h2></label>
+    <description>
+      A mark on a tab with nothing in it — a new tab, a blank one, the home
+      page. It is drawn by the browser rather than by the page, so it does not
+      depend on the settings above and it is never in the way of anything on
+      the page.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label id="tranceNewTabLogoLabel">Mark</label>
+      <description id="tranceNewTabLogoPath" class="trance-path">No mark</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <button id="tranceNewTabLogoChoose" label="Choose…"/>
+      <button id="tranceNewTabLogoClear" label="Remove"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceNewTabLogoSize">Size</label>
+      <description>
+        Pixels, longest edge. The mark is fitted inside a square this big, so a
+        wide picture and a tall one at the same number take up the same room.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceNewTabLogoSize"
+                  class="trance-number"
+                  type="number"
+                  min="16" max="1200" step="1"
+                  preference="trance.surface.newtab.logo.size"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceNewTabLogoOpacity">Opacity</label>
+      <description>Percent. Low enough to be a mark rather than content.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceNewTabLogoOpacity"
+                  class="trance-number"
+                  type="number"
+                  min="0" max="100" step="1"
+                  preference="trance.surface.newtab.logo.opacity"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceNewTabLogoHolographic">Holographic</label>
+      <description>
+        An iridescent sheen over the mark, masked to the shape of the artwork
+        rather than laid behind it — so it reads as light on the drawing and
+        works with whatever picture you chose.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceNewTabLogoHolographic" class="trance-switch" preference="trance.surface.newtab.logo.holographic"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceNewTabLogoTilt">Tilt in 3D</label>
+      <description>
+        The mark leans towards the pointer while the pointer is over it, and
+        eases back to level when it leaves. Motion, so it is governed by the
+        motion level like everything else: at "none" it does not move.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceNewTabLogoTilt" class="trance-switch" preference="trance.surface.newtab.logo.tilt"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceNewTabLogoHover">React to the pointer</label>
+      <description>
+        What drives the lean, and the sheen along with it: where the pointer is
+        decides which way the mark tilts and where the light falls across it.
+        Both wait until the pointer is actually over the mark, and both need
+        "Tilt in 3D" on — a sheen that slides while the mark stays flat is light
+        with no surface behind it. Off, everything is still drawn, simply at
+        rest, and the browser watches the pointer for nothing at all.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceNewTabLogoHover" class="trance-switch" preference="trance.surface.newtab.logo.hover"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
 <hbox id="tranceTabsCategory" class="subcategory" hidden="true" data-category="paneTrance">
   <html:h1>Sidebar &amp; tabs</html:h1>
 </hbox>
 
-<groupbox id="tranceTabStripGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Tab strip</html:h2></label>
-  <description class="description-deemphasized">
-    One owner for pinned tabs, folders, the collapsed sidebar and the unloaded-tab
-    state. Trance holds a single subscription for the whole tab strip, where the
-    mods it replaces held one each.
+<groupbox id="tranceTabStripGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Tab strip</html:h2></label>
+    <description>
+      One owner for pinned tabs, folders, the collapsed sidebar and the
+      unloaded-tab state. Trance holds a single subscription for the whole tab
+      strip, where the mods it replaces held one each.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceTabStripEnabled">Trance tab strip</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceTabStripEnabled" class="trance-switch" preference="trance.tabstrip.enabled"/>
+    </html:div>
+  </html:div>
+
+  <description class="trance-note">
+    Folder tree lines are not here. Trance drew them itself until it did not:
+    the mod that does it is GPL-3.0, so Trance could only reimplement the idea
+    of that drawing rather than ship the drawing. It preinstalls
+    <html:strong>Zen Folder Tree Connectors</html:strong> instead, which you
+    will find in Mods, and draws none of its own.
   </description>
 
-  <checkbox id="tranceTabStripEnabled"
-            label="Trance tab strip"
-            preference="trance.tabstrip.enabled"/>
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceTabStripFolderColors">Colour-code folders</label>
+      <description>Adds “Folder colour” to a folder's context menu.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceTabStripFolderColors" class="trance-switch" preference="trance.tabstrip.folders.colors"/>
+    </html:div>
+  </html:div>
 
-  <vbox class="indent">
-    <checkbox id="tranceTabStripConnectors"
-              label="Draw folder tree lines"
-              preference="trance.tabstrip.connectors"/>
-    <checkbox id="tranceTabStripFolderColors"
-              label="Colour-code folders (adds “Folder colour” to a folder's context menu)"
-              preference="trance.tabstrip.folders.colors"/>
-    <checkbox id="tranceTabStripFolderArc"
-              label="Section-style folder headers"
-              preference="trance.tabstrip.folders.arc-style"/>
-    <checkbox id="tranceTabStripPinsSticky"
-              label="Keep pinned tabs visible while scrolling"
-              preference="trance.tabstrip.pins.sticky"/>
-    <checkbox id="tranceTabStripLazyPins"
-              label="Load pinned tabs only when you use them"
-              preference="browser.sessionstore.restore_pinned_tabs_on_demand"/>
-  </vbox>
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceTabStripFolderArc">Section-style folder headers</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceTabStripFolderArc" class="trance-switch" preference="trance.tabstrip.folders.arc-style"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceTabStripPinsSticky">Keep pinned tabs visible while scrolling</label>
+      <description>
+        The pinned section stays at the top of the list. It only paints a
+        background while tabs are actually passing underneath it, so a list too
+        short to scroll looks exactly as it did.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceTabStripPinsSticky" class="trance-switch" preference="trance.tabstrip.pins.sticky"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceTabStripLazyPins">Load pinned tabs only when you use them</label>
+      <description>The browser's own setting, surfaced here rather than duplicated.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceTabStripLazyPins" class="trance-switch" preference="browser.sessionstore.restore_pinned_tabs_on_demand"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
-<groupbox id="tranceUnloadedGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Unloaded tabs</html:h2></label>
-  <description class="description-deemphasized">
-    A tab that has not been loaded — or that has been discarded to save memory —
-    is dimmed and drained of colour, so it is distinguishable at a glance even in
-    the collapsed sidebar where no label is visible.
-  </description>
+<groupbox id="tranceGlowGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Active tab glow</html:h2></label>
+    <description>
+      A soft half-oval behind the tab you are on, reaching a little past its top
+      and sides. Off by default: it is the one thing in the sidebar that paints
+      outside a tab's own box.
+    </description>
+  </html:div>
 
-  <checkbox id="tranceUnloadedEnabled"
-            label="Dim unloaded tabs"
-            preference="trance.tabstrip.unloaded.enabled"/>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label id="tranceGlowModeLabel" control="tranceGlowMode">Glow</label>
+      <description>
+        <html:strong>Theme colour</html:strong> uses the space's own colour,
+        lifted until it is visible against the chrome — one colour for every
+        tab. <html:strong>Tab icon colour</html:strong> takes it from the tab's
+        own favicon, sampled once, so a tab's glow is the colour of the site it
+        holds.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceGlowMode" preference="trance.tabstrip.glow.mode">
+        <menupopup>
+          <menuitem value="none" label="None"/>
+          <menuitem value="theme" label="Theme colour"/>
+          <menuitem value="icon" label="Tab icon colour"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
 
-  <vbox class="indent">
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceGlowSpreadLabel" control="tranceGlowSpread">Reach</label>
+      <description>How far past the tab it goes, at the top and the two sides.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceGlowSpread"
+                  type="range"
+                  min="0" max="48" step="1"
+                  preference="trance.tabstrip.glow.spread"/>
+      <label id="tranceGlowSpreadValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceGlowOpacityLabel" control="tranceGlowOpacity">Strength</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceGlowOpacity"
+                  type="range"
+                  min="0" max="100" step="1"
+                  preference="trance.tabstrip.glow.opacity"/>
+      <label id="tranceGlowOpacityValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<groupbox id="tranceUnloadedGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Unloaded tabs</html:h2></label>
+    <description>
+      A tab that has not been loaded — or that has been discarded to save
+      memory — is dimmed and drained of colour, so it is distinguishable at a
+      glance even in the collapsed sidebar where no label is visible.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceUnloadedEnabled">Dim unloaded tabs</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceUnloadedEnabled" class="trance-switch" preference="trance.tabstrip.unloaded.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceUnloadedOpacityLabel" control="tranceUnloadedOpacity">Opacity</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceUnloadedOpacity"
                   type="range"
                   min="10" max="100" step="1"
                   preference="trance.tabstrip.unloaded.opacity"/>
       <label id="tranceUnloadedOpacityValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceUnloadedSaturationLabel" control="tranceUnloadedSaturation">Colour</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceUnloadedSaturation"
                   type="range"
                   min="0" max="100" step="5"
                   preference="trance.tabstrip.unloaded.saturation"/>
       <label id="tranceUnloadedSaturationValue" class="trance-range-value"/>
-    </hbox>
-  </vbox>
+    </html:div>
+  </html:div>
 </groupbox>
 
-<groupbox id="tranceRailGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Collapsed sidebar</html:h2></label>
-  <description class="description-deemphasized">
-    Sizing for the icon-only rail. These apply only while the sidebar is
-    collapsed; the expanded sidebar is untouched. The two spacing sliders add to
-    the browser's own rail padding rather than replacing it, so zero leaves the
-    stock layout — including the clearance for the macOS window buttons —
-    exactly as it was.
-  </description>
+<groupbox id="tranceRailGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Collapsed sidebar</html:h2></label>
+    <description>
+      Sizing for the icon-only rail. These apply only while the sidebar is
+      collapsed; the expanded sidebar is untouched. Folder contents are never
+      indented here — with no labels and no tree lines, an indent is not a depth
+      cue, it is a column of icons that do not line up.
+    </description>
+  </html:div>
 
-  <checkbox id="tranceRailEnabled"
-            label="Customise the collapsed sidebar"
-            preference="trance.tabstrip.rail.enabled"/>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceRailEnabled">Customise the collapsed sidebar</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceRailEnabled" class="trance-switch" preference="trance.tabstrip.rail.enabled"/>
+    </html:div>
+  </html:div>
 
-  <vbox class="indent">
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceRailWidthLabel" control="tranceRailWidth">Sidebar width</label>
+      <description>
+        60px is the floor as well as the default — a 48px tab with 6px either
+        side. Below it the macOS window buttons no longer fit the strip reserved
+        for them and the stacked sidebar buttons begin to clip.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceRailWidth"
                   type="range"
-                  min="36" max="96" step="1"
+                  min="60" max="96" step="1"
                   preference="trance.tabstrip.rail.width"/>
       <label id="tranceRailWidthValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceRailTabSizeLabel" control="tranceRailTabSize">Tab size</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceRailTabSize"
                   type="range"
                   min="24" max="72" step="1"
                   preference="trance.tabstrip.rail.tab-size"/>
       <label id="tranceRailTabSizeValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceRailIconSizeLabel" control="tranceRailIconSize">Favicon size</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceRailIconSize"
                   type="range"
                   min="12" max="32" step="1"
                   preference="trance.tabstrip.rail.icon-size"/>
       <label id="tranceRailIconSizeValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceRailMarginTopLabel" control="tranceRailMarginTop">Extra space above</label>
+      <description>
+        Added to the browser's own rail padding rather than replacing it, so
+        zero leaves the stock layout — including the clearance for the macOS
+        window buttons — exactly as it was.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceRailMarginTop"
                   type="range"
                   min="0" max="80" step="1"
                   preference="trance.tabstrip.rail.margin-top"/>
       <label id="tranceRailMarginTopValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <hbox align="center">
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
       <label id="tranceRailMarginBottomLabel" control="tranceRailMarginBottom">Extra space below</label>
+    </html:div>
+    <html:div class="trance-row-control">
       <html:input id="tranceRailMarginBottom"
                   type="range"
                   min="0" max="80" step="1"
                   preference="trance.tabstrip.rail.margin-bottom"/>
       <label id="tranceRailMarginBottomValue" class="trance-range-value"/>
-    </hbox>
+    </html:div>
+  </html:div>
 
-    <checkbox id="tranceRailStackTopButtons"
-              label="Stack the sidebar's top buttons"
-              preference="trance.tabstrip.rail.stack-top-buttons"/>
-  </vbox>
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceRailStackTopButtons">Stack the sidebar's top buttons</label>
+      <description>A rail this narrow cannot hold a row of them.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceRailStackTopButtons" class="trance-switch" preference="trance.tabstrip.rail.stack-top-buttons"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
 <hbox id="tranceChromeCategory" class="subcategory" hidden="true" data-category="paneTrance">
   <html:h1>Chrome</html:h1>
 </hbox>
 
-<groupbox id="tranceIconsGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Icons</html:h2></label>
-  <description class="description-deemphasized">
-    One icon set for the whole browser, shipped as real files rather than
-    inlined into stylesheets. Exactly one pack is loaded at a time, so the one
-    you are not using costs nothing.
-  </description>
+<groupbox id="tranceChromeGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeEnabled">Trance chrome furniture</label>
+      <description>
+        The master switch for everything in this section: the icon set, menus
+        and panels, the new-tab button and the address bar. Off, none of those
+        rules are in the style set and the browser's own appearance is
+        untouched.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeEnabled" class="trance-switch" preference="trance.chrome.enabled"/>
+    </html:div>
+  </html:div>
+</groupbox>
 
-  <checkbox id="tranceChromeIcons"
-            label="Use the Trance icon set"
-            preference="trance.chrome.icons.enabled"/>
-
-  <vbox class="indent">
-    <hbox align="center">
-      <label id="tranceIconPackLabel" control="tranceIconPack">Icon set</label>
-      <menulist id="tranceIconPack" preference="trance.chrome.icons.pack">
-        <menupopup>
-          <menuitem value="fluent" label="Fluent"/>
-          <menuitem value="zen" label="Zen"/>
-        </menupopup>
-      </menulist>
-    </hbox>
-
-    <hbox align="center">
-      <label id="tranceIconSizeLabel" control="tranceIconSize">Icon size</label>
-      <html:input id="tranceIconSize"
-                  type="range"
-                  min="12" max="24" step="1"
-                  preference="trance.chrome.icons.size"/>
-      <label id="tranceIconSizeValue" class="trance-range-value"/>
-    </hbox>
-
-    <checkbox id="tranceIconsEmulatedMenus"
-              label="Also put icons in page and tab context menus (replaces the macOS menu)"
-              preference="trance.chrome.icons.macos-emulated-menus"/>
-    <description class="description-deemphasized indent">
-      macOS draws page and tab context menus itself, and nothing can add an icon
-      to a system-drawn menu. Turning this on replaces them with menus the
-      browser draws, which can carry icons but gives up the platform menu's feel
-      and accessibility behaviour. Every menu the browser already draws itself —
-      panels, the app menu, folder and space menus — gets icons either way.
+<groupbox id="tranceIconsGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Icons</html:h2></label>
+    <description>
+      Trance ships no icon set of its own. It preinstalls the “New Icons” mod,
+      so out of the box the icons are the ones that mod's author draws, and
+      uninstalling it in Mods gives you the browser's own. Either way there is
+      one owner for every glyph — which leaves size as the only thing here worth
+      a preference.
     </description>
-  </vbox>
-</groupbox>
+  </html:div>
 
-<groupbox id="tranceChromePanelsGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Menus, panels and the address bar</html:h2></label>
-  <description class="description-deemphasized">
-    The spacing, corner and edge treatment Trance uses everywhere else, applied
-    to menus and panels — plus two small fixes to things that get in the way
-    daily.
-  </description>
-
-  <checkbox id="tranceChromePanels"
-            label="Apply Trance's spacing and edges to menus and panels"
-            preference="trance.chrome.panels.enabled"/>
-  <checkbox id="tranceChromeMenus"
-            label="Tint menus with the space's colour"
-            preference="trance.chrome.menus.tint"/>
-  <checkbox id="tranceChromeNewTab"
-            label="Show the new-tab button as a plus, without its label"
-            preference="trance.chrome.newtab.compact"/>
-  <checkbox id="tranceChromeHideExtName"
-            label="Hide add-on names in the address bar"
-            preference="trance.chrome.urlbar.hide-extension-name"/>
-  <checkbox id="tranceChromeUrlbarDim"
-            label="Dim the page while the address bar is open"
-            preference="trance.chrome.urlbar.focus-dim"/>
-
-  <vbox class="indent">
-    <hbox align="center">
-      <label id="tranceUrlbarDimLabel" control="tranceUrlbarDim">Dim strength</label>
-      <html:input id="tranceUrlbarDim"
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label id="tranceIconScaleLabel" control="tranceIconScale">Icon size</label>
+      <description>
+        A percentage of the size the browser draws icons at, a quarter either
+        way in steps of one. Reaches the toolbar, the menus and the panels
+        together; 100% is the browser's own size and changes nothing at all.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceIconScale"
                   type="range"
-                  min="0" max="90" step="5"
-                  preference="trance.chrome.urlbar.focus-dim.strength"/>
-      <label id="tranceUrlbarDimValue" class="trance-range-value"/>
-    </hbox>
-  </vbox>
+                  min="75" max="125" step="1"
+                  preference="trance.chrome.icons.scale"/>
+      <label id="tranceIconScaleValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
 </groupbox>
+
+<groupbox id="tranceChromePanelsGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Menus, panels and the address bar</html:h2></label>
+    <description>
+      The spacing, corner and edge treatment Trance uses everywhere else,
+      applied to menus and panels — plus a few small fixes to things that get in
+      the way daily.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromePanels">Trance spacing and edges in menus and panels</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromePanels" class="trance-switch" preference="trance.chrome.panels.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeMenus">Tint menus with the space's colour</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeMenus" class="trance-switch" preference="trance.chrome.menus.tint"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeLogo">Use the Trance mark for the app-menu button</label>
+      <description>
+        In place of the three dots. Off, the button keeps whichever glyph the
+        browser or an installed icon mod draws for it.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeLogo" class="trance-switch" preference="trance.chrome.logo-menu-button"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeHideExtName">Hide add-on names in the address bar</label>
+      <description>An add-on's name otherwise eats a third of the bar on its own options page.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeHideExtName" class="trance-switch" preference="trance.chrome.urlbar.hide-extension-name"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeTopButtons">Hide the window buttons until you reach for them</label>
+      <description>
+        The window controls and the compact-mode toggle fade and slide in when
+        the pointer reaches the top of the sidebar, and go away again when it
+        leaves. They keep their space while hidden, so nothing below them moves
+        — and reaching for one does not make it disappear.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeTopButtons" class="trance-switch" preference="trance.chrome.topbuttons.reveal-on-hover"/>
+    </html:div>
+  </html:div>
+</groupbox>
+
+# The address bar's page-recede settings used to be here, under "Menus, panels
+# and the address bar". They are in Motion &amp; feedback now: dimming and
+# blurring the page while the bar is open is one of four gestures the browser
+# makes, and the other three were already there — so the group that owns
+# "Animation" is the group that owns whether this one runs and how far it goes.
 
 <hbox id="tranceMotionCategory" class="subcategory" hidden="true" data-category="paneTrance">
   <html:h1>Motion &amp; feedback</html:h1>
 </hbox>
 
-<groupbox id="tranceMotionGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Motion</html:h2></label>
-  <description class="description-deemphasized">
-    If your system asks for reduced motion, Trance honours it — this setting can
-    only lower the level, never raise it above what the system requests.
-  </description>
+<groupbox id="tranceMotionGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label id="tranceMotionLevelLabel" control="tranceMotionLevel">Animation</label>
+      <description>
+        If your system asks for reduced motion, Trance honours it — this can
+        only lower the level, never raise it above what the system requests.
+        Everything below is off at <html:strong>None</html:strong>, whichever
+        way its own switch is set.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceMotionLevel" preference="trance.motion.level">
+        <menupopup>
+          <menuitem value="2" label="Full"/>
+          <menuitem value="1" label="Reduced"/>
+          <menuitem value="0" label="None"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
 
-  <hbox align="center">
-    <label id="tranceMotionLevelLabel" control="tranceMotionLevel">Animation</label>
-    <menulist id="tranceMotionLevel" preference="trance.motion.level">
-      <menupopup>
-        <menuitem value="2" label="Full"/>
-        <menuitem value="1" label="Reduced"/>
-        <menuitem value="0" label="None"/>
-      </menupopup>
-    </menulist>
-  </hbox>
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceAnimTabSwitch">Tabs arrive when you switch to them</label>
+      <description>
+        The page comes up from 90% and out of a blur instead of appearing.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceAnimTabSwitch" class="trance-switch" preference="trance.feedback.animations.tab-switch"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceAnimSearch">The address bar settles when it opens</label>
+      <description>
+        The same gesture the other way round, so opening search reads as the
+        opposite of changing tab rather than as the same effect twice.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceAnimSearch" class="trance-switch" preference="trance.feedback.animations.search"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeUrlbarDim">Dim the page while the address bar is open</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeUrlbarDim" class="trance-switch" preference="trance.chrome.urlbar.focus-dim"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceUrlbarDimLabel" control="tranceUrlbarDim">Dim strength</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceUrlbarDim"
+                  type="range"
+                  min="0" max="90" step="5"
+                  preference="trance.chrome.urlbar.focus-dim.strength"/>
+      <label id="tranceUrlbarDimValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceChromeUrlbarBlur">Blur the page while the address bar is open</label>
+      <description>
+        Both are clipped to the page's own rounded rectangle, so neither reaches
+        the sidebar or the space around it. This is separate from the frosted
+        surfaces in Appearance: that is a blur of what is behind the chrome,
+        this is a blur of the page itself.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceChromeUrlbarBlur" class="trance-switch" preference="trance.chrome.urlbar.focus-blur"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceUrlbarBlurLabel" control="tranceUrlbarBlur">Blur radius</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceUrlbarBlur"
+                  type="range"
+                  min="0" max="40" step="1"
+                  preference="trance.chrome.urlbar.focus-blur.radius"/>
+      <label id="tranceUrlbarBlurValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
-<groupbox id="tranceFeedbackGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Feedback</html:h2></label>
-  <description class="description-deemphasized">
-    The loading bar shows how far a page has actually loaded, rather than
-    animating while it waits — so it runs only while something is loading, and
-    stops the moment it finishes.
-  </description>
-
-  <checkbox id="tranceFeedbackEnabled"
-            label="Trance feedback"
-            preference="trance.feedback.enabled"/>
-
-  <vbox class="indent">
-    <checkbox id="tranceFeedbackLoading"
-              label="Show a loading bar while pages load"
-              preference="trance.feedback.loading.enabled"/>
-
-    <vbox class="indent">
-      <hbox align="center">
-        <label id="tranceLoadingPositionLabel" control="tranceLoadingPosition">Position</label>
-        <menulist id="tranceLoadingPosition" preference="trance.feedback.loading.position">
-          <menupopup>
-            <menuitem value="top" label="Top of the page"/>
-            <menuitem value="bottom" label="Bottom of the page"/>
-          </menupopup>
-        </menulist>
-      </hbox>
-
-      <hbox align="center">
-        <label id="tranceLoadingThicknessLabel" control="tranceLoadingThickness">Thickness</label>
-        <html:input id="tranceLoadingThickness"
-                    type="range"
-                    min="1" max="12" step="1"
-                    preference="trance.feedback.loading.thickness"/>
-        <label id="tranceLoadingThicknessValue" class="trance-range-value"/>
-      </hbox>
-    </vbox>
-
-    <checkbox id="tranceFeedbackBubbles"
-              label="Burst a tab into bubbles when it closes"
-              preference="trance.feedback.bubbles.enabled"/>
-
-    <vbox class="indent">
-      <hbox align="center">
-        <label id="tranceBubbleCountLabel" control="tranceBubbleCount">Bubbles per burst</label>
-        <html:input id="tranceBubbleCount"
-                    type="range"
-                    min="3" max="16" step="1"
-                    preference="trance.feedback.bubbles.count"/>
-        <label id="tranceBubbleCountValue" class="trance-range-value"/>
-      </hbox>
-    </vbox>
-
-    <checkbox id="tranceStyledStatusPanel"
-              label="Float the link-target bar away from the window corner"
-              preference="zen.theme.styled-status-panel"/>
-    <description class="description-deemphasized indent">
-      This is Zen's own setting, surfaced here rather than duplicated. Trance
-      builds nothing for it: what the Floating Status Bar mod does, Zen already
-      does, and a second owner for one element is the problem this browser
-      exists to remove.
+<groupbox id="tranceFeedbackGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Feedback</html:h2></label>
+    <description>
+      The loading bar shows how far a page has actually loaded, rather than
+      animating while it waits — so it runs only while something is loading, and
+      stops the moment it finishes.
     </description>
-  </vbox>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceFeedbackEnabled">Trance feedback</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceFeedbackEnabled" class="trance-switch" preference="trance.feedback.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceFeedbackLoading">Show a loading bar while pages load</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceFeedbackLoading" class="trance-switch" preference="trance.feedback.loading.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingPositionLabel" control="tranceLoadingPosition">Loading bar position</label>
+      <description>
+        Which edge of the page it belongs to — and therefore which way it grows.
+        The two side positions span the page's height rather than its width, so
+        the length below means the same thing on either axis.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceLoadingPosition" preference="trance.feedback.loading.position">
+        <menupopup>
+          <menuitem value="top" label="Top of the page"/>
+          <menuitem value="bottom" label="Bottom of the page"/>
+          <menuitem value="left" label="Left of the page"/>
+          <menuitem value="right" label="Right of the page"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingWidthLabel" control="tranceLoadingWidth">Loading bar length</label>
+      <description>
+        A share of the edge it runs along, centred on it. A full-width hairline
+        is the least visible version of a progress bar; a quarter of the edge is
+        an object with two ends.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceLoadingWidth"
+                  type="range"
+                  min="10" max="100" step="1"
+                  preference="trance.feedback.loading.width"/>
+      <label id="tranceLoadingWidthValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingThicknessLabel" control="tranceLoadingThickness">Loading bar thickness</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceLoadingThickness"
+                  type="range"
+                  min="1" max="12" step="1"
+                  preference="trance.feedback.loading.thickness"/>
+      <label id="tranceLoadingThicknessValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingOffsetLabel" control="tranceLoadingOffset">Distance from the edge</label>
+      <description>
+        The bar sits inside the page rather than on the window's border, so it
+        reads as belonging to what is loading.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceLoadingOffset"
+                  type="range"
+                  min="0" max="120" step="1"
+                  preference="trance.feedback.loading.offset"/>
+      <label id="tranceLoadingOffsetValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceLoadingFlourish">Widen the bar when the page finishes</label>
+      <description>
+        It overshoots its own length and settles back before fading, so a load is
+        seen to finish rather than to stop.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceLoadingFlourish" class="trance-switch" preference="trance.feedback.loading.flourish"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceLoadingZoom">Push the page back while it loads</label>
+      <description>
+        The page is scaled up slightly and softened for as long as the load
+        takes, settling as it finishes — the same gesture switching tabs makes,
+        held rather than played once. It is the most expensive effect Trance
+        draws: a blur over the content pane cannot be reused between frames
+        while the page behind it is painting, so this costs real work for the
+        length of a load and nothing at all between loads.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceLoadingZoom" class="trance-switch" preference="trance.feedback.loading.zoom"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingZoomScaleLabel" control="tranceLoadingZoomScale">How far it comes forward</label>
+      <description>Percent above its own size. Past about 8 the page's text starts to resample visibly.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceLoadingZoomScale"
+                  type="range"
+                  min="0" max="20" step="1"
+                  preference="trance.feedback.loading.zoom.scale"/>
+      <label id="tranceLoadingZoomScaleValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceLoadingZoomBlurLabel" control="tranceLoadingZoomBlur">How soft it goes</label>
+      <description>Zero is no blur at all rather than a blur of nothing, which is the difference between costing a pass and costing none.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceLoadingZoomBlur"
+                  type="range"
+                  min="0" max="24" step="1"
+                  preference="trance.feedback.loading.zoom.blur"/>
+      <label id="tranceLoadingZoomBlurValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceFeedbackBubbles">Burst a tab into bubbles when it closes</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceFeedbackBubbles" class="trance-switch" preference="trance.feedback.bubbles.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceBubbleCountLabel" control="tranceBubbleCount">Bubbles per burst</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <html:input id="tranceBubbleCount"
+                  type="range"
+                  min="3" max="16" step="1"
+                  preference="trance.feedback.bubbles.count"/>
+      <label id="tranceBubbleCountValue" class="trance-range-value"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceBubbleShapeLabel" control="tranceBubbleShape">Burst shape</label>
+      <description>
+        Both scatter: angle, distance and size are an evenly-spaced mean plus a
+        normal deviate, so no two bursts are the same and the bubbles thin out
+        away from the tab. <html:strong>Line</html:strong> sends the same
+        scatter along the row the tab was in instead of around it.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceBubbleShape" preference="trance.feedback.bubbles.shape">
+        <menupopup>
+          <menuitem value="circle" label="Circle — out in every direction"/>
+          <menuitem value="line" label="Line — out along one axis"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceStyledStatusPanel">Float the link-target bar away from the window corner</label>
+      <description>
+        Zen's own setting, surfaced here rather than duplicated. Trance builds
+        nothing for it: what the Floating Status Bar mod does, Zen already does,
+        and a second owner for one element is the problem this browser exists to
+        remove.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceStyledStatusPanel" class="trance-switch" preference="zen.theme.styled-status-panel"/>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<hbox id="tranceThemeCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Theme</html:h1>
+</hbox>
+
+<groupbox id="tranceThemeGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Colour picker</html:h2></label>
+    <description>
+      Zen's own gradient picker, with the controls it does not have. Trance adds
+      to that panel rather than replacing it, so the colour wheel, the harmonies
+      and the per-space saving are still Zen's — and turning this off leaves the
+      panel exactly as Zen ships it.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeEnabled">Extended colour picker</label>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeEnabled" class="trance-switch" preference="trance.theme.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeLightness">Lightness slider</label>
+      <description>
+        Zen reads lightness from how far the dot sits from the centre of the
+        wheel, so there is no way to keep a hue and darken it. While the slider
+        is set it owns lightness and the wheel is hue and saturation only; the
+        <html:strong>Full colour</html:strong> palette hands it back.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeLightness" class="trance-switch" preference="trance.theme.controls.lightness"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeAngle">Gradient angle knob</label>
+      <description>
+        Zen builds every gradient at a fixed −45°. The knob is that number, and
+        it goes inert when the theme is a single flat colour, because a flat
+        colour has no angle.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeAngle" class="trance-switch" preference="trance.theme.controls.angle"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemePalettes">Palette button</label>
+      <description>
+        Eight palettes — full colour, vivid, pastel, muted, dark, light, neon and
+        monochrome. A palette is a slider configuration rather than a set of
+        colours, because in this picker the colours come from where you click.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemePalettes" class="trance-switch" preference="trance.theme.palettes.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeSaved">Saved themes</label>
+      <description>
+        The heart saves the current theme to an extra page at the start of the
+        preset pager. The pager still opens where it did before; the left arrow
+        is what reaches the saved page.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeSaved" class="trance-switch" preference="trance.theme.saved.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceThemeSavedCountLabel">Saved themes stored</label>
+      <description>
+        Where the heart puts them. Right-clicking a saved swatch in the picker
+        forgets that one. Both ask first: a saved theme is a set of colours that
+        cannot be derived again from anything the browser still holds, so
+        forgetting one is the only genuinely unrecoverable thing on this page.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <label id="tranceThemeSavedCount" class="trance-range-value"/>
+      <button id="tranceThemeForgetAll" label="Forget all"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeHex">Exact colour entry</label>
+      <description>
+        A hex field next to Zen's colour swatch. The colour is used verbatim
+        rather than derived from a position on the wheel — which also means
+        Zen's own list of custom colours is switched on while this is, since it
+        is the only way to remove one again.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeHex" class="trance-switch" preference="trance.theme.controls.hex"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeNotifications">Say what each button did</label>
+      <description>
+        A short message inside the picker naming the palette that was selected
+        or the colour harmony the algorithm button moved to. It holds no timer:
+        its whole life is one animation, so at motion level 0 there is neither.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeNotifications" class="trance-switch" preference="trance.theme.notifications"/>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<hbox id="tranceOnboardingCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>First run</html:h1>
+</hbox>
+
+<groupbox id="tranceOnboardingGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Onboarding</html:h2></label>
+    <description>
+      Ten screens on a fresh profile: five of Trance's own, then Zen's five
+      rebuilt against Zen's own strings so they stay translated. Trance's five
+      come first because four of them change how the browser is built rather
+      than how it looks, and the fifth is the one bundled extension that does
+      nothing until it has been opened. Three of the answers are the settings
+      immediately below, and they can be changed here at any time.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceOnboardingEnabled">Run onboarding on a fresh profile</label>
+      <description>
+        Off, Zen's own welcome flow runs instead — the browser is not left
+        without a first run. Two full-window takeovers cannot share a window, so
+        it is one or the other rather than both.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceOnboardingEnabled" class="trance-switch" preference="trance.onboarding.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceOnboardingShownLabel">Onboarding</label>
+      <description>
+        Whether the flow has run. Asking for it again starts it when the browser
+        is next idle, in whichever window gets there first.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <label id="tranceOnboardingShown" class="trance-range-value"/>
+      <button id="tranceOnboardingShow" label="Run it again"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceOnboardingChannel">Zen feature set</label>
+      <description>
+        Upstream Zen ships two builds and decides this at compile time. Trance
+        ships one, so it is a setting. <html:strong>Twilight</html:strong> turns
+        on the features Zen has not finished — refreshed context menus, acrylic
+        panel materials, and syncing your spaces between devices.
+        <html:strong>Stable</html:strong> hands each of those prefs back to
+        whatever Zen's own default is, rather than writing the opposite value
+        over it.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceOnboardingChannel" preference="trance.onboarding.channel">
+        <menupopup>
+          <menuitem value="stable" label="Stable"/>
+          <menuitem value="twilight" label="Twilight"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceModsChannel">Mod manager channel</label>
+      <description>
+        Trance preinstalls the Sine mod manager on its pre-release channel,
+        Cosine. Changing this rewrites the version in the engine's own
+        <html:code>engine.json</html:code>, which is what it reads to decide
+        which channel to update itself along — so the change takes effect on its
+        next update check rather than immediately, and nothing is downloaded
+        here.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceModsChannel" preference="trance.mods.channel">
+        <menupopup>
+          <menuitem value="cosine" label="Cosine (pre-release)"/>
+          <menuitem value="sine" label="Sine (stable)"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceArch">Tune blur for</label>
+      <description>
+        The frost is the one thing Trance draws whose cost is not the same on
+        every machine. <html:strong>Apple Silicon</html:strong> is the full
+        24px blur, blurred internal pages and a blurred address bar on focus;
+        <html:strong>Intel</html:strong> drops that to 10px and turns the other
+        two off. Detected from the build on first run — change it only if that
+        was wrong.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <menulist id="tranceArch" preference="trance.perf.arch">
+        <menupopup>
+          <menuitem value="arm64" label="Apple Silicon"/>
+          <menuitem value="x86_64" label="Intel"/>
+        </menupopup>
+      </menulist>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<hbox id="tranceExtensionsCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Extensions</html:h1>
+</hbox>
+
+<groupbox id="tranceExtensionsGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Bundled extensions</html:h2></label>
+    <description>
+      Trance installs seven extensions on a fresh profile — uBlock Origin,
+      SponsorBlock, Privacy Badger, Dark Reader, ClearURLs, Return YouTube
+      Dislike and Zen Internet. They are not bundled files: an enterprise policy
+      names each one and its address on addons.mozilla.org, and the browser
+      installs them itself on first run, so they update like any other add-on
+      and none of them is frozen at whatever version Trance was built against.
+      They are yours from that point on — Add-ons and Themes is where they are
+      configured, disabled, or turned off entirely.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceFirstRunEnabled">First-run report</label>
+      <description>
+        A panel, once, saying which of the seven arrived and offering to try the
+        ones that did not. A policy install is a download during startup with no
+        UI attached, so without this a first run with no network produces a
+        browser that quietly has no ad blocker. Off, this feature holds no
+        panel, no add-on listener and no DOM.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceFirstRunEnabled" class="trance-switch" preference="trance.firstrun.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceFirstRunShowLabel">First run</label>
+      <description>
+        Whether the panel has been shown. Asking for it again makes it appear
+        when the browser is next idle, in whichever window gets there first.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <label id="tranceFirstRunShown" class="trance-range-value"/>
+      <button id="tranceFirstRunShow" label="Show it again"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
 <hbox id="tranceAdvancedCategory" class="subcategory" hidden="true" data-category="paneTrance">
   <html:h1>Advanced</html:h1>
 </hbox>
 
-<groupbox id="tranceAdvancedGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Diagnostics</html:h2></label>
-  <description class="description-deemphasized">
-    Logging is off by default and costs nothing when off. With it on, the browser
-    console reports scheduler suspend/resume, observer rebuilds and feature
-    enable/disable, and Trance keeps the counters used to check its performance
-    budgets.
-  </description>
+<groupbox id="tranceModGuardGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Mods</html:h2></label>
+    <description>
+      Trance ships the Sine mod manager so anything outside its own feature set
+      stays reachable. Most of the curated set is already reimplemented
+      natively, and installing one of those means two owners for one surface.
+      Five are the other way round — Trance installs them itself rather than
+      reimplementing them. Two ship a drawing whose licence does not let Trance
+      ship it; the others own nothing Trance owns, so rewriting them would have
+      removed no conflict and cost what the originals cost.
+    </description>
+  </html:div>
 
-  <checkbox id="tranceDebug"
-            label="Log Trance activity to the browser console"
-            preference="trance.debug"/>
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceModGuard">Warn about mods that can clash with the browser</label>
+      <description>
+        Sine's marketplace and installed list say what a mod is likely to
+        collide with, instead of leaving you to find out from the artefacts.
+        Mods Trance has already reimplemented are named exactly — which feature
+        owns the behaviour and which setting configures it. Everything else is
+        matched on what it says it does: a mod that restyles the tab strip, the
+        toolbar, the address bar or the surfaces gets a general note about the
+        Trance feature it will be arguing with, and one that owns a surface
+        Trance has no opinion about gets nothing at all. The mods Trance
+        installs itself are labelled as such rather than warned about.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceModGuard" class="trance-switch" preference="trance.modguard.enabled"/>
+    </html:div>
+  </html:div>
 </groupbox>
 
-<groupbox id="tranceModGuardGroup" data-category="paneTrance" hidden="true" class="highlighting-group">
-  <label><html:h2>Mods</html:h2></label>
-  <description class="description-deemphasized">
-    Trance ships the Sine mod manager so anything outside its own feature set
-    stays reachable. Twenty-three mods are already reimplemented natively, and
-    installing those means two owners for one surface. With this on, Sine's
-    marketplace and installed list say which Trance feature owns the behaviour
-    instead of leaving you to find out from the artefacts.
-  </description>
-
-  <checkbox id="tranceModGuard"
-            label="Warn about mods that Trance already replaces"
-            preference="trance.modguard.enabled"/>
+<groupbox id="tranceAdvancedGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceDebug">Log Trance activity to the browser console</label>
+      <description>
+        Off by default and free when off. With it on, the console reports
+        scheduler suspend/resume, observer rebuilds and feature enable/disable,
+        and Trance keeps the counters used to check its performance budgets.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceDebug" class="trance-switch" preference="trance.debug"/>
+    </html:div>
+  </html:div>
 </groupbox>
+
+# The pane's one dialog.
+#
+# `<html:dialog>` rather than a XUL `<panel>` or a second window: `showModal()`
+# puts the element in the top layer, gives it a `::backdrop`, traps focus and
+# closes on Escape, all of which a hand-built overlay would have to reimplement
+# and get wrong. It is one element reused by every destructive control on the
+# page rather than one dialog per button — there is exactly one shape of
+# question here ("this cannot be undone; do it?") and one shape of answer.
+#
+# It lives outside every groupbox because it is not a setting and must not be
+# swept up by the row-structure rules or by `data-category` show/hide.
+<html:dialog id="tranceConfirmDialog" class="trance-confirm">
+  <html:h2 id="tranceConfirmTitle"></html:h2>
+  <html:p id="tranceConfirmBody"></html:p>
+  <html:div class="trance-confirm-actions">
+    <html:button id="tranceConfirmCancel" type="button">Cancel</html:button>
+    <html:button id="tranceConfirmAccept" type="button" class="trance-confirm-danger"></html:button>
+  </html:div>
+</html:dialog>
 
 </html:template>

@@ -12,15 +12,34 @@
 | **User's version** | 2.1 (installed and enabled in the twilight profile) |
 | **Source** | `JustAdumbPrsn/ZenFolderTreeConnectors` |
 | **License** | **GPL-3.0** |
-| **Verdict** | NATIVE — clean-room, mandatory |
-| **Phase** | 4 |
+| **Verdict** | ~~NATIVE — clean-room, mandatory~~ → **PREINSTALL** (ADR-027) |
+| **Phase** | ~~4~~ — preinstalled instead |
 | **Cluster** | sidebar-tabs |
 | **Investigated** | 2026-08-25 |
+| **Revised** | 2026-08-26 |
 
-One of the two mods Trance is legally required to reimplement rather than adapt
-(`TRANCE.md` §7.2). It is also the one where the clean-room constraint produced a
-*better* implementation than the original could have had, because Trance can use
-an element Zen already puts in the DOM and a mod cannot rely on.
+## 0. Revision: this one is installed, not reimplemented
+
+Everything below is the phase 4 investigation and it is still accurate as an
+account of the behaviour. The verdict on top of it changed.
+
+Trance did build this: a trunk on `.zen-tab-group-start` and an elbow on each
+child's `::after`, two boxes and no JavaScript where the mod ships a `.uc.js`
+that walks the tab strip on every mutation. It was cheaper than the original and
+it was, unavoidably, an approximation of someone else's drawing — the licence is
+GPL-3.0, so no rule from it may be copied, which means the reimplementation could
+only ever be *a* tree, not *the* tree.
+
+That is the identical position ADR-024 found for the "New Icons" set, from the
+other end of the licence spectrum, and it takes the same answer. Installing a mod
+is not copying it: Sine fetches it from the author's own repository at
+provisioning time, exactly as its own installer would, and nothing from it enters
+this tree. `scripts/trance-cosine.py` preinstalls it, `trance.tabstrip.connectors`
+and the `--trance-connector-*` tokens are gone, and Trance draws no connectors of
+its own. See ADR-027 for the trade — the mod's per-mutation walk is the cost.
+
+The design in §6 below is therefore **withdrawn**, and is kept because it is the
+record of what was tried and why it was not enough.
 
 ## 1. What it actually does
 

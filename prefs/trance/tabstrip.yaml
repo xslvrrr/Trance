@@ -23,12 +23,21 @@
   value: true
 
 # === Mark: Folder tree connectors ===
-
-# Replaces Zen Folder Tree Connectors (22), which needed a script; Trance draws
-# both the trunk and the elbows in CSS by styling `.zen-tab-group-start`, an
-# anchor Zen already puts in every folder container and never styles.
-- name: trance.tabstrip.connectors
-  value: true
+#
+# There is no pref here any more, and that is the feature.
+#
+# Trance used to draw the trunk and the elbows itself, in CSS, behind
+# `trance.tabstrip.connectors`. Zen Folder Tree Connectors is GPL-3.0, so that
+# was a clean-room reimplementation by requirement (TRANCE.md §7.2) — and a
+# clean-room reimplementation of a *drawing* is an approximation of it, which is
+# the same position the icon set was in. Trance now preinstalls the mod instead,
+# from its author's own repository at provisioning time, exactly as its own
+# installer would: see PREINSTALLED_MODS in scripts/trance-cosine.py and
+# ADR-027. Installing a mod is not copying it, and it means the connectors are
+# the ones the mod's author draws.
+#
+# `--trance-connector-*` is gone from trance-tokens.css with it. One owner per
+# surface: the mod owns this one now.
 
 # === Mark: Folders ===
 
@@ -88,9 +97,15 @@
 - name: trance.tabstrip.rail.enabled
   value: true
 
-# Pixels. Total width of the collapsed rail; Zen's own default is 60.
+# Pixels. Total width of the collapsed rail, and Zen's own default: a 48px tab
+# plus 6px of toolbox padding either side.
+#
+# 60 is also the floor the settings slider starts at. Narrower than that and the
+# macOS traffic lights no longer fit the strip Zen reserves for them and the
+# stacked top buttons begin to clip — a 48px rail was not a smaller rail, it was
+# a broken one.
 - name: trance.tabstrip.rail.width
-  value: 48
+  value: 60
 
 # Pixels. Width and height of a tab button inside the rail.
 - name: trance.tabstrip.rail.tab-size
@@ -112,6 +127,43 @@
 - name: trance.tabstrip.rail.margin-bottom
   value: 0
 
-# A 48px rail cannot hold a row of buttons; stack them instead.
+# A rail this narrow cannot hold a row of buttons; stack them instead.
 - name: trance.tabstrip.rail.stack-top-buttons
   value: true
+
+# === Mark: Active tab glow ===
+
+# Nebula's glow behind the selected tab. Opt in.
+#
+# `none` | `theme` | `icon`.
+#
+#   theme — the space's own accent, lifted until it is visible against the
+#           chrome (`--trance-accent-vivid`). One colour for every tab, so the
+#           glow says "this one" and nothing else.
+#   icon  — the tab's own colour: the dominant hue of its favicon, drawn as the
+#           same shape `theme` draws. It used to be the favicon itself, scaled
+#           up and blurred past recognition, and that was the wrong answer twice
+#           over — a blur wide enough to hide a 16px picture is a smear whose
+#           colour is the *average* of the icon rather than its colour, and it
+#           cost a filter pass on every frame the tab was on screen. Sampling is
+#           once per favicon, cached by URL, and the number it produces is the
+#           one a person means by "the colour of that site" (ADR-047).
+#
+# Nebula is GPL-3.0, so this is the behaviour reimplemented from its description
+# and its screenshots and none of its code (TRANCE.md §7.2).
+#
+# Off by default: it is the one thing in the tab strip that paints outside a
+# tab's own box, and a browser whose default look has a glow behind one row is a
+# stronger opinion than a default should hold.
+- name: trance.tabstrip.glow.mode
+  value: "none"
+
+# Pixels. How far past the tab's own box the glow reaches. It is a semi-oval —
+# wider than it is tall, cropped along the bottom — so this is the reach at the
+# top and the sides, and the bottom edge stays where the tab's does.
+- name: trance.tabstrip.glow.spread
+  value: 6
+
+# Percentage. How strongly it reads at its centre.
+- name: trance.tabstrip.glow.opacity
+  value: 80

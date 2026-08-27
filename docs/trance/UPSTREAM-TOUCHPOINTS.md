@@ -7,6 +7,46 @@ when `git rebase upstream/dev` conflicts, it will be in one of these files.
 **Keep this list under ~15 entries.** If a change can be made in a Trance-owned file instead,
 make it there. Adding an entry requires a matching ADR in `DECISIONS.md`.
 
+It stands at **23**, eight over budget, and the retirement pass §11.3 wants is still outstanding.
+
+Phase 9 added three, each one line of consequence: #15 is a `DIRS` entry, #16 is a *deletion* (which
+can only conflict if upstream edits a file that is no longer there), and #17 is one pref inside a
+file Zen already patches (ADR-032).
+
+Phase 11 added two, #18 and #19, and was approved for five to seven. Of Tier A's five, four turned
+out not to need a touchpoint and two turned out not to be defects — see ADR-035. The pattern worth
+keeping is that the reset layer (`trance-reset.css`) and a default-branch pref claim in the owning
+feature between them absorbed every CSS-level and pref-level fix; only a change to upstream
+*behaviour* needed the file itself. #19 is Tier B1 (ADR-038), and it is the same pattern read the
+other way: the plan expected it to cost two files, and it cost one, because the CSS it would
+otherwise have rewritten is still doing a job — it is what the layers fall back to once the
+animation ends.
+
+The settings pass added three, #20 to #22, and all three are *one pref value each* inside a file
+Zen or Firefox already owns. They are not there by preference. ffprefs sorts every YAML entry by
+pref name and emits duplicates adjacently, so a second definition of a name that is already declared
+resolves in `fs::read_dir` order — a different browser on a different machine. A default Trance
+disagrees with therefore has to be changed where it is declared. Defaults that nobody declares live
+in `prefs/trance/browser-defaults.yaml`, which costs no touchpoint at all, and that is where the
+history-mode prefs went for exactly this reason. The three here had no such option.
+
+They are also the cheapest kind of conflict to resolve: a rebase conflict on a one-line pref value is
+a value to re-apply, not a behaviour to re-derive.
+
+Phase 13 added one, #23, and it is the cheapest shape a behavioural touchpoint comes in: a guard
+around a call that is otherwise untouched. Trance's onboarding replaces Zen's welcome rather than
+running before or after it, and it has to — `ZenWelcome` hides every child of `#browser` on entry
+and restores them in `finish()`, so two takeovers in one window means the second one inherits a
+window the first has already rebuilt. The alternative was for `TranceOnboarding` to detect Zen's
+flow and wait for it, which is what `TranceFirstRun` does — but waiting is right for a panel that
+comes *after* a takeover and wrong for a takeover that has to replace one.
+
+Phase 1's artwork closed without a touchpoint. Everything `scripts/trance-branding.py` writes lands
+in `configs/branding/trance/` (#3, already counted) or in `src/zen/trance/icons/`, and the source
+art lives in `docs/trance/brand/` — deliberately *not* under `configs/branding/trance/`, because
+surfer's branding patch copies every non-`content` entry of that directory with `copyFileSync` and
+throws on a subdirectory.
+
 Mark every change in-place:
 
 ```js
@@ -45,6 +85,15 @@ Mark every change in-place:
 | 12 | `src/zen/tests/moz.build` | One entry: `"trance/browser.toml"` | 2 | — |
 | 13 | `src/toolkit/moz-configure.patch` (`toolkit/moz.configure`) | `MOZ_APP_PROFILE`, `MOZ_APP_VENDOR` default, distribution-id default, Linux user appdir | 1 | ADR-014 |
 | 14 | `src/browser/moz-configure.patch` (`browser/moz.configure`) | `imply_option("MOZ_APP_VENDOR", "Trance")` | 1 | ADR-014 |
+| 15 | `src/zen/moz.build` | One `DIRS` entry: `"trance"`, so the build installs `distribution/policies.json` | 9 | ADR-032 |
+| 16 | `build/AppDir/distribution/policies.json` | **Deleted.** Its contents moved into `src/zen/trance/distribution/policies.json`, which every platform now gets. Leaving it would also have broken the AppImage step, which does `mv zen/* $APPDIR/` — `mv` refuses a directory onto a non-empty one of the same name | 9 | ADR-032 |
+| 17 | `src/testing/profiles/mochitest/user-js.patch` (`testing/profiles/mochitest/user.js`) | One pref: `toolkit.policies.perUserDir=true`, so the shipped extension policy does not make every mochitest in the tree dial addons.mozilla.org. Zen already patches this file | 9 | ADR-032 |
+| 18 | `src/zen/media/ZenMediaController.mjs` | Park the 1 Hz position ticker while the window is minimised or fully occluded, and re-derive the position from elapsed wall time on resume. One field, one method, one guard, one teardown | 11 | ADR-035 |
+| 19 | `src/zen/spaces/ZenSpaceManager.mjs` | The workspace cross-fade animates `opacity` on the two background pseudo-elements via `motion.animateMini`, instead of animating the `--zen-background-opacity` custom property. One local array, one replaced `motion.animate` call, one cancel-and-hand-back at the end of the switch | 11 | ADR-038 |
+| 20 | `prefs/zen/view.yaml` | Two pref values: `zen.view.use-single-toolbar` → `false`, so Trance ships the sidebar-and-toolbar layout, and `zen.view.show-newtab-button-top` → `false`, so the new-tab button stays at the foot of the tab list where the preinstalled mod styles it | — | ADR-044 |
+| 21 | `prefs/zen/zen-urlbar.yaml` | One pref value: `zen.urlbar.behavior` → `float`, so the address bar is always the floating panel Trance paints | — | ADR-044 |
+| 22 | `prefs/firefox/urlbar.yaml` | One pref value: `browser.search.suggest.enabled` → `true`. The private-window switch is left off | — | ADR-044 |
+| 23 | `src/zen/common/modules/ZenStartup.mjs` | One `if` around the existing `loadSubScript` of `ZenWelcome.mjs`, so Zen's welcome flow does not start when Trance's onboarding is enabled. Two full-window takeovers cannot share a window. Nothing is added, moved or reordered — with `trance.onboarding.enabled` false the call runs exactly as it did | 13 | ADR-051 |
 
 ## Planned touchpoints
 
@@ -53,10 +102,8 @@ they actually land.
 
 | File | Planned change | Phase |
 |---|---|---|
-| `src/zen/moz.build` | Add `"trance"` to `DIRS` — **only when Trance ships C++, XPIDL, an XPCOM manifest or a `resource:///modules/` module.** Not needed for chrome-packaged files (ADR-012) | — |
 | `src/zen/ZenComponents.manifest` | `#include trance/TranceComponents.manifest` — same condition (ADR-012) | — |
 | ~~`src/zen/common/styles/zen-theme.css`~~ | ~~Single `@import` of `trance.css`~~ — **not needed.** Stylesheets load dynamically so a disabled Trance costs nothing (ADR-010) | — |
-| `build/AppDir/distribution/policies.json` | Merge `ExtensionSettings` | 9 |
 | `src/zen/tabs/**` or `src/zen/folders/**` | Extension points for the Trance tab strip | 4 |
 | `src/zen/urlbar/**` | Extension points for the Trance urlbar treatment | 5 |
 | `.github/workflows/**` | Trance CI matrix | 12 |
@@ -147,3 +194,14 @@ recompiling the tree.
 using the *current* patch text, so an edited patch fails to reverse and then conflicts on apply.
 Edit `engine/<file>` and run `npm run export <file>` instead. To recover from a hand-edit:
 `cd engine && git checkout -- <file>` then `npm run import`.
+
+### `src/zen/moz.build` and `build/AppDir/distribution/policies.json`
+Phase 9's pair, and they are one change. Trance's enterprise policy has to exist as a real file at
+`<install>/distribution/policies.json` before there is a profile, so it cannot be chrome-packaged
+(ADR-012's condition) — `src/zen/trance/moz.build` installs it with `FINAL_TARGET_FILES.distribution`
+and `src/zen/moz.build` has to list `"trance"` for that file to be traversed at all.
+
+The AppDir copy is deleted rather than merged into, for two reasons. It reached only the Linux
+AppImage, so merging would have installed seven extensions on one platform. And the AppImage step
+runs `mv zen/* $APPDIR/`: once the packaged tree contains a `distribution/` of its own, `mv` refuses
+to move it onto a non-empty directory of the same name, so the two files could not have coexisted.

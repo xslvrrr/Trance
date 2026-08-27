@@ -3,30 +3,32 @@
 
 /* Trance: chrome furniture acceptance tests (TRANCE.md §13 Phase 5).
  *
- * Phase 5's acceptance is three claims, and all three are checkable:
+ * Phase 5's acceptance is three claims, and all three are still checkable now
+ * that the icon packs are gone (ADR-039):
  *
- *   "no duplicate glyphs"       → exactly one icon pack is in the style set,
- *                                 and switching packs swaps rather than adds
- *   "no data-URI icons in CSS"  → every glyph is a chrome:// URL to a real file
+ *   "no duplicate glyphs"       → Trance ships no glyph the browser already
+ *                                 draws, so there is no second owner to find
+ *   "no data-URI icons in CSS"  → every glyph Trance does ship is a chrome://
+ *                                 URL to a real file
  *   "every sub-feature independently toggleable with zero residual cost"
  *                               → one attribute each, gone when the pref is off
  *
  * Four mods used to ship four copies of the same glyph set, inlined into CSS as
  * data URIs — the same padlock parsed four times and cached never
- * (TRANCE.md §3.8). That is what the first two guard.
+ * (TRANCE.md §3.8). Trance's answer is now to ship none of them.
  */
 
 "use strict";
 
 const CHROME_SHEET = "chrome://browser/content/trance-styles/trance-chrome.css";
-const iconSheet = pack =>
-  `chrome://browser/content/trance-styles/trance-icons-${pack}.css`;
-
 /** Every sub-feature: its pref, and the root attribute its rules gate on. */
 const FLAGS = [
   { pref: "trance.chrome.panels.enabled", attribute: "trance-chrome-panels" },
   { pref: "trance.chrome.menus.tint", attribute: "trance-chrome-menus" },
-  { pref: "trance.chrome.newtab.compact", attribute: "trance-chrome-newtab" },
+  {
+    pref: "trance.chrome.logo-menu-button",
+    attribute: "trance-chrome-logo",
+  },
   {
     pref: "trance.chrome.urlbar.hide-extension-name",
     attribute: "trance-chrome-urlbar-noextname",
@@ -34,6 +36,14 @@ const FLAGS = [
   {
     pref: "trance.chrome.urlbar.focus-dim",
     attribute: "trance-chrome-urlbar-dim",
+  },
+  {
+    pref: "trance.chrome.urlbar.focus-blur",
+    attribute: "trance-chrome-urlbar-blur",
+  },
+  {
+    pref: "trance.chrome.topbuttons.reveal-on-hover",
+    attribute: "trance-chrome-topbuttons",
   },
 ];
 
@@ -75,100 +85,9 @@ add_task(async function test_feature_is_registered_and_enabled() {
   ok(feature.enabled, "and enabled by default");
   ok(loadedSheets().includes(CHROME_SHEET), "its stylesheet is loaded");
   is(
-    document.documentElement.getAttribute("trance-chrome-icons"),
-    "true",
-    "icons are on by default"
-  );
-});
-
-add_task(async function test_exactly_one_icon_pack_is_loaded() {
-  const packs = ["fluent", "zen"].filter(pack =>
-    loadedSheets().includes(iconSheet(pack))
-  );
-  is(packs.length, 1, "exactly one icon pack is in the style set");
-  is(packs[0], "fluent", "and Fluent is the default");
-});
-
-add_task(async function test_switching_packs_swaps_rather_than_adds() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.chrome.icons.pack", "zen"]],
-  });
-
-  ok(loadedSheets().includes(iconSheet("zen")), "the Zen pack is loaded");
-  ok(
-    !loadedSheets().includes(iconSheet("fluent")),
-    "and Fluent is unloaded, not merely overridden — the pack you are not " +
-      "using is not in the style set at all"
-  );
-
-  await SpecialPowers.popPrefEnv();
-
-  ok(loadedSheets().includes(iconSheet("fluent")), "and it swaps back");
-});
-
-add_task(async function test_an_unknown_pack_falls_back() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.chrome.icons.pack", "nonsense"]],
-  });
-  ok(
-    loadedSheets().includes(iconSheet("fluent")),
-    "an unrecognised pack name falls back to the default rather than leaving " +
-      "the browser with no icons"
-  );
-  await SpecialPowers.popPrefEnv();
-});
-
-add_task(async function test_no_glyph_is_a_data_uri() {
-  // TRANCE.md §3.8 and the Phase 5 acceptance criterion, verified against the
-  // live stylesheet rather than against the source.
-  for (const pack of ["fluent", "zen"]) {
-    await SpecialPowers.pushPrefEnv({
-      set: [["trance.chrome.icons.pack", pack]],
-    });
-
-    ok(
-      loadedSheets().includes(iconSheet(pack)),
-      `the ${pack} sheet is in the style set`
-    );
-
-    const source = await sheetText(iconSheet(pack));
-    // Comments stripped: the generated header explains that every `!important`
-    // was removed on the way in, and that sentence must not be what fails —
-    // or passes — this assertion.
-    const text = source.replace(/\/\*[\s\S]*?\*\//g, "");
-
-    ok(!text.includes("data:"), `no data URI in the ${pack} pack`);
-    ok(!text.includes("!important"), `and no !important in the ${pack} pack`);
-    ok(
-      text.includes(`trance-icons/${pack}/`),
-      `and its glyphs resolve to real files in the ${pack} directory`
-    );
-
-    await SpecialPowers.popPrefEnv();
-  }
-});
-
-add_task(async function test_icons_off_unloads_the_pack() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.chrome.icons.enabled", false]],
-  });
-
-  ok(
-    !document.documentElement.hasAttribute("trance-chrome-icons"),
-    "the attribute is gone"
-  );
-  for (const pack of ["fluent", "zen"]) {
-    ok(
-      !loadedSheets().includes(iconSheet(pack)),
-      `and the ${pack} sheet is unloaded`
-    );
-  }
-
-  await SpecialPowers.popPrefEnv();
-
-  ok(
-    loadedSheets().includes(iconSheet("fluent")),
-    "turning icons back on restores the pack without a restart"
+    loadedSheets().filter(url => url.includes("trance-icons")).length,
+    0,
+    "and no icon-pack sheet exists to load — Trance ships none (ADR-039)"
   );
 });
 
@@ -191,7 +110,8 @@ add_task(async function test_sub_features_toggle_independently() {
 });
 
 add_task(async function test_tokens_follow_their_prefs() {
-  is(tokenValue("--trance-menu-icon-size"), "16px", "the icon size is bound");
+  is(tokenValue("--trance-icon-scale"), "1", "100% is the identity scale");
+  is(tokenValue("--trance-menu-icon-size"), "16px", "and the identity size");
 
   // Stored as percent dimmed, consumed as a brightness multiplier: the pref is
   // the way a person thinks about it and the token is what CSS needs.
@@ -213,36 +133,6 @@ add_task(async function test_no_important_anywhere() {
   ok(!rules.includes("!important"), "and it contains no !important at all");
 });
 
-add_task(async function test_macos_context_menus_are_left_alone_by_default() {
-  // The platform pref is a real trade, so Trance does not take it silently.
-  // Off by default; claimed and restored exactly when it is asked for
-  // (ADR-020, and ADR-011 for the same pattern in TranceSurfaces).
-  // Deliberately not asserting the platform default here: the mochitest
-  // harness sets this pref itself, because a native AppKit menu cannot be
-  // driven from a test. What Trance owes is the round trip — whatever the value
-  // was, it comes back.
-  const original = Services.prefs.getBoolPref(
-    "widget.macos.native-context-menus",
-    true
-  );
-
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.chrome.icons.macos-emulated-menus", true]],
-  });
-  is(
-    Services.prefs.getBoolPref("widget.macos.native-context-menus", true),
-    false,
-    "turning the option on claims the platform pref"
-  );
-  await SpecialPowers.popPrefEnv();
-
-  is(
-    Services.prefs.getBoolPref("widget.macos.native-context-menus", true),
-    original,
-    "and turning it off gives the user's value back"
-  );
-});
-
 add_task(async function test_disabled_chrome_costs_nothing() {
   const root = document.documentElement;
 
@@ -255,11 +145,7 @@ add_task(async function test_disabled_chrome_costs_nothing() {
     !loadedSheets().includes(CHROME_SHEET),
     "its stylesheet is unloaded, not merely overridden"
   );
-  for (const pack of ["fluent", "zen"]) {
-    ok(!loadedSheets().includes(iconSheet(pack)), `no ${pack} pack either`);
-  }
   ok(!root.hasAttribute("trance-chrome"), "the root attribute is gone");
-  ok(!root.hasAttribute("trance-chrome-icons"), "the icon attribute is gone");
   for (const { attribute } of FLAGS) {
     ok(!root.hasAttribute(attribute), `${attribute} is gone`);
   }
@@ -267,4 +153,206 @@ add_task(async function test_disabled_chrome_costs_nothing() {
   await SpecialPowers.popPrefEnv();
 
   ok(chrome().enabled, "re-enabling works without a restart");
+});
+
+add_task(async function test_the_address_bar_dim_stays_inside_the_page() {
+  // Two regressions in one rule.
+  //
+  //   1. A `filter: blur()` paints outside the box it is applied to, so the
+  //      dimmed page bled a halo over the sidebar and the gutter and the effect
+  //      read as belonging to the window rather than to the page. `clip-path`
+  //      runs after `filter`, so an inset clip is what "within the tab window
+  //      bounds" means.
+  //   2. It borrowed `--trance-surface-blur` — the *frosted chrome* radius — so
+  //      widening a surface smeared the page by 24px.
+  const text = await sheetText(CHROME_SHEET);
+
+  ok(
+    text.includes("clip-path: inset("),
+    "the treatment is clipped to the content pane's own rectangle"
+  );
+  ok(
+    !text.includes("blur(var(--trance-surface-blur))"),
+    "and no longer borrows the surface layer's blur radius"
+  );
+
+  const wrapper = document.getElementById("zen-tabbox-wrapper");
+  ok(wrapper, "#zen-tabbox-wrapper exists");
+  if (wrapper) {
+    isnot(
+      window.getComputedStyle(wrapper).clipPath,
+      "none",
+      "and the clip is live while the sub-feature is on"
+    );
+  }
+});
+
+add_task(async function test_dim_and_blur_switch_independently() {
+  const wrapper = document.getElementById("zen-tabbox-wrapper");
+  ok(wrapper, "#zen-tabbox-wrapper exists");
+  if (!wrapper) {
+    return;
+  }
+  const fn = name =>
+    window.getComputedStyle(wrapper).getPropertyValue(name).trim();
+
+  // `filter` takes a single list, so a rule per half would overwrite rather
+  // than compose. Each half is a named function that resolves to an identity
+  // when its switch is off.
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.urlbar.focus-blur", false]],
+  });
+  is(fn("--trance-urlbar-blur-fn"), "blur(0px)", "blur off is an identity");
+  isnot(
+    fn("--trance-urlbar-dim-fn"),
+    "brightness(1)",
+    "and the dim is untouched by it"
+  );
+  await SpecialPowers.popPrefEnv();
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.urlbar.focus-dim", false]],
+  });
+  is(fn("--trance-urlbar-dim-fn"), "brightness(1)", "dim off is an identity");
+  isnot(
+    fn("--trance-urlbar-blur-fn"),
+    "blur(0px)",
+    "and the blur is untouched by it"
+  );
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_the_icon_scale_reaches_the_toolbar() {
+  // The regression this guards is the whole reason the setting was reported as
+  // doing nothing: `trance.chrome.icons.size` wrote a token that only the pack
+  // stylesheets read, and the packs were off by default. Moving the slider
+  // changed a variable nothing consumed.
+  //
+  // The scale now goes through `--zen-toolbar-button-size`, which is the
+  // variable Firefox's own toolbar-button rule multiplies into the icon box —
+  // so it reaches the browser's glyphs, and an icon mod's, without owning
+  // either.
+  const button = document.getElementById("back-button");
+  ok(button, "#back-button exists");
+  if (!button) {
+    return;
+  }
+  const iconWidth = () => {
+    const icon = button.querySelector(".toolbarbutton-icon");
+    return icon ? parseFloat(window.getComputedStyle(icon).width) : 0;
+  };
+
+  const before = iconWidth();
+  Assert.greater(before, 0, "the icon has a width to begin with");
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.icons.scale", 125]],
+  });
+  is(tokenValue("--trance-icon-scale"), "1.25", "125% is a 1.25 multiplier");
+  is(tokenValue("--trance-menu-icon-size"), "20px", "and 20px for menu rows");
+  Assert.greater(
+    iconWidth(),
+    before,
+    "and the toolbar button actually grows — the token is consumed"
+  );
+  await SpecialPowers.popPrefEnv();
+
+  is(iconWidth(), before, "and it comes back exactly");
+});
+
+add_task(async function test_the_scale_is_clamped_to_its_range() {
+  // about:config is not a slider. A value off the end is clamped rather than
+  // honoured into a toolbar nobody can use. The range is a quarter either way:
+  // the scale multiplies the browser's own 16px icon box, so 50% is an 8px
+  // glyph and 200% no longer fits the button drawn around it.
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.icons.scale", 10_000]],
+  });
+  is(tokenValue("--trance-icon-scale"), "1.25", "125% is the ceiling");
+  await SpecialPowers.popPrefEnv();
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.icons.scale", 0]],
+  });
+  is(tokenValue("--trance-icon-scale"), "0.75", "75% is the floor");
+  await SpecialPowers.popPrefEnv();
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.icons.scale", 107]],
+  });
+  is(
+    tokenValue("--trance-icon-scale"),
+    "1.07",
+    "and every whole percent in between is a value it can hold"
+  );
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
+  // Zen declares `list-style-image: url("menu.svg") !important` on the button
+  // itself, and Trance may not answer an !important with one of its own
+  // (TRANCE.md §6.2 rule 1). It does not have to: the `<image
+  // class="toolbarbutton-icon">` inside is what paints the glyph, and a normal
+  // declaration on the child beats a value it merely inherited.
+  //
+  // It is a mask rather than a `list-style-image`, and that is the fix for "the
+  // logo is tiny". `about-logo.svg` is a 1024×1024 branding canvas with the
+  // mark inset well inside it, so as a list-style-image the whole canvas scales
+  // into the 16px box and the mark lands at whatever fraction of 1024 it
+  // occupies. `mask-size: contain` fits the *drawing* to the box instead, and
+  // `background-color: currentColor` makes it the same colour as every glyph
+  // beside it in either theme.
+  const button = document.getElementById("PanelUI-menu-button");
+  ok(button, "#PanelUI-menu-button exists");
+  if (!button) {
+    return;
+  }
+  const icon = button.querySelector(".toolbarbutton-icon");
+  ok(icon, "and it has an icon image");
+  if (!icon) {
+    return;
+  }
+  const style = () => window.getComputedStyle(icon);
+  const mask = () => style().maskImage;
+
+  ok(
+    mask().includes("about-logo.svg"),
+    `the app menu wears the Trance mark by default (${mask()})`
+  );
+  is(
+    style().maskSize,
+    "contain",
+    "sized to the icon box rather than to the artwork's own canvas"
+  );
+  // And the icon box has to be given a size, which is the whole of "the mark
+  // disappeared". `.toolbarbutton-icon` is a XUL `<image>`, and a XUL `<image>`
+  // with no image has no intrinsic size — so `list-style-image: none` collapsed
+  // it to 0×0 and the mask painted a zero-sized mark. Nothing about the rule
+  // was wrong; it was drawing correctly into no space.
+  Assert.greater(
+    parseFloat(style().width),
+    0,
+    `the icon box has a size of its own to draw into (${style().width})`
+  );
+  is(
+    style().width,
+    style().height,
+    "and it is square, so `contain` fits the artwork rather than letterboxing it"
+  );
+  is(
+    style().backgroundColor,
+    style().color,
+    "and drawn in the toolbar's own ink, so it follows the theme"
+  );
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.chrome.logo-menu-button", false]],
+  });
+  ok(
+    !mask().includes("about-logo.svg"),
+    "and opting out gives the browser's own glyph straight back"
+  );
+  await SpecialPowers.popPrefEnv();
+
+  ok(mask().includes("about-logo.svg"), "reversibly");
 });

@@ -1,0 +1,385 @@
+{
+  "schema": 1,
+  "build": {
+    "debugBuild": false,
+    "officialBuild": false,
+    "version": "0.1.0",
+    "workspacesDebug": false,
+    "tranceEnabled": true,
+    "surfacePreset": "nebula"
+  },
+  "notes": [
+    "MOZILLA_OFFICIAL is unset (dev build): no LTO and no PGO, so absolute numbers read slightly worse than a shipped build. zen.workspaces.debug and zen.session-store.log are forced off in the harness profile so they do not also contribute.",
+    "the profile contains no Composite markers on any thread, so composite_markers_minimized was not measured \u2014 this is not a zero. Check MOZ_PROFILER_STARTUP_FILTERS."
+  ],
+  "geckoProfile": true,
+  "rows": [
+    {
+      "id": "compositor_surfaces_idle",
+      "budget": "<= 6",
+      "value": 5,
+      "verdict": "green",
+      "measured_as": "chrome elements whose computed style forces a compositor surface (ADR-034 replacement for the layers.draw-borders count)"
+    },
+    {
+      "id": "backdrop_filter_surfaces",
+      "budget": "<= 3, never nested",
+      "value": 0,
+      "verdict": "green",
+      "measured_as": "chrome elements with a non-none computed backdrop-filter"
+    },
+    {
+      "id": "idle_cpu_percent_focused",
+      "budget": "< 0.5",
+      "value": 14.888,
+      "verdict": "red",
+      "measured_as": "parent-process cpuTime delta over the idle window, as a percentage of one core"
+    },
+    {
+      "id": "idle_cpu_percent_minimized",
+      "budget": "~ 0",
+      "value": 15.764,
+      "verdict": "red",
+      "measured_as": "same, while minimised. ADR-034: minimise is the scripted proxy for occlusion; true occlusion needs a second application"
+    },
+    {
+      "id": "composite_markers_minimized",
+      "budget": "0",
+      "value": null,
+      "verdict": "recorded",
+      "measured_as": "Composite markers on the Renderer/Compositor thread during the minimised window"
+    },
+    {
+      "id": "style_flush_tab_switch_ms",
+      "budget": "< 2",
+      "value": 5.021,
+      "verdict": "red",
+      "measured_as": "longest Styles/RestyleDocument marker within 250ms of a TabSelect"
+    },
+    {
+      "id": "style_flush_space_switch_ms",
+      "budget": "< 2",
+      "value": 13.024,
+      "verdict": "red",
+      "measured_as": "longest Styles/RestyleDocument marker inside the space-switch window. Not a \u00a712.1 row; added with ADR-038, because the cross-fade it measures used to be a per-frame main-thread restyle and a row with no number behind it cannot show that it stopped being one"
+    },
+    {
+      "id": "space_switch_on_compositor",
+      "budget": "2",
+      "value": 2,
+      "verdict": "green",
+      "measured_as": "how many of the cross-fade's two pseudo-elements were seen running on the compositor during the space switches (Animation.isRunningOnCompositor). Both, or the animation is back on the main thread and ADR-038 has been undone"
+    },
+    {
+      "id": "style_total_space_switch_ms",
+      "budget": "record only",
+      "value": 224.957,
+      "verdict": "recorded",
+      "measured_as": "sum of every Styles/RestyleDocument marker inside the space-switch window. The row above is a worst frame; this one is the whole animation, and it is the one that moves when a per-frame restyle stops happening at all (ADR-038)"
+    },
+    {
+      "id": "mutation_callbacks_per_tab_open",
+      "budget": "<= 2",
+      "value": 0.1,
+      "verdict": "green",
+      "measured_as": "TranceLog observer.mutation.callbacks delta / tabs opened"
+    },
+    {
+      "id": "trance_timers_at_idle",
+      "budget": "0",
+      "value": 0,
+      "verdict": "green",
+      "measured_as": "TranceScheduler.timerCount + frameSubscriberCount at idle"
+    },
+    {
+      "id": "resident_mb_one_tab",
+      "budget": "record only",
+      "value": 1152.7,
+      "verdict": "recorded",
+      "measured_as": "sum of residentUniqueSize across all processes, 1 tab. Not a \u00a712.1 row; added in Phase 11 because the memory claim needs one"
+    },
+    {
+      "id": "resident_mb_twenty_tabs",
+      "budget": "record only",
+      "value": 1440.5,
+      "verdict": "recorded",
+      "measured_as": "same, after the 20-tab workload"
+    }
+  ],
+  "detail": {
+    "surfaces": [
+      {
+        "id": "toolbar-menubar",
+        "cls": "browser-toolbar chromeclass-menubar browser-titlebar",
+        "tag": "toolbar",
+        "reasons": [
+          "will-change:opacity"
+        ]
+      },
+      {
+        "id": "zen-toolbar-background",
+        "cls": "zen-toolbar-background zen-browser-generic-background",
+        "tag": "div",
+        "reasons": [
+          "filter"
+        ]
+      },
+      {
+        "id": "TabsToolbar",
+        "cls": "browser-toolbar browser-titlebar",
+        "tag": "toolbar",
+        "reasons": [
+          "will-change:opacity"
+        ]
+      },
+      {
+        "id": null,
+        "cls": "subviewbutton toolbarbutton-1",
+        "tag": "toolbarbutton",
+        "reasons": [
+          "filter"
+        ]
+      },
+      {
+        "id": "zen-browser-background",
+        "cls": "zen-browser-generic-background",
+        "tag": "div",
+        "reasons": [
+          "filter"
+        ]
+      }
+    ],
+    "backdropFilters": [],
+    "spaces": {
+      "rounds": 10,
+      "spaces": 2,
+      "createdSecondSpace": true,
+      "fade": {
+        "sampled": 824,
+        "onCompositor": 392,
+        "pseudos": [
+          "::after",
+          "::before"
+        ]
+      },
+      "resting": {
+        "zen-browser-background": {
+          "variable": "1",
+          "after": "1",
+          "before": "0",
+          "leftoverAnimations": 0
+        },
+        "zen-toolbar-background": {
+          "variable": "1",
+          "after": "1",
+          "before": "0",
+          "leftoverAnimations": 0
+        }
+      }
+    },
+    "occlusion": {
+      "beforeMinimize": {
+        "isFullyOccluded": false,
+        "windowState": 3,
+        "minimized": false,
+        "hasFocus": true
+      },
+      "whileMinimized": {
+        "isFullyOccluded": true,
+        "windowState": 2,
+        "minimized": true,
+        "hasFocus": true
+      }
+    },
+    "tranceAtIdle": {
+      "found": true,
+      "counters": {
+        "observer.mutation.batches": 198,
+        "scheduler.frames": 66,
+        "observer.mutation.callbacks": 25
+      },
+      "observerCount": 1,
+      "timerCount": 0,
+      "frameSubscriberCount": 0,
+      "schedulerSuspended": false
+    },
+    "tranceWhileMinimized": {
+      "found": true,
+      "counters": {
+        "observer.mutation.batches": 201,
+        "scheduler.frames": 66,
+        "observer.mutation.callbacks": 66
+      },
+      "observerCount": 1,
+      "timerCount": 0,
+      "frameSubscriberCount": 0,
+      "schedulerSuspended": true
+    },
+    "settle": {
+      "settled": false,
+      "samples": [
+        88.462,
+        50.303,
+        39.489,
+        28.238,
+        23.858,
+        39.363,
+        16.687,
+        16.74,
+        15.548,
+        14.785,
+        15.161,
+        14.512,
+        16.443,
+        15.363,
+        25.44,
+        16.244,
+        16.631,
+        15.128,
+        15.577,
+        15.2,
+        14.685,
+        14.805,
+        15.029,
+        16.907
+      ]
+    },
+    "idleCpuByProcess": [
+      {
+        "pid": 68586,
+        "type": "extension",
+        "origin": "",
+        "percent": 2.691
+      },
+      {
+        "pid": 68583,
+        "type": "browser",
+        "origin": null,
+        "percent": 2.405
+      },
+      {
+        "pid": 68585,
+        "type": "gpu",
+        "origin": "",
+        "percent": 1.339
+      },
+      {
+        "pid": 68681,
+        "type": "preallocated",
+        "origin": "",
+        "percent": 0.969
+      },
+      {
+        "pid": 68589,
+        "type": "privilegedabout",
+        "origin": "",
+        "percent": 0.968
+      },
+      {
+        "pid": 68596,
+        "type": "web",
+        "origin": "",
+        "percent": 0.966
+      },
+      {
+        "pid": 68683,
+        "type": "preallocated",
+        "origin": "",
+        "percent": 0.964
+      },
+      {
+        "pid": 68664,
+        "type": "webIsolated",
+        "origin": "https://darkreader.org",
+        "percent": 0.93
+      },
+      {
+        "pid": 68584,
+        "type": "socket",
+        "origin": "",
+        "percent": 0.927
+      },
+      {
+        "pid": 68587,
+        "type": "rdd",
+        "origin": "",
+        "percent": 0.925
+      }
+    ],
+    "residentByProcess": [
+      {
+        "pid": 68583,
+        "type": "browser",
+        "origin": null,
+        "mb": 360.3
+      },
+      {
+        "pid": 68585,
+        "type": "gpu",
+        "origin": "",
+        "mb": 285.5
+      },
+      {
+        "pid": 68586,
+        "type": "extension",
+        "origin": "",
+        "mb": 200.6
+      },
+      {
+        "pid": 68664,
+        "type": "webIsolated",
+        "origin": "https://darkreader.org",
+        "mb": 54.2
+      },
+      {
+        "pid": 68589,
+        "type": "privilegedabout",
+        "origin": "",
+        "mb": 50.1
+      },
+      {
+        "pid": 68596,
+        "type": "web",
+        "origin": "",
+        "mb": 38.9
+      },
+      {
+        "pid": 68681,
+        "type": "preallocated",
+        "origin": "",
+        "mb": 30.5
+      },
+      {
+        "pid": 68683,
+        "type": "preallocated",
+        "origin": "",
+        "mb": 30.4
+      },
+      {
+        "pid": 68682,
+        "type": "preallocated",
+        "origin": "",
+        "mb": 30.4
+      },
+      {
+        "pid": 68587,
+        "type": "rdd",
+        "origin": "",
+        "mb": 24.6
+      },
+      {
+        "pid": 68680,
+        "type": "utility",
+        "origin": "",
+        "mb": 23.7
+      },
+      {
+        "pid": 68584,
+        "type": "socket",
+        "origin": "",
+        "mb": 23.6
+      }
+    ],
+    "failedSteps": null
+  }
+}

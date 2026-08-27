@@ -23,11 +23,24 @@
 :root[trance="true"] {
   /* ---- Surfaces ---------------------------------------------------------- */
   /* Consumed only by trance-surfaces.css. `--trance-surface-blur`,
-   * `--trance-surface-alpha`, `--trance-surface-saturate` and
-   * `--trance-content-alpha` are also written at runtime by TranceTokens from
-   * the matching `trance.surface.*` prefs. */
+   * `--trance-surface-alpha` and `--trance-surface-saturate` are also written
+   * at runtime by TranceTokens from the matching `trance.surface.*` prefs. */
   --trance-surface-blur: 24px;
   --trance-surface-saturate: 130%;
+
+  /* The same saturation as a `filter` function, or `none`.
+   *
+   * `filter: saturate(130%)` on the two elements that carry the workspace
+   * gradient is a render pass over the whole window, re-run every time the
+   * gradient is invalidated — measured at ~6ms of a ~20ms colour change on an
+   * M4 at 1800×1131@2x, and it scales with the window. `saturate(100%)` is not
+   * free either: it is an identity *filter*, which still forces the pass.
+   *
+   * So TranceSurfaces writes `none` here whenever the saturation is 100, and a
+   * `saturate()` otherwise. At the identity value the declaration resolves to
+   * `filter: none` and there is no pass at all, which is TRANCE.md §6.6's rule
+   * about a switched-off feature costing nothing, applied to a slider. */
+  --trance-surface-saturate-fn: saturate(var(--trance-surface-saturate));
 
   /* How much of Zen's own chrome background survives.
    *
@@ -42,8 +55,15 @@
    * macOS vibrancy (`zen.widget.macos.window-vibrancy`), Windows Mica, or a
    * transparent GTK window — which is where the blur that matters comes from.
    * `backdrop-filter` below then blurs whatever Gecko itself painted behind
-   * the region, which is what makes compact mode's overlay read as glass. */
-  --trance-surface-alpha: 62%;
+   * the region, which is what makes compact mode's overlay read as glass.
+   *
+   * 35%, not 62%. Zen's default space has no gradient — `--zen-primary-color`
+   * resolves to a near-black grey — so at 62% the surviving chrome background
+   * was a near-black sheet over the window's own frost, and the whole browser
+   * read as a black box rather than as glass. The value has to be low enough
+   * that the *window* is what you see; the sheen below is what stops it
+   * reading as a hole. */
+  --trance-surface-alpha: 35%;
 
   /* The sheen laid over a frosted region, and the only colour the surface
    * layer paints. Deliberately tiny: a frosted pane is mostly what is behind
@@ -51,21 +71,41 @@
    * trace is Nebula's "ambient" quality expressed as a token rather than as an
    * infinite animation (TRANCE.md §3.4, docs/trance/mods/nebula.md B2). */
   --trance-surface-sheen: color-mix(in srgb, #ffffff 7%, transparent);
-  --trance-surface-tint: color-mix(in oklch, var(--trance-accent) 10%, transparent);
-  --trance-surface-bg: color-mix(in srgb, var(--trance-surface-sheen), var(--trance-surface-tint));
+  --trance-surface-tint: color-mix(
+    in oklch,
+    var(--trance-accent) 10%,
+    transparent
+  );
+  --trance-surface-bg: color-mix(
+    in srgb,
+    var(--trance-surface-sheen),
+    var(--trance-surface-tint)
+  );
   --trance-surface-border: color-mix(in oklch, currentColor 12%, transparent);
   --trance-surface-highlight: color-mix(in oklch, currentColor 6%, transparent);
 
-  /* The web content pane's own background, for the `content` region. Separate
-   * from the chrome alpha because the trade-off is different in kind: a
-   * translucent chrome costs nothing but a translucent *page* puts the
-   * workspace gradient behind body text. Off by default for that reason.
+  /* There is no `--trance-content-*` family any more.
    *
-   * The base matches Zen's own opaque value in zen-browser-container.css, so at
-   * 100% this region is a no-op rather than a colour change. */
-  --trance-content-alpha: 85%;
-  --trance-content-base: light-dark(#ffffff, #202020);
-  --trance-content-bg: color-mix(in srgb, var(--trance-content-base) var(--trance-content-alpha), transparent);
+   * `--trance-content-alpha`, `--trance-content-base` and `--trance-content-bg`
+   * existed for the `content` region — a translucent backdrop for websites —
+   * which is removed (ADR-042). They are gone with it rather than left behind
+   * as three tokens nothing reads, which is the state a token layer cannot be
+   * allowed to drift into: an unconsumed token is a value with no owner and no
+   * consumer, and the next thing that needs a colour reaches for it.
+   *
+   * The one thing that had borrowed `--trance-content-bg` for something else —
+   * the first-run panel's primary button, which used a *page backdrop* as a
+   * *foreground* and drew its label at 85% opacity as a result — now uses
+   * `--trance-fg-on-accent`. See that token. */
+
+  /* The background image, and the two numbers that decide how it reads. All
+   * three are written at runtime by TranceSurfaces from `trance.surface.image*`;
+   * the defaults here are "no image", which makes the rule that consumes them
+   * paint nothing rather than paint a missing file. */
+  --trance-surface-image: none;
+  --trance-surface-image-alpha: 0.12;
+  --trance-surface-image-blur: 0px;
+  --trance-surface-image-blur-fn: none;
 
   /* ---- Geometry ---------------------------------------------------------- */
   --trance-radius-sm: 6px;
@@ -78,7 +118,20 @@
   --trance-gap-md: 8px;
   --trance-gap-lg: 12px;
 
+  /* The scale above is chrome furniture: gaps between toolbar buttons, inside
+   * menu rows, around a panel's padding. Twelve pixels is generous there and
+   * cramped at window scale, and Trance has exactly one thing at window scale —
+   * the onboarding flow, which is a full-window layout rather than a control.
+   * Added in Phase 13 rather than reusing `lg` at a multiple, because
+   * `calc(var(--trance-gap-lg) * 2.5)` in a dozen rules is a constant with
+   * extra steps. */
+  --trance-gap-xl: 28px;
+
   --trance-border-width: 1px;
+
+  /* For an outline that has to be seen rather than felt — a dashed placeholder
+   * on top of a gradient, where a hairline is invisible on half of them. */
+  --trance-border-width-strong: 2px;
 
   /* ---- Motion ------------------------------------------------------------ */
   /* Consumed by trance-motion.css and TranceMotion.mjs. No Trance stylesheet
@@ -90,6 +143,15 @@
   --trance-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --trance-ease-emphasis: cubic-bezier(0.3, 0, 0, 1.2);
 
+  /* The animation pack's one duration — a tab arriving, the address bar
+   * settling. Its own token rather than `--trance-dur-slow`, because those two
+   * gestures are the only ones in the browser that move a whole pane and they
+   * have to agree with each other exactly; sharing a duration with a toast
+   * would mean re-tuning both to change either. Zeroed with the rest at motion
+   * level 0, shortened at level 1, and read from JavaScript by TranceFeedback
+   * rather than restated there (TRANCE.md §6.2 rule 3). */
+  --trance-dur-arrival: 350ms;
+
   /* Which keyframe set a gesture resolves to, per motion level. Call sites use
    * the token so no feature has to check the level itself. Keyframes are
    * defined in trance-motion.css. */
@@ -98,16 +160,74 @@
   --trance-anim-fade-out: trance-fade-out;
 
   /* ---- Elevation --------------------------------------------------------- */
-  /* Resolved to shadows here so no feature writes an ad-hoc box-shadow. */
+  /* Resolved to shadows here so no feature writes an ad-hoc box-shadow.
+   *
+   * The colour is one token in both directions, and it is not the same idea in
+   * each. On a dark chrome a shadow is a shadow: black, and strong enough to
+   * separate two dark surfaces. On a light one a black shadow reads as dirt —
+   * what lifts a pale panel off a pale background is a *light* edge, so the
+   * light value is a barely-there white and the geometry below does the rest.
+   * Alpha is part of the colour rather than of the rule, so one declaration
+   * covers both cases. */
+  --trance-shadow-color: light-dark(rgb(255 255 255 / 5.5%), rgb(0 0 0 / 55%));
+
   --trance-elev-0: none;
-  --trance-elev-1: 0 1px 2px rgb(0 0 0 / 10%);
-  --trance-elev-2: 0 4px 16px rgb(0 0 0 / 14%);
+  --trance-elev-1: 0 1px 2px var(--trance-shadow-color);
+  --trance-elev-2: 0 4px 16px var(--trance-shadow-color);
 
   /* ---- Accent ------------------------------------------------------------ */
   /* Derived from Zen's gradient engine, never hardcoded. Zen writes
    * `--zen-primary-color` from the active theme. */
   --trance-accent: var(--zen-primary-color, AccentColor);
-  --trance-accent-muted: color-mix(in oklch, var(--trance-accent) 35%, transparent);
+
+  /* The accent, guaranteed to be visible against the chrome.
+   *
+   * `--zen-primary-color` is whatever the space's gradient resolves to, and on
+   * a fresh profile with no gradient picked that is `rgb(47, 47, 47)` — a
+   * near-black. Anything Trance draws in it lands invisible on dark chrome,
+   * which is exactly what happened to the loading bar and the tab-close burst:
+   * both were running correctly and painting near-black on near-black.
+   *
+   * Mixing toward the opposite end of the scheme fixes that for every theme at
+   * once. A saturated accent stays recognisably itself; a near-black or
+   * near-white one is lifted until it reads. This is the token every
+   * *foreground* mark uses; `--trance-accent` stays raw for tints and fills,
+   * where the surface behind it supplies the contrast. */
+  --trance-accent-vivid: color-mix(
+    in oklch,
+    var(--trance-accent) 45%,
+    light-dark(#101014, #f2f2f7)
+  );
+  --trance-accent-muted: color-mix(
+    in oklch,
+    var(--trance-accent-vivid) 55%,
+    transparent
+  );
+
+  /* The accent as a *fill behind text*, rather than as a mark or an edge.
+   *
+   * `--trance-surface-tint` is the same idea over the raw accent, and it is
+   * deliberately weak — it is applied to whole panels. A selected card in a
+   * chooser has to be distinguishable from an unselected one across a window,
+   * and at 10% of a near-black accent it is not. This is the vivid accent
+   * instead, at a strength that stays behind body text on both schemes.
+   *
+   * Introduced for the onboarding flow's choice cards, and not scoped to them:
+   * "the selected one of several" is a pattern, and the next one should not
+   * invent a third mix. */
+  --trance-accent-wash: color-mix(
+    in oklch,
+    var(--trance-accent-vivid) 14%,
+    transparent
+  );
+
+  /* Ink that has to stay readable on top of a fill of the accent, rather than
+   * beside it. Not `--trance-content-bg`: that is a *page backdrop* and carries
+   * the content region's alpha, so using it as a foreground produced text at 85%
+   * opacity — which is what made the first-run panel's primary button look
+   * disabled next to the two ordinary buttons beside it. A foreground colour has
+   * no alpha to inherit from a surface. */
+  --trance-fg-on-accent: light-dark(#ffffff, #101014);
 
   /* ---- Motion and feedback (Phase 6) ------------------------------------- */
   /* Consumed only by trance-feedback.css.
@@ -115,27 +235,259 @@
    * `--trance-loading-progress` is written on the bar element itself by
    * TranceFeedback, from the progress listener — it is per-element state, not a
    * token, and the declaration here is only the value the bar starts at. */
-  --trance-loading-thickness: 3px;
+  --trance-loading-thickness: 5px;
   --trance-loading-progress: 0;
+
+  /* The track the fill runs in.
+   *
+   * The bar used to be one element that was invisible until something loaded
+   * and then appeared already part-filled, which reads as a glitch rather than
+   * as progress: there was nothing on screen to be a fraction *of*. It is a
+   * track and a fill now — the track appears at full length the moment a load
+   * starts, and the fill grows out of its centre (ADR-045).
+   *
+   * Derived from the accent rather than from a grey, for the same reason every
+   * other Trance surface value is: a fixed grey is a foreign stripe on a pale
+   * theme and invisible on a dark one. */
+  --trance-loading-track: color-mix(
+    in oklch,
+    var(--trance-accent-vivid) 20%,
+    transparent
+  );
+
+  /* The page, while it is loading. Both are written at runtime by TranceTokens
+   * from `trance.feedback.loading.zoom.scale` / `.blur`, and both are the
+   * identity here so that a window which has not reached the feature — or has
+   * it switched off — transitions to and from exactly nothing.
+   *
+   * The blur is a *function* rather than a length for the reason the surface
+   * saturation is: `blur(0px)` still forces a full-pane render pass and `none`
+   * does not, and this pane is the largest element in the window. */
+  --trance-loading-zoom: 1;
+  --trance-loading-zoom-blur-fn: none;
+
+  /* How much of its edge the bar spans at 100%, and how far in from that edge
+   * it sits. Both are written at runtime by TranceTokens from
+   * `trance.feedback.loading.width` / `.offset`.
+   *
+   * A quarter of the edge rather than all of it, and inset rather than flush:
+   * a full-width hairline on the window's border is the least legible version
+   * of a progress bar — it is a one-pixel change along something nobody is
+   * looking at. A short object a few pixels inside the page is visibly an
+   * object, and it visibly belongs to the page rather than to the frame. */
+  --trance-loading-span: 25%;
+  --trance-loading-offset: 10px;
+
+  /* The finish flourish: how far past its own length the bar goes on the last
+   * frame before it settles and fades. A fraction, applied as a scale on the
+   * axis the bar runs along, so it costs a composite and not a layout. */
+  --trance-loading-overshoot: 1.06;
+
+  /* The empty-tab mark. All three are written at runtime by TranceSurfaces from
+   * `trance.surface.newtab.logo*`; the defaults are "no mark", so a window that
+   * has not reached the feature paints nothing rather than a missing file. */
+  --trance-newtab-logo: none;
+  --trance-newtab-logo-size: 250px;
+  --trance-newtab-logo-alpha: 0.35;
+
+  /* Where the pointer is, relative to the mark's own box: -1 at one edge, 0 at
+   * the centre, 1 at the other. `TranceSurfaces` writes both onto the element
+   * itself — per-element state, not tokens — and the declarations here are the
+   * rest position everything falls back to, which is also what the mark shows
+   * when the pointer is somewhere else in the window.
+   *
+   * Two numbers rather than two angles, because the same pair drives the tilt
+   * *and* the sheen's position, and deriving both from one source is what stops
+   * a mark whose highlight and whose rotation disagree about where the light
+   * is coming from. */
+  --trance-newtab-logo-px: 0;
+  --trance-newtab-logo-py: 0;
+
+  /* How far the mark leans at the edge of its box, and how far the parallax
+   * carries the sheen. Fixed rather than pref-backed: they are the shape of one
+   * gesture, and a mark that can be set to lean 60° is not a setting anyone
+   * wants, it is a bug report. */
+  --trance-newtab-logo-tilt: 14deg;
+
+  /* Half the background-position range, which is as far as this can go: the
+   * sheen sits at `50%` at rest and swings this far either side of it, so
+   * anything past 50% would ask for a position outside the layer. It is at that
+   * ceiling deliberately — the eight turns of hue a full sweep runs through are
+   * the product of this and the 500% layer width in trance-surfaces.css, and
+   * this is the cheaper of the two to spend. */
+  --trance-newtab-logo-parallax: 50%;
+
+  /* The holographic sheen: an oil-slick ramp that repeats, rather than one long
+   * ramp with ends.
+   *
+   * Two numbers describe what this has to do, and they pull in opposite
+   * directions: two full turns of the hue circle are visible on the mark at
+   * rest, and dragging the pointer from one edge of the mark to the other runs
+   * about eight turns past. Two visible and eight travelled means the ramp has
+   * to be four mark-widths longer than the window looking at it — which a
+   * finite gradient cannot be without either running off its own end at the
+   * extremes of the travel or carrying eighty hand-written stops.
+   *
+   * `repeating-linear-gradient` is both answers at once. Nine stops describe one
+   * turn of the circle over 9% of the gradient line, the gradient repeats itself
+   * for as long as the box is wide, and `background-size: 500%` in
+   * trance-surfaces.css makes that box five times the mark. Two turns land
+   * inside the mark, four mark-widths of travel are available either side of
+   * centre, and there is no end to slide off.
+   *
+   * 9% and not 10%: the gradient line of a 115° ramp across a 5:1 box is a
+   * little longer than the box is wide, so a tenth of the line is slightly less
+   * than a tenth of the width. The period is set from what lands on the artwork
+   * rather than from the arithmetic that would be tidy.
+   *
+   * The hues are the lighter members of each family (#ff6b96 rather than
+   * #ff2d6f, and so on around), because eight saturated bands per turn at full
+   * strength is a bruise; and the accent's share of each stop is 18%, because a
+   * tint stronger than that flattens the turns back towards each other and
+   * undoes the density it is meant to be tinting. They are still at the vivid
+   * end on purpose: this is masked to the shape of the drawing and then
+   * composited at the sheen alpha, so a "tasteful" desaturated ramp arrives as
+   * grey.
+   *
+   * Repeating is not animating: the pattern is static and the whole layer slides
+   * as one when the mark tilts (TRANCE.md §3.4). */
+  --trance-newtab-logo-sheen: repeating-linear-gradient(
+    115deg,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #ffd6e4) 0%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #ffe0bd) 0.9%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #fff7bf) 2.4%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #bff6d4) 3.1%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #c1efff) 4.9%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #cbd6ff) 5.8%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #e5c8ff) 7.3%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #ffd1ee) 8.2%,
+    color-mix(in oklch, var(--trance-accent-vivid) 10%, #ffd6e4) 9.7%
+  );
+
+  /* The second layer: specular banding across the ramp, at an angle of its own.
+   * It carries no hue — it is light, and its whole job is to lift whichever
+   * parts of the ramp it happens to be crossing (see the
+   * `background-blend-mode: screen` in trance-surfaces.css).
+   *
+   * `repeating-linear-gradient`, and that is the other half of the density. One
+   * band crossing twenty-four hue stops lifts one of them; a comb of narrow
+   * bands at a different angle and a different period lifts every fourth or
+   * fifth, and the two periods beat against each other into a moiré that
+   * neither layer contains on its own. That is the difference between a
+   * highlight travelling over a rainbow and a film that shifts as a whole.
+   *
+   * Repeating is not animating: the pattern is static and the whole layer
+   * slides as one when the mark tilts (TRANCE.md §3.4). */
+  --trance-newtab-logo-streak: repeating-linear-gradient(
+    -35deg,
+    transparent 0 2.4%,
+    rgb(255 255 255 / 16%) 3.7%,
+    rgb(255 255 255 / 48%) 4.8%,
+    rgb(255 255 255 / 18%) 5.6%,
+    transparent 7.1% 11.8%
+  );
+
+  /* The sheen's own strength, and it is absolute now rather than a fraction of
+   * the mark's.
+   *
+   * It used to be a descendant of an element carrying
+   * `--trance-newtab-logo-alpha`, so the two multiplied and 0.75 of a 35% mark
+   * was 26% of anything — which is the ceiling that made the effect read as a
+   * faint tint no matter what colours went into it. The artwork is its own
+   * pseudo-element now (see trance-surfaces.css) and this stands on its own. */
+  --trance-newtab-logo-sheen-alpha: 0.7;
 
   /* The tab-close burst. Travel distance is computed from the closing tab's
    * measured size rather than declared here: a burst that ignores the size of
-   * the thing that burst reads as unrelated to it. */
-  --trance-bubble-size: 6px;
+   * the thing that burst reads as unrelated to it.
+   *
+   * The bubbles are drawn in `--trance-accent-vivid`, not the raw accent. See
+   * that token: at the raw value a default profile bursts near-black bubbles
+   * onto near-black chrome, which is indistinguishable from no burst at all. */
+  --trance-bubble-size: 7px;
   --trance-bubble-count: 8;
+
+  /* ---- The web view's corners (Phase 3) ---------------------------------
+   *
+   * Four corners rather than one radius, because in an edgeless window whether
+   * a corner is rounded is a question about the *window* and not about the
+   * pane: a corner that meets a window edge has to be square, or the arc takes
+   * a notch out of the edge of the screen. trance-surfaces.css derives the four
+   * from the layout; the defaults here are Zen's own radius, which is what a
+   * window that is not edgeless wants on all four.
+   *
+   * Two consumers, and they used to disagree. The `.browserSidebarContainer`
+   * radius was zeroed by the edgeless rule while the `clip-path` that keeps the
+   * address bar's page-recede inside the pane went on rounding all four from
+   * `--zen-webview-border-radius` — so "edgeless" squared the pane and the clip
+   * put the corners back.
+   */
+  --trance-webview-radius: var(--zen-native-inner-radius, var(--trance-radius-lg));
+  --trance-webview-radius-tl: var(--trance-webview-radius);
+  --trance-webview-radius-tr: var(--trance-webview-radius);
+  --trance-webview-radius-br: var(--trance-webview-radius);
+  --trance-webview-radius-bl: var(--trance-webview-radius);
 
   /* ---- Chrome furniture (Phase 5) ---------------------------------------- */
   /* Consumed only by trance-chrome.css and the two generated icon sheets.
    * Seven mods used to own pieces of the toolbar, the menus and the address
    * bar; these are the values they were each reinventing. */
 
-  /* `--trance-menu-icon-size` is written at runtime by TranceTokens from
-   * `trance.chrome.icons.size`. The opacity is not a pref: an icon that is
-   * quieter than its label is a design decision, and a per-user one would just
-   * be a way to make some menus inconsistent with others. */
+  /* Both are written at runtime by TranceTokens from
+   * `trance.chrome.icons.scale`, which is one preference expressed twice: as a
+   * multiplier for Zen's `--zen-toolbar-button-size`, and as a length for the
+   * menu and subview rows that size their icon box directly.
+   *
+   * The defaults here are the identity — 1 and the browser's own 16px — so a
+   * window that has not reached the chrome feature yet, or has it switched off,
+   * is sized exactly as the browser sizes itself.
+   *
+   * There is no fill-opacity token any more. It existed to make Trance's own
+   * `stroke="context-fill"` glyphs sit a step below their labels; with the
+   * packs gone the browser's icons carry their own treatment and a second one
+   * on top of it is what made the toolbar brighten (ADR-039). */
+  --trance-icon-scale: 1;
   --trance-menu-icon-size: 16px;
-  --trance-menu-icon-opacity: 80%;
   --trance-menu-item-height: 28px;
+
+  /* How far the sidebar's content rides up while the top strip is empty.
+   *
+   * The strip's own height, less one gap. `--zen-toolbar-height` is Zen's,
+   * declared per platform and per layout, which is why this reads it rather
+   * than restating one of its values; the fallback is the smaller of the two
+   * Zen ships.
+   *
+   * The gap is held back on purpose. Riding up by the *whole* strip is the tidy
+   * arithmetic — the list ends up exactly where it would be if the strip were
+   * not there — and it put the first tab hard against the top of the window,
+   * because the sidebar's own padding went up with it. A gap of it kept back
+   * leaves the list breathing room while the buttons are away, and it changes
+   * nothing about where the list sits once they arrive: that end of the travel
+   * is `margin-block-end: 0` either way. */
+  --trance-topbuttons-shift: calc(
+    var(--zen-toolbar-height, 34px) - var(--trance-gap-lg)
+  );
+
+  /* How far past its own box the branding mark's mask is scaled, so that the
+   * mark ends up the size of the glyphs beside it.
+   *
+   * This was 150% for as long as the mask was `chrome://branding/content/
+   * about-logo.svg`, which is application *icon* artwork: a mark inset well
+   * inside a 1024 canvas, so `mask-size: contain` fitted the canvas and
+   * delivered a 9px mark into a 17px box. Scaling past the box was the
+   * correction for a margin that was in the file.
+   *
+   * The mark the chrome uses now is `trance-icons/trance-mark.svg`, which
+   * `scripts/trance-branding.py` traces with no margin at all and no plate
+   * behind it — a 24-unit viewBox the glyph fills edge to edge, in
+   * `currentColor`. There is nothing left to compensate for, so the scale is
+   * 100% and the mark is exactly the size of the box it is given.
+   *
+   * Kept as a token rather than inlined because it is a fact about the
+   * *artwork*: redraw the mark with margin and this is the one place that has
+   * to change, and the rule that consumes it says why it exists
+   * (trance-chrome.css). */
+  --trance-logo-mask-scale: 100%;
 
   /* Chrome scrollbars sit on frosted surfaces now, where Firefox's default
    * track reads as an opaque stripe. Thumb only, no custom-drawn scrollbar. */
@@ -148,21 +500,146 @@
    * inverted on the way in. */
   --trance-urlbar-dim: 0.7;
 
+  /* The blur that goes with it, and its own value rather than the surface
+   * blur's. They read as one effect but they are not the same tool: the
+   * surface blur is a `backdrop-filter` over whatever Gecko painted behind a
+   * chrome region, and this is a `filter` on the content pane itself. Sharing
+   * one token meant the dim could not be softened without also changing every
+   * frosted surface. Written at runtime from
+   * `trance.chrome.urlbar.focus-blur.radius`. */
+  --trance-urlbar-blur: 6px;
+
+  /* The two halves of the address-bar treatment, as filter functions rather
+   * than as raw values. `filter` takes one list, so a rule per half would mean
+   * the second overwriting the first instead of composing with it; naming each
+   * half lets one declaration carry both and lets either be switched off to a
+   * genuine identity. TranceChrome re-declares these on `#zen-tabbox-wrapper`
+   * when the matching sub-feature is on — never here, and never on `:root`
+   * from another file. */
+  --trance-urlbar-dim-fn: brightness(1);
+  --trance-urlbar-blur-fn: blur(0px);
+
   /* ---- Tab strip (Phase 4) ----------------------------------------------- */
   /* Consumed only by trance-tabstrip.css. Five mods used to own pieces of the
    * tab strip; these are the values they were each reinventing. */
 
-  /* Folder tree connectors. The colour is deliberately `currentColor`-derived
-   * rather than accent-derived: a tree line is structure, not decoration, and
-   * an accent-coloured one competes with the folder colour below. */
-  --trance-connector-color: color-mix(in oklch, currentColor 20%, transparent);
-  --trance-connector-width: 1px;
-  --trance-connector-radius: var(--trance-radius-sm);
-
-  /* Unloaded tabs. Both are written at runtime by TranceTokens from
+  /* There are no `--trance-connector-*` tokens. Folder tree connectors are the
+   * preinstalled Zen Folder Tree Connectors mod now, not a Trance drawing, so
+   * the mod owns their colour and geometry the way it owns everything else
+   * about them (ADR-027). A token layer that still described a line nothing in
+   * this tree draws would be a second, silent owner for it.
+   *
+   * Unloaded tabs. Both are written at runtime by TranceTokens from
    * `trance.tabstrip.unloaded.opacity` / `.saturation`. */
   --trance-tab-unloaded-opacity: 55%;
   --trance-tab-unloaded-saturation: 0%;
+
+  /* ---- Tab fills --------------------------------------------------------- */
+  /*
+   * One row is filled and the rest are not.
+   *
+   * The previous ramp gave every tab a veil — 10 / 25 / 35 / 45 on light,
+   * 20 / 35 / 45 / 55 on dark — so a sidebar of eight tabs was eight stacked
+   * translucent slabs with the selected one a shade louder than the rest. On a
+   * window whose whole point is that the chrome is one continuous material,
+   * that is eight rectangles drawn on it, and the one piece of information the
+   * fills carry (which tab am I on) was a 10% difference between two of them.
+   *
+   * So: an unselected tab paints nothing, and the selected one paints the
+   * scheme's opposite end at full strength — white on a dark browser, black on
+   * a light one. It is the highest-contrast thing in the sidebar because it is
+   * the only thing in the sidebar anyone needs to find without looking.
+   *
+   * `--trance-tab-fg-selected` is the other half and is not optional: ink that
+   * stayed the toolbar's colour would be white-on-white the moment the fill
+   * arrived. It is the *page* colour rather than a fixed black, so it tracks
+   * the scheme with the fill.
+   *
+   * Hover keeps a veil, at the strength the old *default* fill used, because
+   * "the pointer is over this row" still has to be visible on a row that is
+   * otherwise painting nothing. Pinned no longer needs a value of its own: it
+   * used to sit below the default fill to keep the shelf quieter than the list,
+   * and with the list at zero there is nothing left to be quieter than.
+   */
+  /* There is no `--trance-tab-bg` or `--trance-tab-pinned-bg` any more. Both
+   * were `transparent`, and both were consumed by rules that had to outrank
+   * Firefox's hover and selected fills in order to paint them — which is
+   * exactly what left the selected tab and the hovered tab with no background
+   * at all. "An unselected tab paints nothing" is what upstream already does,
+   * so the way to say it is to declare nothing. See trance-tabstrip.css. */
+  /* Black in both schemes, not the scheme's opposite end.
+   *
+   * A white veil on a dark browser was the obvious choice and it is the wrong
+   * one here: the selected tab is *already* white, so a hovered row and the
+   * active row were two brightnesses of the same idea and the hover read as a
+   * half-selected tab. Black recedes instead — the row the pointer is over
+   * darkens, the row you are on is the only bright thing in the list, and the
+   * two can never be confused. On a light browser black at 8% is the same
+   * gesture and needs no second value. */
+  --trance-tab-bg-hover: light-dark(rgb(0 0 0 / 8%), rgb(0 0 0 / 38%));
+  --trance-tab-bg-selected: light-dark(#000000, #ffffff);
+  --trance-tab-fg-selected: light-dark(#ffffff, #000000);
+
+  /* How long a fill takes to arrive and to leave. Its own token rather than
+   * `--trance-dur-fast` used inline in three sheets: hover feedback is one
+   * gesture and the tab strip, the toolbar and the menus should not be able to
+   * disagree about how long it takes. Motion, and therefore zero at motion
+   * level 0 like everything else (TRANCE.md §3.5). */
+  --trance-hover-dur: var(--trance-dur-fast);
+
+  /* The essentials grid is the other surface in the sidebar that is a *set of
+   * things* rather than a list, and it is the one that should read as a shelf
+   * now that the tabs above it do not. Still the scheme's own end — the inverse
+   * of the selected tab, so the two are never mistaken for each other — but no
+   * longer the floor of it.
+   *
+   * Opaque `#000000` was that floor, and on a dark browser it read as a hole
+   * cut in the sidebar rather than as a shelf on it: the tile was darker than
+   * the chrome behind it and darker than anything else in the window, so the
+   * grid was the heaviest object in a sidebar where the *selected tab* is
+   * supposed to be. At 35% the same black is a shading of the frosted surface
+   * instead of a replacement for it — the shelf still reads, the tiles still
+   * sit below every tab in the list, and the chrome behind them is still
+   * visible through them like it is through everything else Trance paints.
+   *
+   * The light end is left opaque. White on a light browser is not the floor of
+   * anything; it is the same distance from the surface that 35% black is on a
+   * dark one. */
+  --trance-essentials-bg: light-dark(#ffffff, rgb(0 0 0 / 35%));
+
+  /* The same shelf colour, muted by the same slider that mutes an unloaded tab.
+   *
+   * An essential is the one tab whose background is a solid tile rather than
+   * nothing, so the unloaded treatment — `opacity` on the tab and the icon
+   * desaturated — did not read on it: an opaque black tile at 55% opacity over
+   * dark chrome is still a black tile. Mixing the tile itself toward
+   * transparent is what makes an unloaded essential recede the way an unloaded
+   * tab in the list does, and deriving it from `--trance-tab-unloaded-opacity`
+   * means the one slider still owns how far. */
+  --trance-essentials-bg-unloaded: color-mix(
+    in srgb,
+    var(--trance-essentials-bg) var(--trance-tab-unloaded-opacity),
+    transparent
+  );
+
+  /* ---- Active tab glow --------------------------------------------------- */
+  /*
+   * Nebula's glow, reimplemented from its description rather than its code
+   * (GPL-3.0 — TRANCE.md §7.2). Both are written at runtime by TranceTokens
+   * from `trance.tabstrip.glow.spread` / `.opacity`; the mode itself is an
+   * attribute, because a mode that resolved to a value would still cost the
+   * pseudo-element it draws into.
+   *
+   * `--trance-tab-glow-color` is per-element state rather than a token: in
+   * `icon` mode TranceTabStrip samples the selected tab's favicon once and
+   * writes the dominant colour onto the tab, and the declaration here is what
+   * every other tab — and a tab whose icon has not been read yet — resolves to.
+   * It used to be `--trance-tab-glow-image`, the favicon itself behind a wide
+   * `blur()`; see ADR-047 for why a colour is both cheaper and more accurate.
+   */
+  --trance-tab-glow-spread: 6px;
+  --trance-tab-glow-alpha: 0.8;
+  --trance-tab-glow-color: var(--trance-accent-vivid);
 
   /* The collapsed icon rail. All five are written at runtime by TranceTokens
    * from `trance.tabstrip.rail.*`; the values here are the fallbacks that apply
@@ -171,8 +648,14 @@
    * The two margins are *extra* space added to Zen's own rail padding, so zero
    * means "leave Zen's layout alone". They used to be absolute paddings, which
    * replaced Zen's bottom padding and double-counted the macOS traffic-light
-   * clearance Zen already applies to `#titlebar`. */
-  --trance-rail-width: 48px;
+   * clearance Zen already applies to `#titlebar`.
+   *
+   * Zen's own collapsed rail is 60px — a 48px tab plus 6px of toolbox padding
+   * either side — and that is the floor as well as the default. Below it the
+   * macOS traffic lights no longer fit the strip Zen reserves for them and the
+   * top buttons start to clip, so a narrower rail is not a smaller rail, it is
+   * a broken one. */
+  --trance-rail-width: 60px;
   --trance-rail-tab-size: 36px;
   --trance-rail-icon-size: 16px;
   --trance-rail-margin-top: 0px;
@@ -181,16 +664,87 @@
   /* The sticky pinned-tabs occluder lives with the other tab-strip tokens
    * rather than with the surfaces, because it is not a frosted surface: it has
    * to hide tabs scrolling underneath it. Borrowing the surface token here is
-   * what put a dark band under the space name. */
-  --trance-sticky-bg: light-dark(rgb(238 238 240 / 90%), rgb(28 30 36 / 90%));
+   * what put a dark band under the space name.
+   *
+   * Derived from Zen's own chrome colour rather than from two hardcoded greys.
+   * A near-opaque slab is unavoidable — that is what an occluder is — but a
+   * slab in the chrome's own colour reads as part of the sidebar, where
+   * `rgb(28 30 36)` read as a foreign grey stripe sitting on it. It is still
+   * only ever painted when there is something to occlude; see the
+   * `:has(tab)` gate in trance-tabstrip.css. */
+  --trance-sticky-bg: color-mix(
+    in srgb,
+    var(--zen-main-browser-background, Canvas) 92%,
+    transparent
+  );
 
   /* Folder colour. `--tab-group-color` is Firefox's own inline custom property,
    * written by MozTabbrowserTabGroup's `color` setter and resolved from the
    * platform palette in tab.tokens.css — Trance mixes it, it does not define a
    * second palette (docs/trance/mods/advanced-tab-groups.md §6). */
-  --trance-folder-tint: color-mix(in oklch, var(--tab-group-color) 22%, transparent);
-  --trance-folder-tint-strong: color-mix(in oklch, var(--tab-group-color) 55%, transparent);
-  --trance-folder-stroke: color-mix(in oklch, var(--tab-group-color) 70%, transparent);
+  --trance-folder-tint: color-mix(
+    in oklch,
+    var(--tab-group-color) 22%,
+    transparent
+  );
+  --trance-folder-tint-strong: color-mix(
+    in oklch,
+    var(--tab-group-color) 55%,
+    transparent
+  );
+  --trance-folder-stroke: color-mix(
+    in oklch,
+    var(--tab-group-color) 70%,
+    transparent
+  );
+
+  /* ---- Theme picker (Phase 8) -------------------------------------------- */
+  /* Consumed only by trance-theme.css.
+   *
+   * Every value here is derived from `currentColor` or from the accent rather
+   * than declared outright, because the panel this draws into is painted in the
+   * space's own gradient: a fixed grey track reads as a foreign stripe on a
+   * pale theme and disappears entirely on a dark one. The two exceptions are
+   * the heart and the toast, and both are named colours on purpose — a heart
+   * that took the accent would be invisible against its own theme, and a toast
+   * has to stay readable over whatever gradient is behind it. */
+  --trance-picker-track: color-mix(in oklch, currentColor 14%, transparent);
+  --trance-picker-thumb: light-dark(#1c1c1e, #f2f2f7);
+  --trance-picker-dot: color-mix(in oklch, currentColor 22%, transparent);
+
+  /* The dashed outline of an empty saved-theme slot. Stronger than every other
+   * border in the stack on purpose: it is drawn over the space's own gradient,
+   * where the usual 12% mix reads as nothing at all. */
+  --trance-picker-slot: color-mix(in oklch, currentColor 45%, transparent);
+  --trance-picker-heart: #ff4d4f;
+  --trance-picker-toast-bg: color-mix(in srgb, #000000 55%, transparent);
+  --trance-picker-toast-fg: #ffffff;
+
+  /* The lightness slider's own track: the accent, dark at one end and light at
+   * the other, so the control shows what it does rather than describing it.
+   *
+   * This is the *fallback*. TranceTheme writes the real one onto the slider's
+   * wrapper, built from the theme's hue at three fixed lightnesses, and it does
+   * so only when the panel opens or the theme is committed — never during a
+   * drag.
+   *
+   * That is the fix for "the gradient changes as you move it". Derived from
+   * `--trance-accent` live, this track was a picture of the *current* colour,
+   * and the current colour is what the slider is changing: dragging toward dark
+   * darkened the accent, which darkened the whole ramp, which moved the ramp out
+   * from under the thumb. A control that shows what it does has to keep showing
+   * the same thing while it does it. */
+  --trance-picker-lightness-track: linear-gradient(
+    to right,
+    color-mix(in oklch, var(--trance-accent) 25%, #000000),
+    var(--trance-accent) 50%,
+    color-mix(in oklch, var(--trance-accent) 25%, #ffffff)
+  );
+
+  /* How long an in-panel notification lives, start to finish. A duration
+   * rather than a timer: TranceTheme spends it as one Web Animation, so at
+   * motion level 0 there is no animation and no timer either. */
+  --trance-toast-life: 2200ms;
 }
 
 /* Motion level 1 (reduced) shortens every duration to the instant token rather
@@ -202,7 +756,13 @@
   --trance-dur-fast: var(--trance-dur-instant);
   --trance-dur-base: var(--trance-dur-instant);
   --trance-dur-slow: var(--trance-dur-instant);
+  --trance-dur-arrival: var(--trance-dur-instant);
   --trance-ease-emphasis: var(--trance-ease-standard);
+
+  /* Reduced motion keeps the fade and drops the travel, so the pack's scale and
+   * the bar's overshoot resolve to no movement at all while the opacity part of
+   * each still runs. */
+  --trance-loading-overshoot: 1;
 
   /* Reduced motion keeps the fade and drops the travel. */
   --trance-anim-rise-in: trance-fade-in;
@@ -216,34 +776,131 @@
   --trance-dur-fast: 0ms;
   --trance-dur-base: 0ms;
   --trance-dur-slow: 0ms;
+  --trance-dur-arrival: 0ms;
+
+  --trance-loading-overshoot: 1;
 
   --trance-anim-rise-in: none;
   --trance-anim-fade-in: none;
   --trance-anim-fade-out: none;
 }
 
-/* ---- Surface presets ------------------------------------------------------
+/* ---- Surface presets: gone ------------------------------------------------
  *
- * The presets are the four surface mods collapsed into one system: Nebula's
- * glass, Compact Transparent Mode's tighter overlay geometry, and Transparent
- * Zen plus Nova UI's flat translucency. They are *variations of one surface
- * layer*, not additional layers (TRANCE.md §8.1).
+ * There were four — nebula, compact, flat, custom — and between them they moved
+ * two tokens: a corner radius and a border strength. Everything a person
+ * actually reaches a surface preset for is a slider (blur radius, chrome
+ * opacity, saturation), those sliders are pref-backed and written as inline
+ * custom properties, and an inline property beats a preset block outright — so
+ * three of the four presets were a name for two pixels, and the fourth was a
+ * name for "no preset". Removing them removes a control that could not do what
+ * its options implied (ADR-041). */
+
+/* ── The web view's corners, in an edgeless window ──────────────────────────
  *
- * Presets only adjust tokens that are not pref-backed. Blur radius, opacity and
- * saturation come from `trance.surface.*` prefs, which TranceTokens writes as
- * inline custom properties — those always win, so a preset cannot fight the
- * user's sliders.
+ * The defaults above are Zen's own radius on all four, which is what a window
+ * that is not edgeless wants. Edgeless narrows them: see the "Edgeless" section
+ * of trance-surfaces.css for what the mode is and why it exists. It lives here
+ * because owning a token's value in every state is the token layer's job
+ * (TRANCE.md §6.2) — trance-surfaces.css and trance-chrome.css both read these,
+ * and neither may be the one that decides them.
  *
- * `custom` deliberately has no block: it is the defaults plus the sliders.
+ * Two facts about the layout, and four corners derived from them. Each corner
+ * is `min()` of its two edges, so a corner is rounded only when *neither* of
+ * its edges lies on the window — which is the whole rule.
+ *
+ * `--trance-webview-edge-*` is the radius that edge permits: the pane's radius
+ * where the edge is internal, zero where it runs along the screen.
+ *
+ *   bottom  always zero — the wrapper's margin is gone in edgeless, so the
+ *           pane's bottom edge is the bottom of the window.
+ *   far     the side away from the sidebar: also the window, also zero.
+ *   near    the side the sidebar is on. Never the window, so the pane's own
+ *           radius, and the one corner that survives in the shipped layout.
+ *   top     the pane's own radius while something sits above it, zero once
+ *           nothing does — which is the same condition as the collapsed-strip
+ *           rule in trance-surfaces.css, because it is the same decision.
+ *
+ * Physical rather than logical names, deliberately. `zen-right-side` is not a
+ * writing direction — Zen itself flips this layout with `left` and `right` — so
+ * a logical corner property would have to be told which side the sidebar is on
+ * all over again.
  */
 
-:root[trance="true"][trance-surface="compact"] {
-  --trance-radius-lg: 12px;
-  --trance-surface-border: color-mix(in oklch, currentColor 18%, transparent);
+:root[trance="true"][trance-surface-edgeless="true"] {
+  --trance-webview-edge-top: var(--trance-webview-radius);
+  --trance-webview-edge-bottom: 0px;
+  --trance-webview-edge-near: var(--trance-webview-radius);
+  --trance-webview-edge-far: 0px;
+
+  --trance-webview-edge-left: var(--trance-webview-edge-near);
+  --trance-webview-edge-right: var(--trance-webview-edge-far);
+
+  --trance-webview-radius-tl: min(
+    var(--trance-webview-edge-top),
+    var(--trance-webview-edge-left)
+  );
+  --trance-webview-radius-tr: min(
+    var(--trance-webview-edge-top),
+    var(--trance-webview-edge-right)
+  );
+  --trance-webview-radius-br: min(
+    var(--trance-webview-edge-bottom),
+    var(--trance-webview-edge-right)
+  );
+  --trance-webview-radius-bl: min(
+    var(--trance-webview-edge-bottom),
+    var(--trance-webview-edge-left)
+  );
 }
 
-:root[trance="true"][trance-surface="flat"] {
-  --trance-radius-lg: 10px;
-  --trance-surface-border: color-mix(in oklch, currentColor 22%, transparent);
-  --trance-surface-highlight: transparent;
+:root[trance="true"][trance-surface-edgeless="true"][zen-right-side="true"] {
+  --trance-webview-edge-left: var(--trance-webview-edge-far);
+  --trance-webview-edge-right: var(--trance-webview-edge-near);
+}
+
+/* Nothing above the pane, so its top edge *is* the top of the window.
+ *
+ * Zen never collapses the strip to zero: in single-toolbar layout it is a
+ * `--zen-element-separation` window-drag bar, and compact mode's hidden toolbar
+ * shrinks to the same value rather than to nothing. Either way the page starts
+ * a few pixels down from the top of the screen with a band of chrome above it,
+ * which is a gutter — the one thing edgeless removes everywhere else. */
+:root[trance="true"][trance-surface-edgeless="true"][zen-single-toolbar="true"]:not([zen-has-bookmarks]) {
+  --trance-webview-edge-top: 0px;
+}
+
+/* stylelint-disable-next-line media-query-no-invalid */
+@media -moz-pref("zen.view.compact.hide-toolbar") {
+  :root[trance="true"][trance-surface-edgeless="true"][zen-compact-mode="true"]:not([zen-single-toolbar="true"]) {
+    --trance-webview-edge-top: 0px;
+  }
+}
+
+/* ── The icon scale, applied ────────────────────────────────────────────────
+ *
+ * `--zen-toolbar-button-size` is Zen's own, and it is the variable Firefox's
+ * toolbar-button rule multiplies into the icon box's width and height
+ * (browser/themes/shared/toolbarbuttons.css). Redeclaring it here scales every
+ * toolbar glyph — including the ones an `!important` `list-style-image` owns,
+ * because this is geometry rather than the image.
+ *
+ * The base is restated rather than read back, because a custom property cannot
+ * refer to itself. Zen declares 16px with a macOS branch at 17px, and that
+ * branch is repeated so a scale of 100% resolves to exactly what Zen already
+ * had — a genuine no-op rather than a one-pixel change nobody asked for.
+ */
+
+:root[trance="true"][trance-chrome="true"] {
+  --trance-icon-base-size: 16px;
+
+  --zen-toolbar-button-size: calc(
+    var(--trance-icon-base-size) * var(--trance-icon-scale)
+  );
+}
+
+@media (-moz-platform: macos) {
+  :root[trance="true"][trance-chrome="true"] {
+    --trance-icon-base-size: 17px;
+  }
 }

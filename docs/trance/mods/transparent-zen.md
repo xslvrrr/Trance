@@ -98,3 +98,35 @@ Shared with `TranceSurfaces` — see `nebula.md` §6.
    own vibrancy already provides most of the effect.
 2. Confirm B3 is genuinely handled by the Zen Internet extension in your setup,
    so Trance can leave the content area alone.
+
+---
+
+## 8. Revision — 2026-08-25
+
+Reported as "no proper page transparency support", and the report was right: the
+`content` region set a CSS `background` on the `<browser>` and stopped there.
+That colour sits *behind* the content process's canvas, and the canvas is
+opaque — Gecko fills it with the page's background colour, or white when the
+page declares none. So the only thing the declaration could reach was the few
+pixels the rounded corners expose and the frame before first paint.
+
+Real page transparency is one attribute and Gecko owns it. `transparent` on a
+chrome-document `<browser>` reaches `BrowserParent::IsTransparent`, travels to
+the content process in `ParentShowInfo`, and makes
+`PresShell::IsTransparentContainerElement` true — at which point the canvas is
+composited with alpha instead of filled. Firefox already ships the switch that
+sets it on every tab it builds: `browser.tabs.allow_transparent_browser`.
+`TranceSurfaces` claims it while the region is on and gives it back on disable,
+the same treatment `zen.theme.acrylic-elements` gets (ADR-011).
+
+Two consequences, both stated on the settings page rather than hidden:
+
+- `tabbrowser.js` reads the pref when it *creates* a browser, so this reaches
+  tabs opened from that point on.
+- With the switch on, every content browser carries `transparent="true"`, so the
+  Trance rule now *requires* that attribute where it used to exclude it — the
+  declaration it replaces is Zen's own fixed
+  `light-dark(rgba(255,255,255,0.6), rgba(255,255,255,0.1))`, so the alpha
+  follows the slider instead of being a constant. The default dropped from 85%
+  to 40%, because with the canvas actually transparent the number now means what
+  it says.

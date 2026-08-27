@@ -10,10 +10,28 @@
 | **User's version** | 1.0.6 |
 | **Source** | `themaster5209/zen-better-new-tab-button` (not in either marketplace index; installed out-of-band) |
 | **License** | **none** |
-| **Verdict** | NATIVE |
-| **Phase** | 5 |
+| **Verdict** | ~~NATIVE~~ → **PREINSTALL** (ADR-049) |
+| **Phase** | 5, withdrawn 2026-08-27 |
 | **Cluster** | chrome-furniture |
 | **Investigated** | 2026-08-25 |
+
+## 0. Outcome — preinstalled, not reimplemented
+
+Trance no longer implements any of this. It preinstalls the author's own
+distribution through `scripts/trance-cosine.py`, and ships no rule that names
+`#tabs-newtab-button` or `#vertical-tabs-newtab-button` at all.
+
+The reimplementation below kept B1 and refused B3, and that was the wrong trade
+for this particular mod. The two-owners argument that justifies every other
+clean-room rewrite in this project (TRANCE.md §3.1) does not apply to a mod whose
+users install it anyway: it *created* the second owner. What shipped was a third
+of the mod with the part most people install it for missing.
+
+`trance.chrome.newtab.compact`, its settings row, its root attribute and the
+whole `[trance-chrome-newtab]` block are gone. `zen.view.show-newtab-button-top`
+also defaults to `false` now, because the mod styles the button where Zen puts
+it by default. Everything from §1 down is kept as the record of what was
+investigated and why the verdict changed (ADR-049).
 
 ## 1. What it actually does
 

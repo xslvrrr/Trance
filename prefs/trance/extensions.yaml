@@ -1,0 +1,63 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: bundled extensions and the first-run panel.
+#
+# The seven extensions themselves are not configured here. They are installed by
+# `src/zen/trance/distribution/policies.json`, which the build installs into the
+# application's `distribution/` directory (ADR-032), and their own settings are
+# their own business — TRANCE.md §9.3 is explicit that Trance ships no filter
+# list, no Dark Reader theme and no SponsorBlock category selection. Preloading
+# someone else's tool with our opinions is not configuration, it is a surprise.
+#
+# ── The pref TRANCE.md §9.2 asked for and this file does not set ───────────
+#
+# §9.2 prescribed `extensions.autoDisableScopes: 0`, with the reasoning "do not
+# auto-disable policy-installed add-ons". That pref does not do that. It is read
+# in exactly one place — `XPIDatabase.updateMetadata`, under
+# `isDetectedInstall && aNewAddon.foreignInstall` — so it applies only to add-ons
+# *found in a scanned directory on disk*. A policy install is not one of those:
+# `installAddonFromURL` runs `AddonManager.getInstallForURL(...).install()`,
+# which lands in the profile scope through the normal install path and is never
+# marked foreign, so it is enabled the moment it finishes.
+#
+# Setting it to 0 would therefore change nothing about our seven extensions, and
+# would turn off the prompt that exists so a *different* program cannot drop an
+# XPI into the system add-ons directory and have it silently switch itself on.
+# That is a real protection paid for with nothing gained, so the pref is not
+# here. ADR-032 records the finding.
+#
+# Refs: TRANCE.md §9, §13 Phase 9; ADR-032, ADR-033
+
+# === Mark: Install flow ===
+
+# Suppress the "you are downloading a third-party add-on" interstitial. All
+# seven install URLs are addons.mozilla.org's own `/latest.xpi` endpoints, so
+# the interstitial has nothing to warn about; without this it can still appear
+# on a slow first run and read as an error.
+#
+# `xpinstall.signatures.required` is deliberately NOT touched. AMO builds are
+# signed and signature verification stays on (TRANCE.md §9.2).
+- name: extensions.postDownloadThirdPartyPrompt
+  value: false
+
+# === Mark: First-run panel ===
+
+# The panel that reports, once, whether the seven extensions arrived.
+#
+# Off, `TranceFirstRun` allocates nothing: no panel, no add-on listener, no
+# scheduler subscription, and the pref observer that every TranceFeature keeps.
+- name: trance.firstrun.enabled
+  value: true
+
+# State, not a setting: true once a window has taken ownership of showing the
+# panel. It is written the moment a window decides to show it rather than when
+# the panel closes, which is what stops a second window opening a second copy —
+# and what stops the panel coming back if the browser is killed while it is
+# open.
+#
+# The settings page surfaces it as a button ("Show it again") rather than as a
+# checkbox, because "completed" is not a thing anyone wants to set (§6.6).
+- name: trance.firstrun.completed
+  value: false

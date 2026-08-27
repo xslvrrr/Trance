@@ -3,30 +3,1379 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  *
- * Trance: about:preferences#trance layout.
+ * Trance: about:preferences — the whole page, not just the Trance pane.
  *
- * This sheet is loaded into the preferences document, which is a content-ish
- * page rather than the browser chrome, so it does not have the Trance token
- * layer available — TranceCore only loads that into browser windows. Keep this
- * file to layout only and let Firefox's own in-content design tokens supply the
- * colours.
+ * ── Why this file grew ─────────────────────────────────────────────────────
  *
- * Refs: TRANCE.md §6.6
+ * It used to style `[data-category="paneTrance"]` and nothing else. That made
+ * the Trance pane the one coherent surface in a window of Firefox defaults,
+ * Zen additions and Sine's own markup — five visual languages behind one
+ * sidebar. Every one of them was individually defensible and together they read
+ * as an unfinished port.
+ *
+ * So the palette moved up a level. Firefox's in-content design system resolves
+ * *everything* — built-in panes, Zen's panes, the shadow DOM of `moz-page-nav`,
+ * `moz-card`, `moz-toggle`, `moz-input-search`, and Sine's cards — from a small
+ * set of custom properties. Re-declaring that set once, on `#preferences-root`,
+ * restyles all of them at the same time and leaves each widget's own layout,
+ * behaviour and accessibility exactly as the platform wrote it.
+ *
+ * Two mechanics make that work and are worth stating, because both look like
+ * they should not:
+ *
+ *   1. **Layers.** Those tokens are declared inside `@layer tokens-*`. An
+ *      *unlayered* declaration beats a layered one outright, whatever its
+ *      specificity — so one `#preferences-root` block wins without a single
+ *      `!important` and without an arms race.
+ *   2. **Shadow DOM.** The widgets declare the same tokens on `:host` inside
+ *      their own sheets. Custom properties inherit into a shadow tree, and for
+ *      normal declarations the *outer* tree wins, so the value set here is the
+ *      value the widget's internals see.
+ *
+ * ── The palette ────────────────────────────────────────────────────────────
+ *
+ * Vercel's: a true black canvas, one hairline that does all the separating,
+ * type in two weights and two greys, and an inverted primary — white on black,
+ * black on white — instead of a hue. There is no third accent colour in the
+ * page, which is deliberate: Zen's accent is whatever the active space's
+ * gradient resolves to, and on a profile with no gradient picked that is a
+ * near-neutral grey, so a design that leaned on it would be a design that
+ * disappears on a fresh profile.
+ *
+ * Every surface colour is mixed toward `transparent` by `--trance-ui-alpha`,
+ * which reads `--trance-internal-alpha` — the value the "Page opacity" slider
+ * writes into the registered user sheet (trance-internal.css). So the same
+ * palette is glass while internal-page transparency is on and solid black when
+ * it is off, from one set of declarations rather than two themes.
+ *
+ * ── Literal colours ────────────────────────────────────────────────────────
+ *
+ * `TranceCore` loads the token layer into browser windows only, so `--trance-*`
+ * resolves to nothing in this document and the chrome palette cannot be
+ * consumed here. This file is therefore the token owner *for this document*,
+ * the same way trance-tokens.css is for a browser window: one block, at the
+ * top, and nothing below it declares a colour. The stylelint plugin exempts it
+ * by name and says why (`PALETTE_FILES` in
+ * src/zen/trance/lint/stylelint-plugin-trance/index.mjs).
+ *
+ * Durations are exempt for the older reason: there is no Firefox timing token
+ * to consume and `var(--trance-dur-fast)` would be a no-op rather than a value.
+ *
+ * Sine's own pane is not here — it needs `!important` to answer Sine's, which
+ * is a different argument and lives in its own file (trance-sine.css).
+ *
+ * Refs: TRANCE.md §6.2, §6.6; ADR-023, ADR-028, ADR-029
  */
 
-#tranceSurfacesGroup label[control],
-#tranceMotionGroup label[control] {
-  min-width: 12em;
+/* ── Palette and shape ──────────────────────────────────────────────────────
+ *
+ * The only block in this file that declares a colour, a radius or a literal
+ * anything. `#preferences-root` is the document's root element; declaring here
+ * rather than on `:root` keeps the selector honest about which document this
+ * is, and keeps the block out of the way of the user sheet, which owns
+ * `--in-content-*` and the page's own `background-color`.
+ */
+
+#preferences-root {
+  /* How much of a surface survives. Written by the Page opacity slider into
+   * the registered user sheet; absent — and therefore 100% — when internal-page
+   * transparency is switched off, at which point this palette is opaque black
+   * rather than glass. */
+  --trance-ui-alpha: var(--trance-internal-alpha, 100%);
+  --trance-ui-alpha-raised: min(100%, calc(var(--trance-ui-alpha) + 14%));
+
+  /* Ink. Two weights of foreground and two of hairline is the entire scale. */
+  --trance-ui-fg: light-dark(#171717, #ededed);
+  --trance-ui-fg-muted: light-dark(#5f5f5f, #a1a1a1);
+  --trance-ui-fg-faint: light-dark(#8f8f8f, #7d7d7d);
+  --trance-ui-line: light-dark(rgba(0, 0, 0, 10%), rgba(255, 255, 255, 10%));
+  --trance-ui-line-strong: light-dark(rgba(0, 0, 0, 22%), rgba(255, 255, 255, 20%));
+
+  /* Surfaces, in three steps: the page, a card on it, a control on the card. */
+  --trance-ui-canvas: color-mix(in srgb, light-dark(#ffffff, #000000) var(--trance-ui-alpha), transparent);
+  --trance-ui-raised: color-mix(in srgb, light-dark(#fafafa, #0c0c0c) var(--trance-ui-alpha-raised), transparent);
+  --trance-ui-control: light-dark(rgba(0, 0, 0, 5%), rgba(255, 255, 255, 6%));
+  --trance-ui-control-hover: light-dark(rgba(0, 0, 0, 9%), rgba(255, 255, 255, 10%));
+  --trance-ui-control-active: light-dark(rgba(0, 0, 0, 14%), rgba(255, 255, 255, 15%));
+
+  /* The primary is the inverse of the page, never a hue. */
+  --trance-ui-inverse: light-dark(#171717, #ffffff);
+  --trance-ui-inverse-hover: light-dark(#000000, #e6e6e6);
+  --trance-ui-inverse-fg: light-dark(#ffffff, #0a0a0a);
+
+  /* Status, borrowed from Firefox's own ramp so a warning still reads as one. */
+  --trance-ui-danger: light-dark(#c5211a, #ff6166);
+  /* Mixed toward the page's own ink rather than stated twice, so the hover is
+   * one declaration in both schemes instead of two branches that can drift. */
+  --trance-ui-danger-hover: color-mix(
+    in srgb,
+    var(--trance-ui-danger) 82%,
+    light-dark(#000000, #ffffff)
+  );
+
+  /* What a modal dims the page with. Dimmed rather than frosted: the page
+   * behind it is already translucent over the window's own material, and a
+   * `backdrop-filter` here would be a second blur over a surface the operating
+   * system has already blurred — the mistake trance-surfaces.css documents at
+   * length, made in a different document. */
+  --trance-ui-scrim: light-dark(rgba(0, 0, 0, 25%), rgba(0, 0, 0, 55%));
+
+  /* Shape. One control radius, one card radius, and nothing in between — the
+   * "commitment to the shape" is that no widget picks its own. */
+  --trance-ui-radius: 6px;
+  --trance-ui-radius-card: 12px;
+  --trance-ui-radius-pill: 999px;
+
+  --trance-ui-duration: 120ms;
+  --trance-ui-easing: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- Firefox's in-content design system, re-pointed ------------------- */
+  /* Unlayered, so these beat the `@layer tokens-*` declarations they replace,
+   * and inherited, so they reach every widget's shadow tree. */
+
+  /* The legacy in-content pair, for the case where the user sheet is not
+   * registered at all. `common.css` paints `body` from
+   * `--in-content-page-background`, so without these the page would be
+   * Firefox's own near-black-with-a-violet-cast under a Trance-black card the
+   * moment internal-page transparency was switched off. When the sheet *is*
+   * registered it declares both with `!important` from the user origin and wins
+   * outright, which is the arrangement: it owns them, this is the fallback. */
+  --in-content-page-background: var(--trance-ui-canvas);
+  --in-content-box-background: var(--trance-ui-raised);
+
+  --background-color-canvas: var(--trance-ui-canvas);
+  --background-color-box: var(--trance-ui-raised);
+  --background-color-box-info: var(--trance-ui-control);
+  --background-color-dimmed: var(--trance-ui-control);
+  --background-color-dimmed-further: var(--trance-ui-control-hover);
+  --background-color-list-item-hover: var(--trance-ui-control-hover);
+
+  --border-color: var(--trance-ui-line);
+  --border-color-deemphasized: var(--trance-ui-line);
+  --border-color-interactive: var(--trance-ui-line-strong);
+  --border-color-selected: var(--trance-ui-inverse);
+
+  --border-radius-xsmall: 3px;
+  --border-radius-small: 4px;
+  --border-radius-medium: var(--trance-ui-radius);
+  --border-radius-large: var(--trance-ui-radius-card);
+
+  --text-color: var(--trance-ui-fg);
+  --text-color-deemphasized: var(--trance-ui-fg-muted);
+  --text-color-error: var(--trance-ui-danger);
+  --icon-color: var(--trance-ui-fg-muted);
+  --link-color: var(--trance-ui-fg);
+  --link-color-hover: var(--trance-ui-fg);
+  --link-color-active: var(--trance-ui-fg-muted);
+
+  /* The accent is the inverse, not the space gradient. See the header. */
+  --color-accent-primary: var(--trance-ui-inverse);
+  --color-accent-primary-hover: var(--trance-ui-inverse-hover);
+  --color-accent-primary-active: var(--trance-ui-inverse-hover);
+  --color-accent-primary-selected: var(--trance-ui-inverse);
+
+  --button-background-color: var(--trance-ui-control);
+  --button-background-color-hover: var(--trance-ui-control-hover);
+  --button-background-color-active: var(--trance-ui-control-active);
+  --button-text-color: var(--trance-ui-fg);
+  --button-text-color-primary: var(--trance-ui-inverse-fg);
+  --button-border-color: var(--trance-ui-line);
+  --button-border-radius: var(--trance-ui-radius);
+  --button-font-weight: 500;
+  --button-min-height: 32px;
+  --button-padding-inline: 12px;
+
+  --input-text-background-color: var(--trance-ui-control);
+  --input-text-color: var(--trance-ui-fg);
+  --input-text-border-color: var(--trance-ui-line);
+  --input-text-border-radius: var(--trance-ui-radius);
+  --input-text-min-height: 34px;
+
+  --checkbox-border-radius: 4px;
+
+  --card-background-color: var(--trance-ui-raised);
+  --card-border-color: var(--trance-ui-line);
+  --card-border-radius: var(--trance-ui-radius-card);
+  --card-box-shadow: none;
+  --card-box-shadow-hover: none;
+
+  --box-border-color: var(--trance-ui-line);
+  --box-border-radius: var(--trance-ui-radius-card);
+
+  --focus-outline-color: var(--trance-ui-inverse);
+  --focus-outline: 2px solid var(--trance-ui-inverse);
+  --focus-outline-offset: 2px;
+
+  /* The category rail. All of these are consumed inside `moz-page-nav`'s
+   * shadow tree; none of them needs a selector that reaches into it. */
+  --page-nav-border-color: transparent;
+  --page-nav-button-border-radius: var(--trance-ui-radius);
+  --page-nav-button-border-radius-focused: var(--trance-ui-radius);
+  --page-nav-button-background-color-selected: var(--trance-ui-control-hover);
+  --page-nav-button-background-color-hover: var(--trance-ui-control);
+  --page-nav-button-text-color-selected: var(--trance-ui-fg);
+  --page-nav-button-indicator-background-color: transparent;
+  --page-nav-button-indicator-width: 0;
+  --page-nav-button-padding: 7px 10px;
+  --page-nav-button-gap: 1px;
+  --page-nav-gap: 16px;
+
+  /* The page itself. When internal-page transparency is on, the user sheet
+   * declares `background-color: transparent !important` on this same element
+   * and wins outright — so this one declaration is the whole of "black when
+   * the glass is off, glass when it is on". */
+  background-color: var(--trance-ui-canvas);
+  color: var(--trance-ui-fg);
 }
 
-#tranceSurfacesGroup input[type="range"] {
+/* ── The shell ──────────────────────────────────────────────────────────────*/
+
+/* The search bar's own strip.
+ *
+ * ── Why this is transparent and no longer sticky ───────────────────────────
+ *
+ * `preferences.css` gives `#search-container` `background-color:
+ * var(--background-color-canvas)` so that settings scrolling underneath it are
+ * occluded, and `.sticky-container` pins it to the top so that there is
+ * something to occlude.
+ *
+ * The previous version kept both and painted the strip in the page's own colour
+ * at the page's own alpha, on the theory that "the same colour as the page"
+ * cannot read as a separate slab. It does, and the reason is that the page is
+ * not that colour: trance-internal.css declares `background-color: transparent
+ * !important` on the root *and* on `body`, so nothing paints
+ * `--in-content-page-background` at all. The page is fully transparent and the
+ * strip was the only thing in the document painting the 55%-black canvas —
+ * which is exactly the black rectangle across the top of the settings page.
+ *
+ * Matching it to a colour nothing else uses is not fixable by choosing a better
+ * colour. The occlusion is only needed because the strip is pinned, so the strip
+ * stops being pinned: the search field scrolls with the settings it searches,
+ * there is nothing behind it to hide, and it needs no background of its own.
+ * That is also where Vercel puts a settings search — in the flow at the top of
+ * the page, not in a bar over it.
+ *
+ * `position: static` on `.sticky-container` is an author-normal declaration
+ * against `preferences.css`'s own author-normal `position: sticky`, at equal
+ * specificity, from a sheet loaded later — so it wins without `!important`, and
+ * trance-internal.css leaves both properties alone.
+ */
+.sticky-container {
+  position: static;
+}
+
+/* ── And why it has a background again ──────────────────────────────────────
+ *
+ * Un-pinning the strip fixed the black rectangle and left a different problem
+ * behind, which is what "give the find-in-settings section a background to stop
+ * overlapping" is about.
+ *
+ * The page is fully transparent — trance-internal.css clears the root's and the
+ * body's background outright — and so was this strip, and so, at 6% white, was
+ * the search field inside it. So the field was a hairline outline with the
+ * *window* showing through it: the workspace gradient, the background texture,
+ * and whatever the frost behind the window resolves to, all of it directly
+ * behind the placeholder text and behind anything typed into it. Text over a
+ * moving gradient reads as two things overlapping, which is exactly what it is.
+ *
+ * The fix is a surface, not a colour: the strip becomes a card in the same
+ * palette and at the same radius as every other card on the page, and the field
+ * inside it sits on the card rather than on the window. Both still follow
+ * `--trance-ui-alpha`, so this is glass while internal-page transparency is on
+ * and solid when it is off — the same as the cards below it, which is the whole
+ * point of it being one.
+ */
+#search-container {
+  background-color: var(--trance-ui-raised);
+  border: 1px solid var(--trance-ui-line);
+  border-radius: var(--trance-ui-radius-card);
+  padding: 8px;
+  margin-block-end: 20px;
+}
+
+#searchInput {
+  --input-text-background-color: var(--trance-ui-raised);
+  --input-text-border-color: var(--trance-ui-line);
+  --input-text-min-height: 36px;
+
+  width: 100%;
+}
+
+/* Vertical rhythm. Wider than the stock 600px because the Trance pane is a
+ * two-column list — a name on the left and its control on the right — and at
+ * 600px the descriptions wrap to three lines. */
+.pane-container {
+  width: min(100%, 720px);
+}
+
+#categories {
+  width: 232px;
+
+  @media (max-width: 950px) {
+    width: auto;
+  }
+}
+
+/* ── Type ───────────────────────────────────────────────────────────────────*/
+
+#mainPrefPane {
+  & h1 {
+    font-size: 1.5em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  & h2 {
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ── Combobox ───────────────────────────────────────────────────────────────
+ *
+ * A `<menulist>` in this document is drawn by the platform, which on macOS
+ * means a real `NSPopUpButton`: it ignores every token above, it opens a menu
+ * in the system's own colours, and it is the one control on the page that
+ * cannot be made to look like the rest of it.
+ *
+ * `trance-settings.js` leaves the menulist in the DOM — `Preferences` binds to
+ * it, and Sine's own dialogs listen to it — moves it out of sight, and puts
+ * this in its place, forwarding a selection back as a `command` and a `change`
+ * event. So the widget is ours and the plumbing is still the platform's.
+ */
+
+.trance-combobox {
+  position: relative;
+  display: inline-flex;
+  min-width: 13em;
+}
+
+/* The menulist a combobox has taken over from. Kept in the layout at zero size
+ * rather than `display: none`, so anything that measures it, focuses it or
+ * reads `.selectedItem` still finds a live element.
+ *
+ * The ID is load-bearing rather than decorative: Sine sizes the menulists in
+ * its own dialogs with `.sineItemPreferenceDialogContent menulist`, which
+ * outweighs a bare class, and its sheet is injected after this one so a tie
+ * would go to it as well. This is the smallest selector that wins. */
+#preferences-body menulist.trance-combobox-native {
+  position: absolute;
+  width: 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.trance-combobox-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius);
+  background-color: var(--trance-ui-control);
+  color: var(--trance-ui-fg);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--trance-ui-duration) var(--trance-ui-easing),
+    border-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  &:hover {
+    background-color: var(--trance-ui-control-hover);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+  }
+
+  &[aria-expanded="true"] {
+    border-color: var(--trance-ui-inverse);
+  }
+}
+
+.trance-combobox-value {
   flex: 1;
-  min-width: 8em;
-  margin-inline: var(--space-small, 4px);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The chevron, drawn rather than fetched: two borders of an empty box, rotated.
+ * One less icon to package, and it takes `currentColor` for free. */
+.trance-combobox-arrow {
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 3px;
+  margin-block-start: -3px;
+  border-inline-end: 1.5px solid var(--trance-ui-fg-muted);
+  border-block-end: 1.5px solid var(--trance-ui-fg-muted);
+  rotate: 45deg;
+  flex: 0 0 auto;
+}
+
+/* `position: fixed`, because a combobox inside one of Sine's `<dialog>`s is
+ * inside a scroll container that would otherwise clip its list. The script
+ * measures the button and writes `inset-block-start` / `inset-inline-start`. */
+.trance-combobox-popup {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 13em;
+  max-height: 18em;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius);
+  background-color: var(--trance-ui-raised);
+  box-shadow: 0 8px 24px light-dark(rgba(0, 0, 0, 12%), rgba(0, 0, 0, 50%));
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.trance-combobox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--trance-ui-fg);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--trance-ui-control-hover);
+    outline: none;
+  }
+
+  /* The tick is the same drawn glyph as the chevron, at a different rotation.
+   * Always in the layout so that selecting a different option does not move the
+   * labels sideways. */
+  &::before {
+    content: "";
+    width: 4px;
+    height: 8px;
+    margin-inline: 2px 4px;
+    border-inline-end: 1.5px solid currentColor;
+    border-block-end: 1.5px solid currentColor;
+    rotate: 45deg;
+    opacity: 0;
+    flex: 0 0 auto;
+  }
+
+  &[aria-selected="true"]::before {
+    opacity: 1;
+  }
+}
+
+/* ── The Trance pane ────────────────────────────────────────────────────────
+ *
+ * Every setting is one row: its name and its explanation on the left, its
+ * control on the right, a hairline between rows and a border around the group.
+ * Scanning for a setting is then reading a column of names rather than parsing
+ * sentences, and a control that is subordinate to another — a slider that only
+ * means something while its switch is on — can be *shown* as subordinate.
+ */
+
+/* ── Section headings ───────────────────────────────────────────────────────
+ *
+ * The eyebrow that separates two groups. It used to be declared here, scoped to
+ * `[data-category="paneTrance"]`, with `#tranceGeneralCategory` overriding it
+ * back to a page title. Both moved to the "Zen's own panes" section at the
+ * bottom of this file with the pane restriction removed: every pane in the
+ * document draws its bands the same way, and there is no longer a first heading
+ * that is a title — the category rail already says which page this is, and one
+ * pane in twelve wearing a 1.5em heading was the largest single inconsistency
+ * between the Trance pane and the rest.
+ */
+
+/* ── Cards ──────────────────────────────────────────────────────────────────*/
+
+groupbox.trance-card {
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid var(--trance-ui-line);
+  border-radius: var(--trance-ui-radius-card);
+  background-color: var(--trance-ui-raised);
+  /* Rows draw their own hairlines edge to edge; without this the top row's
+   * corners escape the card's. */
+  overflow: hidden;
+}
+
+.trance-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+
+  & h2 {
+    font-size: 0.95em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  /* `description` is a XUL element; inside a flex column it needs to be told to
+   * behave like a paragraph rather than like a box. */
+  & description {
+    margin: 0;
+    color: var(--trance-ui-fg-muted);
+    font-size: 0.85em;
+    line-height: 1.5;
+    max-width: 62ch;
+  }
+}
+
+/* A header immediately followed by its first row would draw two horizontal
+ * lines a few pixels apart — the header's padding and the row's border. The
+ * row owns the line; the header owns the space above it. */
+.trance-card-header + .trance-row {
+  border-block-start: 1px solid var(--trance-ui-line);
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────────────*/
+
+.trance-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  transition: background-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  & + .trance-row {
+    border-block-start: 1px solid var(--trance-ui-line);
+  }
+
+  &:hover {
+    background-color: var(--trance-ui-control);
+  }
+}
+
+.trance-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* Without this a long description makes the row wider than the card instead
+   * of wrapping, and takes the control off the right-hand edge with it. */
+  min-width: 0;
+  flex: 1;
+
+  & > label {
+    margin: 0;
+    font-weight: 500;
+  }
+
+  & > description {
+    margin: 0;
+    color: var(--trance-ui-fg-muted);
+    font-size: 0.83em;
+    line-height: 1.45;
+    max-width: 58ch;
+  }
+
+  & code {
+    font-size: 0.95em;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background-color: var(--trance-ui-control);
+  }
+}
+
+.trance-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+/* Rows whose control is subordinate to the row above — a slider that only means
+ * something while its switch is on. Indented against a hairline, so the
+ * relationship is drawn rather than described. */
+.trance-row.trance-row-child {
+  padding-inline-start: 32px;
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 16px;
+    width: 1px;
+    background-color: var(--trance-ui-line);
+  }
+
+  & > .trance-row-text > label {
+    font-weight: 400;
+    color: var(--trance-ui-fg-muted);
+  }
+}
+
+/* ── Typed numbers ──────────────────────────────────────────────────────────
+ *
+ * Two settings on this page are numbers you type rather than numbers you drag:
+ * the empty-tab mark's size and its opacity. A slider is the right control for
+ * a value you tune by eye against something on screen, and the wrong one for a
+ * value you already know — "350" is one keystroke run, and finding 350 on a
+ * 16–1200 track is not.
+ *
+ * `<html:input type="number">` in a XUL document is an HTML input with none of
+ * `common.css`'s in-content styling attached, so the page's own token set is
+ * applied here rather than inherited. The spinner is kept: it is the affordance
+ * that says this box takes a number.
+ */
+
+.trance-number {
+  width: 6em;
+  min-height: var(--input-text-min-height);
+  padding: 0 8px;
+  border: 1px solid var(--input-text-border-color);
+  border-radius: var(--input-text-border-radius);
+  background-color: var(--input-text-background-color);
+  color: var(--input-text-color);
+  font: inherit;
+  text-align: end;
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+  }
+}
+
+/* ── Switches ───────────────────────────────────────────────────────────────
+ *
+ * A XUL `checkbox` builds `.checkbox-check` and a label box in its light DOM,
+ * so the element itself becomes the track and its check becomes the knob. The
+ * label box is empty on every switch here — the name lives in the row's text
+ * column, where it lines up with every other row's name — so it is removed
+ * rather than hidden, to keep it out of the flex layout.
+ */
+
+checkbox.trance-switch {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  width: 34px;
+  min-width: 34px;
+  height: 20px;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius-pill);
+  background-color: var(--trance-ui-control);
+  transition:
+    background-color var(--trance-ui-duration) var(--trance-ui-easing),
+    border-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  & > .checkbox-label-box {
+    display: none;
+  }
+
+  & > .checkbox-check {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-inline: 2px;
+    border: none;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-fg-muted);
+    transition:
+      translate var(--trance-ui-duration) var(--trance-ui-easing),
+      background-color var(--trance-ui-duration) var(--trance-ui-easing);
+  }
+
+  /* On is the page's inverse — white on black, black on white — for the reason
+   * the whole palette avoids a hue: Zen resolves its accent from the active
+   * space's gradient, and a profile with no gradient picked resolves it to a
+   * near-neutral grey, at which point "on" and "off" are the same colour with
+   * the knob at different ends. */
+  &[checked] {
+    background-color: var(--trance-ui-inverse);
+    border-color: var(--trance-ui-inverse);
+  }
+
+  &[checked] > .checkbox-check {
+    translate: 14px 0;
+    background-color: var(--trance-ui-inverse-fg);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+  }
+
+  &[disabled] {
+    opacity: 0.4;
+  }
+}
+
+/* ── Sliders ────────────────────────────────────────────────────────────────*/
+
+[data-category="paneTrance"] input[type="range"] {
+  appearance: none;
+  width: 180px;
+  height: 20px;
+  margin: 0;
+  background-color: transparent;
+
+  &::-moz-range-track {
+    height: 4px;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-control-active);
+  }
+
+  /* Same reasoning as the switch: the filled part of a track has to be
+   * unmistakably filled, and the page's inverse is the one value guaranteed to
+   * contrast with it in both schemes. */
+  &::-moz-range-progress {
+    height: 4px;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-inverse);
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-inverse);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+  }
+}
+
+/* The chosen file, under the "Image" label. A path is longer than this column
+ * and the readable end of it is the last part, so it is truncated from the
+ * front — and it is monospace, because a filename is a literal. */
+.trance-path {
+  overflow: hidden;
+  direction: rtl;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 0.83em;
+  color: var(--trance-ui-fg-muted);
 }
 
 .trance-range-value {
-  min-width: 4em;
+  min-width: 3.5em;
+  margin: 0;
   text-align: end;
+  color: var(--trance-ui-fg-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Platform notes ─────────────────────────────────────────────────────────
+ *
+ * Blur, on the platforms where it can do something.
+ *
+ * Where the window is translucent in its own right — macOS vibrancy, Windows
+ * Mica, a transparent GTK window — the frost is produced behind the browser by
+ * the compositor, and a `backdrop-filter` over it replaces it with a flat
+ * rectangle instead of softening it. trance-surfaces.css therefore ships no
+ * blur surfaces there at all, so these controls would be controls that provably
+ * cannot do anything. A note takes their place, and the two swap over on
+ * exactly the same condition the stylesheet uses.
+ */
+
+#tranceSurfaceBlurNote,
+#tranceInternalBlurNote {
+  display: none;
+}
+
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-windows-mica) or (-moz-platform: macos) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')) {
+  #tranceSurfaceBlurRow,
+  #tranceInternalBlurRow {
+    display: none;
+  }
+
+  #tranceSurfaceBlurNote,
+  #tranceInternalBlurNote {
+    display: flex;
+  }
+}
+
+/* A row that is a note rather than a setting: full width, no control column. */
+.trance-note {
+  padding: 12px 16px;
+  color: var(--trance-ui-fg-muted);
+  font-size: 0.83em;
+  line-height: 1.5;
+
+  & + .trance-row,
+  .trance-row + & {
+    border-block-start: 1px solid var(--trance-ui-line);
+  }
+}
+
+/* ── Narrow windows ─────────────────────────────────────────────────────────
+ *
+ * Below this the two columns stop being two columns: the description wraps to
+ * two or three lines and the control is pushed against the edge. Stacking is
+ * the honest answer, and it is the same markup.
+ */
+
+@media (max-width: 700px) {
+  .trance-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .trance-row-control {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  [data-category="paneTrance"] input[type="range"] {
+    flex: 1;
+    width: auto;
+  }
+}
+
+/* ── Zen's own panes ────────────────────────────────────────────────────────
+ *
+ * The Trance pane above is a card of rows; Zen's three panes — Look and Feel,
+ * Tab Management, Keyboard Shortcuts — are a `groupbox` of loose `checkbox`es
+ * with an `<h2>` every so often and the tickbox on the *left*. Both were
+ * individually fine, and next to each other behind one category rail they read
+ * as two products: ADR-028 gave the document one palette, and it turned out
+ * that a shared palette makes a difference in *layout* more obvious rather than
+ * less.
+ *
+ * Nothing below adds markup. Every rule takes an element Zen already writes and
+ * gives it the same three pieces the Trance pane uses: a card, a row, and a
+ * switch. That is the "pre-built component" constraint — `groupbox` is the Card,
+ * `checkbox` is the Switch, `menulist` is the Select (upgraded to the Trance
+ * combobox by trance-settings.js), `input[type=range]` is the Slider,
+ * `.zenCKSOption-input` is a `kbd` — so the page gains one visual language
+ * without gaining a second widget set to maintain, and every control keeps the
+ * behaviour and accessibility the platform wrote for it.
+ *
+ * ── Scope, and why it is not every pane ───────────────────────────────────
+ *
+ * `groupbox[data-category^="paneZen"]`. Firefox's own panes are deliberately
+ * out: they are already carrying the palette from ADR-028 and are already built
+ * out of `moz-card` and `setting-group`, which are cards; and their `checkbox`es
+ * sit at unpredictable depths inside `hbox`es and fieldsets, where the
+ * full-bleed row treatment below would bleed past its container instead of
+ * filling it. Zen's markup is flat — every checkbox is a direct child of the
+ * groupbox or of one `vbox.indent` — which is the condition these rules need.
+ *
+ * ── Why no `!important` ───────────────────────────────────────────────────
+ *
+ * `preferences.css`, `zen-preferences.css` and the in-content theme are all
+ * author sheets in this document, and this file is loaded from the Trance
+ * template partway down `preferences.xhtml` — after every one of them. A
+ * selector of equal specificity therefore wins on order alone, and the rules
+ * below are written to the same weight as the ones they replace rather than
+ * above them.
+ *
+ * Refs: ADR-028, ADR-029
+ */
+
+/* ── The card ───────────────────────────────────────────────────────────────*/
+
+#mainPrefPane groupbox[data-category^="paneZen"] {
+  margin: 0 0 10px;
+  padding: 2px 16px 12px;
+  border: 1px solid var(--trance-ui-line);
+  border-radius: var(--trance-ui-radius-card);
+  background-color: var(--trance-ui-raised);
+}
+
+/* Zen highlights the matched group when the settings search finds something in
+ * it, in `--zen-primary-color` — the space gradient, which on a profile with no
+ * gradient picked is a near-neutral grey against a near-neutral card. The
+ * hairline going firm and the surface lifting one step is the same signal in
+ * values the palette guarantees. */
+#mainPrefPane groupbox[data-category^="paneZen"][highlightable="true"] {
+  border-color: var(--trance-ui-line-strong);
+  background-color: var(--trance-ui-control);
+}
+
+/* ── Headings ───────────────────────────────────────────────────────────────
+ *
+ * `hbox.subcategory > h1` is the band between two groups on *every* pane, so
+ * this one is document-wide: it is type, not layout, and it cannot bleed out of
+ * a container. It is the rule the Trance pane used to own privately, with the
+ * pane restriction taken off, so "Vertical Tabs", "General" and "Motion &
+ * Feedback" are one kind of thing.
+ *
+ * There is deliberately no longer a first heading that is a page title. The
+ * Trance pane had one; nothing else did; and one pane in twelve wearing a 1.5em
+ * heading was the largest single inconsistency between it and the rest. The
+ * category rail already says which page this is.
+ */
+#mainPrefPane hbox.subcategory {
+  margin-block: 32px 10px;
+  border-bottom: none;
+  padding-bottom: 0;
+
+  & > h1 {
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--trance-ui-fg-faint);
+    margin: 0;
+  }
+}
+
+/* The `<h2>` inside a group is that group's own header, and Zen wraps it in a
+ * `<label>` so it can be a click target. Same size and weight as
+ * `.trance-card-header h2`. */
+#mainPrefPane groupbox[data-category^="paneZen"] > label > h2 {
+  font-size: 0.95em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 14px 0 0;
+}
+
+#mainPrefPane groupbox[data-category^="paneZen"] > label:first-child > h2 {
+  margin-block-start: 6px;
+}
+
+#mainPrefPane groupbox[data-category^="paneZen"] > description,
+#mainPrefPane groupbox[data-category^="paneZen"] .description-deemphasized {
+  margin: 2px 0 8px;
+  color: var(--trance-ui-fg-muted);
+  font-size: 0.83em;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────────────
+ *
+ * A `checkbox` on these panes carries its own label, where a row on the Trance
+ * pane carries the label in its text column. So the row is built out of the
+ * checkbox itself: `row-reverse` puts the control against the right-hand edge
+ * where every other control on the page is, and `space-between` holds it there
+ * while the label takes the rest.
+ *
+ * `margin-inline: -16px` with matching padding takes the row full-bleed inside
+ * the card's own padding, so the hover fill and the hairline between two rows
+ * run edge to edge exactly as they do on the Trance pane. That is also why the
+ * selector is a direct child: a checkbox nested inside some other container
+ * would pull 16px out of *that* container instead of out of the card.
+ */
+#mainPrefPane groupbox[data-category^="paneZen"] > checkbox,
+#mainPrefPane groupbox[data-category^="paneZen"] > vbox.indent > checkbox {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-block: 0;
+  margin-inline: -16px;
+  padding: 10px 16px;
+  transition: background-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  &:hover {
+    background-color: var(--trance-ui-control);
+  }
+
+  & + checkbox {
+    border-block-start: 1px solid var(--trance-ui-line);
+  }
+
+  & > .checkbox-label-box {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  & > .checkbox-label-box > .checkbox-label {
+    margin: 0;
+    font-weight: 500;
+    white-space: normal;
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: -2px;
+  }
+
+  &[disabled="true"] {
+    opacity: 0.4;
+  }
+}
+
+/* A label-and-control pair that Zen writes as an `hbox` — the three menulists.
+ * Same row, with the label doing the job the checkbox's own label box does
+ * above. */
+#mainPrefPane groupbox[data-category^="paneZen"] > hbox[align="center"] {
+  justify-content: space-between;
+  gap: 16px;
+  margin-inline: -16px;
+  padding: 10px 16px;
+
+  & > label {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-weight: 500;
+  }
+}
+
+/* The switch, out of the one child a XUL checkbox gives us.
+ *
+ * The Trance pane's switch uses the checkbox as the track and `.checkbox-check`
+ * as the knob. That is unavailable here, because on these panes the checkbox is
+ * the whole row — so `.checkbox-check` is the track and the knob is a
+ * `radial-gradient` inside it. `background-position-x` is animatable, so the
+ * knob slides for free, the switch stays one element and one composited
+ * property, and no pseudo-element is asked of a XUL `<image>`. */
+#mainPrefPane groupbox[data-category^="paneZen"] checkbox > .checkbox-check {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 34px;
+  min-width: 34px;
+  height: 20px;
+  margin: 0;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius-pill);
+  background-color: var(--trance-ui-control);
+  background-image: radial-gradient(
+    circle 7px at 10px 50%,
+    var(--trance-ui-fg-muted) 99%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-position-x: 0;
+  transition:
+    background-color var(--trance-ui-duration) var(--trance-ui-easing),
+    background-position-x var(--trance-ui-duration) var(--trance-ui-easing),
+    border-color var(--trance-ui-duration) var(--trance-ui-easing);
+}
+
+/* On is the page's inverse, for the reason the whole palette avoids a hue —
+ * see the Trance pane's switch. */
+#mainPrefPane groupbox[data-category^="paneZen"] checkbox[checked] > .checkbox-check {
+  border-color: var(--trance-ui-inverse);
+  background-color: var(--trance-ui-inverse);
+  background-image: radial-gradient(
+    circle 7px at 10px 50%,
+    var(--trance-ui-inverse-fg) 99%,
+    transparent 100%
+  );
+  background-position-x: 13px;
+}
+
+/* Zen's subordinate-setting wrapper, drawn the way `.trance-row-child` is:
+ * indented against a hairline, so the relationship is visible rather than
+ * described. The rows inside it answer the extra indent on their start edge so
+ * their end edge still reaches the card's. */
+#mainPrefPane groupbox[data-category^="paneZen"] > vbox.indent {
+  margin: 0 0 0 16px;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--trance-ui-line);
+  /* The wrapper's own start edge is 16px in from the card's content box, and
+   * its end edge is the card's — so it is 16px narrower than the card on one
+   * side only. Without this the rows inside it, which are pulled full-bleed,
+   * make it wider than that and the card clips them. */
+  min-width: 0;
+
+  & > checkbox {
+    /* -16px on both sides, not -32px on the end.
+     *
+     * The card's own padding is 16px, and a full-bleed row answers it by
+     * pulling 16px out of each side — which is what the non-indented rows above
+     * do. This wrapper does not add anything to the *end* edge: its indent is
+     * all on the start. Pulling 32px out of an edge that only has 16px to give
+     * put every indented row in Look and Feel and Tab Management 16px past the
+     * card's border, with its control hanging outside the rounded corner. */
+    margin-inline: -16px;
+  }
+
+  & > checkbox > .checkbox-label-box > .checkbox-label {
+    font-weight: 400;
+    color: var(--trance-ui-fg-muted);
+  }
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────────*/
+
+#mainPrefPane groupbox[data-category^="paneZen"] input[type="range"] {
+  appearance: none;
+  width: 180px;
+  height: 20px;
+  margin: 0;
+  background-color: transparent;
+
+  &::-moz-range-track {
+    height: 4px;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-control-active);
+  }
+
+  &::-moz-range-progress {
+    height: 4px;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-inverse);
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: var(--trance-ui-radius-pill);
+    background-color: var(--trance-ui-inverse);
+  }
+}
+
+#mainPrefPane groupbox[data-category^="paneZen"] button {
+  min-height: 32px;
+  padding-inline: 12px;
+  border: 1px solid var(--trance-ui-line);
+  border-radius: var(--trance-ui-radius);
+  background-color: var(--trance-ui-control);
+  color: var(--trance-ui-fg);
+  font-weight: 500;
+  transition: background-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  &:hover {
+    background-color: var(--trance-ui-control-hover);
+  }
+}
+
+/* ── The layout picker ──────────────────────────────────────────────────────
+ *
+ * Zen draws the three sidebar layouts as 250px screenshots with a 4px accent
+ * frame on the selected one. The frame is `--zen-colors-primary` — the space
+ * gradient again, so on a fresh profile "selected" is a slightly different grey
+ * — and a 4px border that appears and disappears moves the images by 4px.
+ *
+ * It becomes a card that is selected the way a shadcn radio card is: a border
+ * that is always there and changes colour, and a surface that lifts. Nothing
+ * moves, and "selected" is the page's inverse, which reads in both schemes.
+ */
+#zenLayoutList {
+  gap: 10px;
+  margin-block: 6px 12px;
+
+  & > [layout] {
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--trance-ui-line);
+    border-radius: var(--trance-ui-radius-card);
+    background-color: var(--trance-ui-control);
+    font-weight: 500;
+    transition:
+      border-color var(--trance-ui-duration) var(--trance-ui-easing),
+      background-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+    &:hover {
+      background-color: var(--trance-ui-control-hover);
+    }
+
+    & img {
+      width: 190px;
+      max-width: 100%;
+      border: none;
+      border-radius: var(--trance-ui-radius);
+    }
+
+    &.selected {
+      border-color: var(--trance-ui-inverse);
+      background-color: var(--trance-ui-control-active);
+    }
+
+    &.selected img {
+      border: none;
+    }
+  }
+}
+
+/* ── Keyboard shortcuts ─────────────────────────────────────────────────────
+ *
+ * `#zenCKSOption-wrapper` is a flat list of rows, each a label and a recorder
+ * input, separated by `[data-group]` bands. The bands become the same small-caps
+ * eyebrow the pane headings use, the rows become the same row, and the recorder
+ * becomes a `kbd`: monospace, centred, on a control surface — so a shortcut
+ * looks like a key rather than like an empty text field waiting for a sentence.
+ */
+#zenCKSOption-wrapper > [data-group] {
+  margin: 18px -16px 4px;
+  padding: 0 16px 6px;
+  border-bottom: 1px solid var(--trance-ui-line);
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--trance-ui-fg-faint);
+}
+
+.zenCKSOption {
+  margin: 0 -16px;
+  padding: 8px 16px;
+  gap: 16px;
+  transition: background-color var(--trance-ui-duration) var(--trance-ui-easing);
+
+  &:hover {
+    background-color: var(--trance-ui-control);
+  }
+
+  & > label {
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--trance-ui-fg);
+  }
+}
+
+.zenCKSOption-input {
+  width: 220px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius);
+  background-color: var(--trance-ui-control);
+  color: var(--trance-ui-fg);
+  font-family: monospace;
+  font-size: 0.85em;
+  text-align: center;
+  transition: border-color var(--trance-ui-duration) var(--trance-ui-easing);
+}
+
+.zenCKSOption-input.zenCKSOption-input-not-set {
+  color: var(--trance-ui-fg-faint);
+}
+
+/* Recording. A ring rather than a border swap, so the field does not change
+ * size the moment it starts listening, and the page's inverse rather than the
+ * accent for the usual reason. */
+.zenCKSOption-input.zenCKSOption-input-editing {
+  border-color: var(--trance-ui-inverse);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trance-ui-inverse) 35%, transparent);
+}
+
+.zenCKSOption-input.zenCKSOption-input-valid {
+  border-color: var(--trance-ui-line-strong);
+}
+
+.zenCKSOption-input.zenCKSOption-input-invalid,
+.zenCKSOption-conflict {
+  border-color: var(--trance-ui-danger);
+  color: var(--trance-ui-danger);
+}
+
+/* ── Theme marketplace ──────────────────────────────────────────────────────
+ *
+ * Zen's own theme list, given the card treatment trance-sine.css gives Sine's.
+ * Not merged into that file: this pane's rules need no `!important`, so they
+ * belong here where the ban still applies.
+ */
+.zenThemeMarketplaceItem {
+  margin-bottom: 8px;
+  padding: 14px;
+  border: 1px solid var(--trance-ui-line);
+  border-radius: var(--trance-ui-radius-card);
+  background-color: var(--trance-ui-raised);
+  box-shadow: none;
+}
+
+.zenThemeMarketplaceItemTitle {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.zenThemeMarketplaceItemDescription {
+  color: var(--trance-ui-fg-muted);
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+/* ── The confirmation dialog ────────────────────────────────────────────────
+ *
+ * One `<html:dialog>`, shown with `showModal()`, reused by every destructive
+ * control on the page. See `gTranceSettings.confirm`.
+ *
+ * It is a card, in the same palette and at the same radius as every other card
+ * here, because it is the same surface asking a question rather than a
+ * different kind of object. The only thing about it that is not a card is the
+ * confirming button, which is drawn in the danger colour: a dialog whose two
+ * buttons look identical is a dialog people answer by position.
+ */
+
+dialog.trance-confirm {
+  max-width: 420px;
+  padding: 20px;
+  border: 1px solid var(--trance-ui-line-strong);
+  border-radius: var(--trance-ui-radius-card);
+  background-color: var(--trance-ui-raised);
+  color: var(--trance-ui-fg);
+
+  &::backdrop {
+    background-color: var(--trance-ui-scrim);
+  }
+
+  & h2 {
+    margin: 0 0 8px;
+    font-size: 1em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  & p {
+    margin: 0;
+    color: var(--trance-ui-fg-muted);
+    font-size: 0.85em;
+    line-height: 1.5;
+  }
+}
+
+.trance-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-block-start: 20px;
+}
+
+.trance-confirm-danger {
+  background-color: var(--trance-ui-danger);
+  color: var(--trance-ui-inverse-fg);
+  border-color: transparent;
+
+  &:hover {
+    background-color: var(--trance-ui-danger-hover);
+  }
+}
+
+/* ── Narrow windows ─────────────────────────────────────────────────────────*/
+
+@media (max-width: 700px) {
+  #mainPrefPane groupbox[data-category^="paneZen"] input[type="range"] {
+    width: auto;
+  }
+
+  .zenCKSOption-input {
+    width: 140px;
+  }
 }

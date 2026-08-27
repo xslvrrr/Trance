@@ -7,14 +7,16 @@
  *
  * Behaviour inspired by "SuperPins" by CosmoCreeper
  * (https://github.com/CosmoCreeper/Zen-Themes), "Advanced Tab Groups" by
- * Vertex-Mods (https://github.com/Vertex-Mods/Advanced-Tab-Groups), "Zen Folder
- * Tree Connectors" by JustAdumbPrsn
- * (https://github.com/JustAdumbPrsn/ZenFolderTreeConnectors), "Customize
- * Collapsed Sidebar" by Ciuriya (https://github.com/Ciuriya/zen-themes) and
- * "Unloaded Tabs" by qumeqa (https://github.com/qumeqa/unloaded-tabs).
- * Implemented independently for Trance; no code copied. Folder Tree Connectors
- * is GPL-3.0 and three of the others are unlicensed, so this is a clean-room
- * reimplementation by requirement, not by preference (TRANCE.md §7.2, §7.3).
+ * Vertex-Mods (https://github.com/Vertex-Mods/Advanced-Tab-Groups),
+ * "Customize Collapsed Sidebar" by Ciuriya (https://github.com/Ciuriya/zen-themes)
+ * and "Unloaded Tabs" by qumeqa (https://github.com/qumeqa/unloaded-tabs).
+ * Implemented independently for Trance; no code copied. Three of them are
+ * unlicensed, so this is a clean-room reimplementation by requirement, not by
+ * preference (TRANCE.md §7.2, §7.3).
+ *
+ * Zen Folder Tree Connectors used to be in that list. It is preinstalled now
+ * rather than reimplemented — see the Folder tree connectors section below and
+ * ADR-027.
  *
  * ── Why this file has no `!important` ──────────────────────────────────────
  *
@@ -24,20 +26,12 @@
  * a winner that changes with load order (TRANCE.md §3.1).
  *
  * Trance ships inside the browser, so it can pick extension points instead of
- * fighting. The two that matter:
- *
- *   1. Zen's collapsed-rail block declares `--tab-min-width` and
- *      `--zen-toolbox-padding` `!important` on `:root`, but declares
- *      `--zen-toolbox-max-width` — the one `#navigator-toolbox` actually
- *      consumes — normally. Re-declaring these variables on the *toolbox*
- *      rather than on `:root` overrides the inherited value outright, and
- *      importance on an ancestor's declaration has no say in that.
- *
- *   2. `.zen-tab-group-start` is an empty div Zen puts in every folder's
- *      container and never styles (three references in the whole tree, all
- *      markup). It is an unused anchor sitting exactly where a tree trunk
- *      belongs, which is why Trance draws connectors with no script at all
- *      where the original mod ships one.
+ * fighting. The one that matters: Zen's collapsed-rail block declares
+ * `--tab-min-width` and `--zen-toolbox-padding` `!important` on `:root`, but
+ * declares `--zen-toolbox-max-width` — the one `#navigator-toolbox` actually
+ * consumes — normally. Re-declaring these variables on the *toolbox* rather
+ * than on `:root` overrides the inherited value outright, and importance on an
+ * ancestor's declaration has no say in that.
  *
  * Refs: TRANCE.md §3.1, §3.2, §6.2, §8.1, §13 Phase 4;
  * docs/trance/mods/{superpins,advanced-tab-groups,zen-folder-tree-connectors,
@@ -80,6 +74,37 @@
       width: var(--trance-rail-icon-size);
       height: var(--trance-rail-icon-size);
     }
+
+    /* Zen's collapsed rail centres the favicon but leaves its overlay at its
+       expanded-tab size. A bookmark indicator is therefore clipped out of the
+       icon stack. Keep overlays in the same measured box as their favicon. */
+    &:not([zen-sidebar-expanded="true"]) .tab-icon-overlay {
+      display: -moz-box;
+      width: var(--trance-rail-icon-size);
+      height: var(--trance-rail-icon-size);
+      margin-inline: 0;
+      opacity: 1;
+    }
+
+    /* No folder indent in the rail.
+     *
+     * Indentation is how an expanded sidebar shows depth: the label is visible,
+     * the tree line is visible, and the offset says which row belongs to which
+     * folder. None of that is true in the icon rail. There are no labels, no
+     * tree line, and the rail is barely wider than one tab — so an indent there
+     * is not a depth cue, it is a column of icons that do not line up with the
+     * column above them.
+     *
+     * Zen keeps its own indent rules behind `[zen-sidebar-expanded]`, so this is
+     * not undoing them; it is covering the inline `--zen-folder-indent` that
+     * ZenFolders writes on every tab regardless of the sidebar state, and any
+     * margin that reads it. `margin-inline: auto` is what a top-level tab in the
+     * rail already gets, so a folder's children land in exactly the same
+     * column. */
+    &:not([zen-sidebar-expanded]) .tab-group-container > * {
+      --zen-folder-indent: 0px;
+      margin-inline: auto;
+    }
   }
 
   /* A rail this narrow cannot hold a row of buttons. */
@@ -90,51 +115,250 @@
     }
   }
 
-  /* ── Folder tree connectors (Zen Folder Tree Connectors) ──────────────────
+  /* ── Folder tree connectors ───────────────────────────────────────────────
    *
-   * Two boxes and no JavaScript: `.zen-tab-group-start` becomes the trunk, and
-   * each child's `::after` becomes the arm that joins it. Nesting needs no
-   * extra rule — a subfolder is a `zen-folder` with a container of its own, so
-   * the same two rules apply at every depth.
+   * Not here any more, and deliberately not replaced by anything.
+   *
+   * Trance used to draw the trunk and the elbows itself — two boxes and no
+   * JavaScript, behind `trance.tabstrip.connectors`. It worked, and it was
+   * still an approximation: Zen Folder Tree Connectors is GPL-3.0, so Trance
+   * could only ever reimplement the *idea* of that drawing rather than ship the
+   * drawing. Trance now preinstalls the mod (scripts/trance-cosine.py,
+   * ADR-027), which puts the connectors under one owner again — the mod's —
+   * and makes them the lines its author draws rather than lines that look a bit
+   * like them.
+   *
+   * Nothing in this file may style the folder container's trunk anchor or a
+   * container child's `::after`. That is the mod's surface now, and a test
+   * checks that the anchor's class name does not appear in this sheet at all.
    */
 
-  &[trance-tabstrip-connectors="true"][zen-sidebar-expanded] {
-    & .tab-group-container {
-      position: relative;
+  /* ── Tab fills ────────────────────────────────────────────────────────────
+   *
+   * Two states, two values, declared in trance-tokens.css — see there for why
+   * the hover veil is black in both schemes rather than the scheme's opposite
+   * end. There is no third: an unselected tab paints nothing, which is what
+   * `.tab-background` already does upstream, so the resting state is a decision
+   * that needs no declaration to express.
+   *
+   * Both are Firefox's own variables, and that is the whole of this section.
+   * `--tab-background-color-hover` and `--tab-background-color-selected` are
+   * what `.tab-background` reads in
+   * browser/themes/shared/tabbrowser/tabs.css, so redeclaring them on the tab
+   * container reaches every state Firefox already draws — including the ones
+   * Trance has no rule for (multiselect, keyboard focus, the drag stack), which
+   * keep working because they were never being replaced.
+   *
+   * ── Why the two rules that used to be here are gone ──────────────────────
+   *
+   * They were eating the two variables above. Firefox draws the hover and the
+   * selected fill from
+   * `.tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected])` and
+   * `.tab-background:is([selected], [multiselected])` — (0,5,0) and (0,2,0).
+   * The Trance rule that painted the *resting* fill was
+   * `:root[…][…] .tabbrowser-tab:not([zen-essential]) > .tab-stack >
+   * .tab-background`, which is (0,6,1) and therefore beat both of them with
+   * `transparent`. So the selected tab had no fill, the hovered tab had no
+   * fill, and the two tokens that were supposed to supply them resolved into
+   * declarations that never won. "The open tab has no background, neither does
+   * the hovered tab" was one selector, not two missing values.
+   *
+   * Saying "an unselected tab paints nothing" by painting `transparent` over
+   * every other state is the whole mistake. Upstream already paints nothing
+   * there; the correct way to agree with it is to declare nothing.
+   *
+   * The pinned rule went with it, and its token. It existed to sit *below* the
+   * resting fill — a shelf quieter than the list above it — and the resting
+   * fill is nothing, so there was nothing left for it to be quieter than. */
+  & #tabbrowser-tabs {
+    --tab-background-color-hover: var(--trance-tab-bg-hover);
+    --tab-background-color-selected: var(--trance-tab-bg-selected);
+  }
+
+  /* The fade.
+   *
+   * A fill that appears the instant the pointer crosses a row and vanishes the
+   * instant it leaves reads as a flicker on a list you are scanning, which is
+   * the one thing the tab strip is for. One transition on the element every
+   * state paints into covers hover, selection and the drag stack at once.
+   *
+   * Motion, so it is owned by `trance.motion.level` and costs nothing at level
+   * 0 — the duration token is zero there and the fill simply appears, which is
+   * exactly what somebody who turned motion off asked for (TRANCE.md §3.5).
+   *
+   * trance-specificity: one class, deliberately. This adds a property Firefox
+   * does not declare on `.tab-background` at all, so there is nothing to
+   * outrank and a longer selector would only be harder to find. */
+  & .tab-background {
+    transition: background-color var(--trance-hover-dur) var(--trance-ease-standard);
+  }
+
+  /* The selected row's ink.
+   *
+   * Not optional, and not decoration: the selected fill is now the scheme's
+   * opposite end at full strength (white on a dark browser, black on a light
+   * one), so a label that kept the toolbar's own colour would be white on white.
+   * The two travel together — see `--trance-tab-fg-selected` in
+   * trance-tokens.css — which is also why this is `color` on the tab rather
+   * than a rule per label and per icon: everything inside the row inherits it,
+   * and the favicon follows through `-moz-context-properties` where the icon is
+   * a themed glyph rather than a picture. */
+  & .tabbrowser-tab[visuallyselected]:not([zen-essential]) {
+    color: var(--trance-tab-fg-selected);
+  }
+
+  /* ── Active tab glow ──────────────────────────────────────────────────────
+   *
+   * Nebula's, reimplemented from its description and screenshots — the mod is
+   * GPL-3.0 and none of its rules may be copied (TRANCE.md §7.2). Opt in, and
+   * absent entirely at `none`: the attribute is not set, so neither of the two
+   * blocks below matches and the pseudo-element is never generated.
+   *
+   * ── Why it is drawn on the tab and not on `.tab-background` ───────────────
+   *
+   * Zen declares `overflow: hidden` on `.tab-background` (vertical-tabs.css), so
+   * a glow drawn there is clipped to exactly the box it is supposed to escape.
+   * The tab becomes an `overflow: clip` box with an `overflow-clip-margin`,
+   * which is the same clipping with a dial on it — so the glow goes on the tab
+   * and the dial is opened exactly far enough to let it out.
+   *
+   * `z-index: -1` and no stacking context of Trance's own: the tab is already
+   * `position: relative` (Zen), so the pseudo-element lands behind the tab's
+   * in-flow content — the fill, the favicon and the label — and in front of the
+   * chrome behind it, which is where a glow belongs. Nothing else in the tab
+   * needs a stacking order for that to hold.
+   *
+   * ── Two things that were wrong about where it landed ──────────────────────
+   *
+   *   1. It escaped the tab strip. The tab's `overflow-clip-margin` is opened
+   *      to the spread so the glow can leave the tab's own box, and there
+   *      was nothing further out to stop it: on a selected tab near the top or
+   *      the bottom of the list the glow spilled over the essentials grid, over
+   *      the pinned separator, and out of the sidebar entirely. `overflow: clip`
+   *      on the tab container is the outer bound — the glow may leave its tab,
+   *      it may not leave the list. `overflow-clip-margin` there is zero on
+   *      purpose: the container *is* the boundary being asked for.
+   *   2. It went under the neighbouring rows. Every tab is its own
+   *      `position: relative` box at the same stacking order, so a glow drawn
+   *      at `z-index: -1` inside tab N is painted before tab N+1's background
+   *      and the part of it that reaches the row below was covered by that
+   *      row. Raising the *tab* — not the pseudo-element — fixes it in the only
+   *      place it can be fixed: the two boxes are siblings, so the order between
+   *      them is decided between them, and the pseudo-element keeps its
+   *      `z-index: -1` inside its own tab so it stays behind its own label.
+   */
+
+  &:is([trance-tabstrip-glow="theme"], [trance-tabstrip-glow="icon"]) {
+    & #tabbrowser-tabs {
+      overflow: clip;
+      overflow-clip-margin: 0;
     }
 
-    & .tab-group-container > .zen-tab-group-start {
-      position: absolute;
-      inset-block-start: 0;
-      /* Zen indents container children by `--zen-folder-indent` with
-       * `!important`, and that margin applies to this absolutely-positioned box
-       * too. Pulling back half the indent lands the trunk in the middle of the
-       * gutter the indent was already reserving, rather than under the rows. */
-      inset-inline-start: calc(var(--zen-folder-indent, var(--trance-gap-lg)) / -2);
-      /* Stop half a row short so the trunk ends at the last child's arm instead
-       * of running past it. The original mod measures the last row to do this;
-       * a row is `--tab-min-height` tall, so the measurement is unnecessary. */
-      inset-block-end: calc(var(--tab-min-height) / 2);
-      width: var(--trance-connector-width);
-      background-color: var(--trance-connector-color);
-      pointer-events: none;
+    & .tabbrowser-tab[visuallyselected] {
+      /* The clip margin only works on a clipping box. Zen does not declare
+         one on tabs, so the old margin was inert and the glow stayed inside
+         the selected row. */
+      overflow: clip;
+      overflow-clip-margin: var(--trance-tab-glow-spread);
+      /* Above its neighbours, so the part of the glow that reaches past the
+         row is not painted over by the row it reaches into. */
+      z-index: 2;
     }
 
-    & .tab-group-container > :is(tab, zen-folder, tab-group) {
-      position: relative;
-    }
+    /* trance-specificity: two attributes on the root, one class and one
+       attribute on the tab. The attribute is the state the whole feature is
+       about, and the class is what separates a tab from the folder rows and
+       group labels that share its container.
 
-    & .tab-group-container > :is(tab, zen-folder, tab-group)::after {
+       ── Why `::after` and not `::before` ──────────────────────────────────
+
+       zen-folders.css carries `zen-folder > .tab-group-container > tab::before
+       { background: none !important }`. A glow drawn into `::before` is
+       therefore erased on exactly the tabs that live inside a folder, and
+       nowhere else — which is "tab glow does not work in folders" in one
+       declaration, in a sheet that is not this one. Trance may not answer an
+       `!important` with one of its own (TRANCE.md §6.2 rule 1), and it does not
+       need to: `tab::after` is unclaimed by Firefox and by Zen alike, so moving
+       the glow one pseudo-element over gives it back its own surface. */
+    & .tabbrowser-tab[visuallyselected]::after {
       content: "";
       position: absolute;
-      inset-block-start: 50%;
-      inset-inline-start: calc(var(--zen-folder-indent, var(--trance-gap-lg)) / -2);
-      width: calc(var(--zen-folder-indent, var(--trance-gap-lg)) / 2);
-      height: var(--trance-connector-width);
-      background-color: var(--trance-connector-color);
-      border-start-start-radius: var(--trance-connector-radius);
+      z-index: -1;
+      /* Out past the top and the two sides, flush along the bottom: the tab
+         sits on the row below it, and a glow that reached under the tab would
+         read as the gap between two rows lighting up rather than as this row
+         being the active one. */
+      inset: calc(-1 * var(--trance-tab-glow-spread))
+        calc(-1 * var(--trance-tab-glow-spread)) 0;
+      /* A dome rather than a pill: the top corners are half the box wide and
+         the whole box tall, so the outline is one continuous half-ellipse rather
+         than two arcs with a straight run between them. */
+      border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+      opacity: var(--trance-tab-glow-alpha);
       pointer-events: none;
     }
+  }
+
+  /* The space's own accent, lifted until it is visible against the chrome —
+     see `--trance-accent-vivid`. The gradient is anchored at the bottom centre
+     so the brightest part of the glow is where the tab is. */
+  &[trance-tabstrip-glow="theme"] .tabbrowser-tab[visuallyselected]::after {
+    background-image: radial-gradient(
+      ellipse at 50% 100%,
+      var(--trance-accent-vivid),
+      transparent 70%
+    );
+  }
+
+  /* The tab's own colour: the dominant hue of its favicon, drawn as exactly the
+     shape `theme` draws above. `TranceTabStrip` samples the icon once per
+     favicon and writes the result onto the selected tab; a tab whose icon has
+     not been read yet — and every tab in `theme` mode — resolves the token's
+     own value, which is the accent, so there is never a frame with no colour.
+
+     It used to be the favicon *itself*, scaled to cover the box and put behind
+     a `blur()` as wide as the spread. That was wrong twice. A blur wide enough
+     to hide a 16px picture does not reveal the icon's colour, it reveals the
+     average of the icon and the transparent space around it — which for most
+     favicons is a washed-out grey. And a `filter` on the element re-runs
+     whenever the element is repainted, which for a tab means every hover, every
+     label change and every progress tick, so the cheap-sounding "one 16px
+     image" was a Gaussian pass on the busiest element in the sidebar. Sampling
+     is once, cached by favicon URL, and produces the number a person means when
+     they say "the colour of that site" (ADR-047). */
+  &[trance-tabstrip-glow="icon"] .tabbrowser-tab[visuallyselected]::after {
+    background-image: radial-gradient(
+      ellipse at 50% 100%,
+      var(--trance-tab-glow-color),
+      transparent 70%
+    );
+  }
+
+  /* ── Essentials ───────────────────────────────────────────────────────────
+   *
+   * Zen's essentials grid uses one `gap` for both axes. The icons are square and
+   * the grid is at most four columns wide, so the horizontal gap is the one that
+   * decides whether the row reads as a group of related things or as four
+   * unrelated buttons; the vertical one is separating whole rows and wants to
+   * stay where it is.
+   *
+   * `column-gap` alone, therefore, and one step down the scale rather than a
+   * number of this rule's own.
+   *
+   * The grid also carries the shelf colour. It reads as a shelf now precisely
+   * because the tab list below it paints nothing: the scheme's own end, opaque,
+   * and the inverse of the selected tab, so the two loudest things in the
+   * sidebar can never be mistaken for one another.
+   *
+   * `--zen-toolbar-element-bg` is the variable Zen's own essentials rules read
+   * (vertical-tabs.css), so this is one declaration rather than a rule per
+   * state — and every state Zen draws that Trance has no opinion about (hover,
+   * drag, multiselect, the selected essential's own lighter veil) keeps working,
+   * because none of them is being replaced.
+   */
+  & .zen-essentials-container {
+    column-gap: var(--trance-gap-xs);
+    --zen-toolbar-element-bg: var(--trance-essentials-bg);
   }
 
   /* ── Folder colour (Advanced Tab Groups) ──────────────────────────────────
@@ -182,19 +406,66 @@
    *      strength — `--trance-sticky-bg` — not a translucent veil, and it must
    *      not depend on a token another feature owns.
    *   2. It applied whenever the sidebar was expanded, including when the
-   *      section is empty. Zen marks that case with `hide-separator`, at which
-   *      point the section collapses to nothing but still painted a band. There
-   *      is nothing to keep visible while scrolling when there are no pinned
-   *      tabs, so the treatment simply does not apply.
+   *      section is empty. `[hide-separator]` was the wrong test for that: Zen
+   *      only sets it in some of the empty cases, so a fresh profile with no
+   *      pinned tabs still got a 22px slab under the space name — a section
+   *      containing nothing but its own separator, painted as if it held
+   *      something. `:has(tab)` asks the question the rule actually means. An
+   *      occluder with nothing to occlude is a stripe, not a feature.
+   *   3. It painted whenever there *were* pinned tabs, which is not the same
+   *      question as whether anything is passing underneath them. With a short
+   *      tab list — every fresh profile, and most windows most of the time —
+   *      the list does not scroll at all, so the slab was permanent: a grey
+   *      block sitting behind the pinned rows, which is what a pinned *folder*
+   *      shows as its own background because a folder paints none of its own.
+   *      That is the whole of the "folders have a grey background" report, and
+   *      the switch that turned it on was this one.
+   *
+   *      Sticky positioning is free and stays unconditional; the *paint* is
+   *      what the two attributes below gate. `[overflowing]` and
+   *      `[scrolledtostart]` are the arrowscrollbox's own — it maintains both
+   *      already, for its scroll buttons — so between them they say exactly
+   *      "there is content, and some of it is above the fold". Nothing to
+   *      occlude, nothing painted.
    */
 
   &[trance-tabstrip-pins-sticky="true"][zen-sidebar-expanded] {
-    & .zen-workspace-pinned-tabs-section:not([hide-separator]) {
+    & .zen-workspace-pinned-tabs-section:has(tab):not([hide-separator]) {
       position: sticky;
       inset-block-start: 0;
       z-index: 1;
+    }
+
+    /* trance-specificity: four of these five are the test itself — the
+       scrollbox, whether it scrolls, whether it is at the top, and whether the
+       section holds anything. Shortening the selector would mean dropping one
+       of the conditions, and each one is a case where the slab must not paint. */
+    & .workspace-arrowscrollbox[overflowing]:not([scrolledtostart])
+      .zen-workspace-pinned-tabs-section:has(tab) {
       background-color: var(--trance-sticky-bg);
     }
+  }
+
+  /* ── The pinned separator's "Clear" button ────────────────────────────────
+   *
+   * The dart beside the word. Zen draws the button as an icon and a label and
+   * then hides the icon unless `can-close="true"`, which `ZenSpaceManager` only
+   * sets when *every* unpinned tab in the space is closable — so the moment one
+   * of them is the selected tab, an essential or a tab in a folder, the arrow
+   * disappears and the button is a word floating on a hairline with nothing to
+   * say what it does.
+   *
+   * The attribute still means something and is left alone: it is what makes the
+   * button do nothing on a space it cannot clear. What it should not do is take
+   * the glyph away, because the glyph is the only part of that control that is
+   * an affordance rather than a noun.
+   *
+   * trance-specificity: two attributes and two classes against Zen's class,
+   * negation and class — one more than it, which is what it takes to answer a
+   * `display: none` in a sheet that is not this one.
+   */
+  & .zen-workspace-close-unpinned-tabs-button .toolbarbutton-icon {
+    display: revert;
   }
 
   /* ── Unloaded tabs (Unloaded Tabs, and SuperPins' competing knobs) ─────────
@@ -211,6 +482,25 @@
 
     & .tabbrowser-tab:is([pending], [discarded]) .tab-icon-image {
       filter: saturate(var(--trance-tab-unloaded-saturation));
+    }
+
+    /* And the essential's tile with it.
+     *
+     * An essential is the one tab in the sidebar whose background is a solid
+     * shelf colour rather than nothing, and the two declarations above could
+     * not reach it: `opacity` fades the whole row towards what is behind it,
+     * and what is behind an essential is dark chrome, so an opaque black tile
+     * at 55% over dark chrome is still a black tile. The tab dimmed and its
+     * background did not, which is "unloading an essential tab should also mute
+     * the background".
+     *
+     * `--zen-toolbar-element-bg` is the variable Zen's own essentials rules
+     * read, so re-declaring it on the tab mutes every state Zen paints from it
+     * at once rather than a rule per state — and the muted value is the shelf
+     * colour mixed by the same slider that dims the row, so there is one number
+     * deciding how far an unloaded tab recedes and not two. */
+    & .tabbrowser-tab[zen-essential]:is([pending], [discarded]) {
+      --zen-toolbar-element-bg: var(--trance-essentials-bg-unloaded);
     }
   }
 }

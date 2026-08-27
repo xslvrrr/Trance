@@ -8,8 +8,18 @@
 
 ["browser_trance_feedback.js"]
 
+["browser_trance_firstrun.js"]
+
 ["browser_trance_foundation.js"]
+
+["browser_trance_onboarding.js"]
+
+["browser_trance_perf.js"]
+
+["browser_trance_settings.js"]
 
 ["browser_trance_surfaces.js"]
 
 ["browser_trance_tabstrip.js"]
+
+["browser_trance_theme.js"]

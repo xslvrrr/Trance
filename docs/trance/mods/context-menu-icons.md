@@ -1,5 +1,11 @@
 # Context Menu Icons — investigation
 
+> **Withdrawn (ADR-039).** Everything below describes the icon packs as they
+> were built in Phase 5. They are no longer in the tree: Trance ships no icon
+> pack, `trance.chrome.icons.{enabled,pack,size,macos-emulated-menus}` are gone,
+> and the only surviving piece of the cluster is `trance.chrome.icons.scale`.
+> Kept as the record of what was built and why it was removed.
+
 | | |
 |---|---|
 | **Mod** | Context Menu Icons (CMI) |
@@ -88,7 +94,7 @@
 - **Scheduler use:** none
 - **Observer use:** none — `list-style-image` is a style rule; the style system
   already watches the tree
-- **New tokens:** `--trance-menu-icon-size`, `--trance-menu-icon-opacity`
+- **New tokens:** `--trance-menu-icon-size`, `--trance-icon-fill-opacity`
 
 Two decisions worth recording:
 
