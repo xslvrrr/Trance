@@ -2697,11 +2697,66 @@ the band unchanged. Ordinary hysteresis: hard to trip, easy to hold. The state i
 attribute rather than kept in a field, so the CSS and the tracker cannot disagree about which
 threshold applies.
 
-In a collapsed sidebar — `:root:not([zen-sidebar-expanded="true"])`, Zen's own flag, so it covers the
-compact-mode toggle and a splitter drag alike — both are simply shown.
+In a collapsed sidebar both are simply shown.
+
+*Corrected the same day:* the first version of this named only
+`:root:not([zen-sidebar-expanded="true"])` and claimed it covered "the compact-mode toggle and a
+splitter drag alike". It does not. Zen has two ways of being collapsed and they are different
+states: `zen-sidebar-expanded` goes false for the narrow rail, where the sidebar is still on screen
+at icon width, while `zen-compact-mode` is what the collapse toggle itself sets and takes the
+sidebar off-screen entirely — with the rail flag left `true` throughout. So the rule missed the
+mode the button it was about is named after. It now matches
+`:is([zen-compact-mode="true"], :not([zen-sidebar-expanded="true"]))`.
 
 **Consequences:**
 - The reveal is still one `mousemove` doing one rect comparison, attached only while the pointer is
   in the sidebar and only while the sub-feature is on.
 - A collapsed sidebar pays no reveal cost at all: the rules that hide the buttons stop applying, so
   there is no animation to run and no margin to collapse.
+
+---
+
+## ADR-058 — The staged `chrome.manifest` is called something else inside the app
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+ADR-055 got Sine into the package and it still did not run. The `.dmg` contained `config.js`, the
+`trance-cosine/` payload and the engine; a fresh profile was seeded with `chrome/JS`,
+`chrome/sine-mods` and `chrome/utils`; onboarding's mod-manager page reported the engine version
+correctly. And Sine was nowhere in Settings, with nothing in the console to say why.
+
+`chrome/utils/` in the seeded profile had `fs.sys.mjs`, `uc_api.sys.mjs`, `utils.sys.mjs` — and no
+`chrome.manifest`. `config.js` registers that manifest and then imports
+`chrome://userscripts/content/sine.sys.mjs`; the whole block is guarded by `cmanifest.exists()`, so
+with the manifest gone it did nothing at all, silently and by design.
+
+The manifest was in `dist/bin/trance-cosine/utils/` and absent from the packaged app, because
+`mach package` treats **any** file named `chrome.manifest` as a chrome manifest: `SimpleManifestSink.add`
+routes it to the packager's own registry rather than copying it through. Trance's copy is not a
+manifest for *this* application — it is data, staged to be handed to a profile later — but nothing in
+the name says so.
+
+**Decision:** stage it as `chrome.manifest.in`, and have `config.js` rename it the moment it lands
+in a profile. The provisioner renames only the *staged* copy; the one it writes straight into a
+development profile keeps its real name, because nothing scans a profile for manifests.
+
+**Consequences:**
+- Third packaging bug in two days with the same shape: a file was in the build, was not in the
+  package, and every check had been run against the build. The three together are why TRANCE.md's
+  Phase 12 now says every claim about what Trance ships has to be asserted against the packaged
+  artefact.
+- The failure was silent because `config.js` guards on `exists()`, which is right for a browser —
+  a missing bootloader must not throw before the UI — and wrong for a build check. The verification
+  that catches this class is "launch the packaged app against a fresh profile and look at what it
+  seeded", which is now what was done.
+- `chrome.manifest.in` is not a preprocessor input despite the extension. The name was chosen
+  because the packager ignores it, and that is the whole reason.
+- `--uninstall` now cleans both trees rather than the one it was pointed at. `mach build` copies
+  `dist/bin` into `dist/Trance.app`, so provisioning for packaging reaches the development app on the
+  next build whether or not that was intended — and `mach test` launches the `.app`. Cleaning only
+  `dist/bin` left autoconfig behind there and the entire mochitest suite died on "Timed out waiting
+  for connection on 127.0.0.1:2828", which is the failure `trance-cosine.py`'s docstring has warned
+  about since Phase 7 arriving from a direction it did not cover.

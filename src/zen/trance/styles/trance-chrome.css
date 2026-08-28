@@ -288,10 +288,13 @@
      * be hunted for — and the collapse toggle is the one control that gets you
      * *out* of the mode, which is the worst thing to hide inside it.
      *
-     * `zen-sidebar-expanded` is Zen's own flag for the expanded sidebar, so
-     * "not expanded" is collapsed however it got that way — the compact-mode
-     * toggle or a drag of the splitter. */
-    &:not([zen-sidebar-expanded="true"]) {
+     * Two flags, because Zen has two ways of being collapsed and they are not
+     * the same state. `zen-sidebar-expanded` is off for the narrow rail — the
+     * sidebar is still there, just icons wide. `zen-compact-mode` is what the
+     * collapse toggle itself sets, and it takes the sidebar off-screen
+     * entirely; the rail flag stays `true` throughout it, which is why naming
+     * only the rail missed the mode the button is named after. */
+    &:is([zen-compact-mode="true"], :not([zen-sidebar-expanded="true"])) {
       & #zen-sidebar-top-buttons .titlebar-buttonbox-container,
       & #zen-toggle-compact-mode {
         opacity: 1;

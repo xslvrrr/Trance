@@ -150,10 +150,23 @@
   background-color: var(--trance-surface-bg);
 }
 
+/* White, not the accent.
+ *
+ * The accent is a `color-mix` built for chrome furniture that sits *on* the
+ * frosted surface, and at button size against the takeover's dark backdrop it
+ * read as muted rather than as the one thing on the screen to press. The flow
+ * has exactly one primary control per page and it should look like it. White is
+ * fixed rather than themed for the same reason the takeover's backdrop is: the
+ * page behind it is Trance's own dark surface in both colour schemes, so
+ * `light-dark()` here would be answering a question the screen does not ask. */
 .trance-onboarding-button.primary {
   border-color: transparent;
-  background-color: var(--trance-accent-vivid);
-  color: var(--trance-fg-on-accent);
+  background-color: var(--trance-onboarding-primary-bg);
+  color: var(--trance-onboarding-primary-fg);
+}
+
+.trance-onboarding-button.primary:hover {
+  background-color: var(--trance-onboarding-primary-bg-hover);
 }
 
 /* The import page's confirm, before a profile has been chosen. It stays on the
@@ -170,7 +183,7 @@
 }
 
 .trance-onboarding-button.primary[disabled]:hover {
-  background-color: var(--trance-accent-vivid);
+  background-color: var(--trance-onboarding-primary-bg);
 }
 
 .trance-onboarding-button[hidden] {

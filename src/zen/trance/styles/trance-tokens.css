@@ -229,6 +229,19 @@
    * no alpha to inherit from a surface. */
   --trance-fg-on-accent: light-dark(#ffffff, #101014);
 
+  /* The onboarding flow's one primary button per page.
+   *
+   * White rather than the accent, and fixed rather than themed. The accent is a
+   * `color-mix` tuned for chrome furniture sitting *on* the frosted surface; at
+   * button size against the takeover's backdrop it read as muted rather than as
+   * the one thing on screen to press. And the takeover paints over Trance's own
+   * dark chrome in both colour schemes, so `light-dark()` here would answer a
+   * question the screen never asks — unlike `--trance-fg-on-accent` above,
+   * which sits on a fill that really does change with the theme. */
+  --trance-onboarding-primary-bg: #ffffff;
+  --trance-onboarding-primary-bg-hover: #e8e8ec;
+  --trance-onboarding-primary-fg: #101014;
+
   /* ---- Motion and feedback (Phase 6) ------------------------------------- */
   /* Consumed only by trance-feedback.css.
    *

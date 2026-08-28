@@ -1854,9 +1854,19 @@ file being in the package.* `policies.json` was in `dist/bin` and absent from th
 `.app` that `./mach run` launches rather than the `dist/bin` the packager walks (ADR-055). Both were
 invisible to `npm start`, which is the only way either had ever been exercised.
 
+Then a third, found in 0.1.1 the same day (ADR-058). Sine *was* in that package and still did not
+run: `mach package` treats any file named `chrome.manifest` as a chrome manifest and absorbs it into
+its own registry rather than copying it, so the staged `trance-cosine/utils/chrome.manifest`
+vanished. `config.js` guards its whole load path on that file existing, so a seeded profile got a
+complete engine and nothing to start it — silently. It is staged as `chrome.manifest.in` now and
+renamed on the way into a profile.
+
 The standing conclusion for the rest of this phase: **anything Trance claims to ship has to be
-asserted against the packaged artefact**, not against the development build. That assertion belongs
-in the CI matrix above, and until the matrix exists it is a manual step on every release.
+asserted against the packaged artefact**, not against the development build — and for anything with
+a runtime effect, asserted by *running* that artefact against a fresh profile rather than by looking
+at the files in it. All three of these were invisible to `npm start`, and the third was invisible to
+a file listing as well. That assertion belongs in the CI matrix above, and until the matrix exists it
+is a manual step on every release.
 
 `npm run package` now runs `npm run provision` first, so packaging needs the network. That is a real
 cost, taken deliberately: Sine is not vendored (§7), and a package that silently lacks half of what
