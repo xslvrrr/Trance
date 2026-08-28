@@ -73,6 +73,22 @@ const TOPBUTTONS_SLOP = 2;
 const TOPBUTTONS_BAND = 8;
 
 /**
+ * How much of that band actually *opens* the strip.
+ *
+ * The band was one region doing two jobs, and they want different sizes. To
+ * keep the buttons up it should be generous — a pointer travelling towards a
+ * window control should not lose them on the way. To open them in the first
+ * place it should be small, because the whole strip plus a gap of grace spans
+ * the top of the sidebar, and crossing it on the way to anything else revealed
+ * three buttons and shifted the tab list down.
+ *
+ * So the open threshold is 30% of the keep threshold, centred on the strip, and
+ * the keep threshold is unchanged. Standard hysteresis: hard to trip, easy to
+ * hold.
+ */
+const TOPBUTTONS_ENTER_FRACTION = 0.3;
+
+/**
  * The icon scale: a quarter smaller to a quarter larger, one percent at a time.
  *
  * 50–200% in steps of 25 was the previous range and it was the wrong shape for
@@ -321,12 +337,26 @@ export class TranceChrome extends TranceFeature {
     }
     const rect =
       this.context.window.windowUtils.getBoundsWithoutFlushing(strip);
-    const inside =
-      !!rect.height &&
-      point.y <= rect.bottom + TOPBUTTONS_BAND &&
-      point.y >= rect.top - TOPBUTTONS_BAND;
     const root = this.context.document.documentElement;
-    if (inside) {
+    if (!rect.height) {
+      root.removeAttribute(ATTR_TOPBUTTONS_NEAR);
+      return;
+    }
+
+    // Two thresholds, and which one applies depends on where the strip already
+    // is. Reading the attribute back rather than keeping a field: it is the
+    // same state, and one owner for it means the CSS and this can never
+    // disagree about whether the buttons are up.
+    let upper = rect.top - TOPBUTTONS_BAND;
+    let lower = rect.bottom + TOPBUTTONS_BAND;
+    if (!root.hasAttribute(ATTR_TOPBUTTONS_NEAR)) {
+      const centre = (rect.top + rect.bottom) / 2;
+      const half = ((lower - upper) * TOPBUTTONS_ENTER_FRACTION) / 2;
+      upper = centre - half;
+      lower = centre + half;
+    }
+
+    if (point.y >= upper && point.y <= lower) {
       root.setAttribute(ATTR_TOPBUTTONS_NEAR, "true");
     } else {
       root.removeAttribute(ATTR_TOPBUTTONS_NEAR);

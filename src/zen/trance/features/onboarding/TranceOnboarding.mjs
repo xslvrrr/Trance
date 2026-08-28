@@ -73,6 +73,9 @@ const ATTR_STAGE = "trance-onboarding-stage";
 
 const ROOT_ID = "trance-onboarding";
 
+/** The import page's confirm button, which is the one button with a state. */
+const BUTTON_IMPORT_ID = "trance-onboarding-import-confirm";
+
 const ZEN_INTERNET_ID = "{91aa3897-2634-4a8a-9092-279db23a7689}";
 
 /**
@@ -694,6 +697,12 @@ export class TranceOnboarding extends TranceFeature {
       button.className = "trance-onboarding-button";
       if (index === 0) {
         button.classList.add("primary");
+      }
+      // Only the import page uses this, and only because its primary button is
+      // the one control on the flow whose enabled state depends on something
+      // the page's own `render` discovers.
+      if (spec.id) {
+        button.id = spec.id;
       }
       labelled.push(this.#label(button, spec.label));
       this.addListener(button, "click", async () => {
@@ -1521,6 +1530,19 @@ export class TranceOnboarding extends TranceFeature {
         { l10n: "zen-welcome-import-description-2" },
       ],
       buttons: [
+        // The confirm. Before this existed the page had two buttons — "import
+        // from another browser", which opens a wizard and stays put, and
+        // "skip" — so the only way to leave was the one labelled *skip*, and
+        // leaving is what committed the Zen import. Choosing a profile and
+        // pressing "skip" imported it; that is not a confirmation, it is a
+        // trapdoor.
+        //
+        // Hidden when there is no Zen to import from, because a disabled
+        // button explains nothing to somebody who has never run Zen.
+        {
+          id: BUTTON_IMPORT_ID,
+          label: { text: "Import" },
+        },
         {
           label: { l10n: "zen-welcome-import-button" },
           onClick: () => {
@@ -1531,7 +1553,15 @@ export class TranceOnboarding extends TranceFeature {
             return false;
           },
         },
-        { label: { l10n: "zen-welcome-skip-button" } },
+        {
+          label: { l10n: "zen-welcome-skip-button" },
+          onClick: () => {
+            // Skip means skip. Whatever is selected above, leaving by this
+            // button imports nothing.
+            this.#answers.importFrom = "";
+            return true;
+          },
+        },
       ],
       render: container => this.#renderImport(container),
       commit: async () => {
@@ -1539,6 +1569,29 @@ export class TranceOnboarding extends TranceFeature {
         await this.#commitDefaultBrowser();
       },
     };
+  }
+
+  /**
+   * Enables the confirm button, or takes it off the page entirely.
+   *
+   * Called once when the page renders and again on every change of the choice
+   * group, because "is there something to import" is not known until the disk
+   * walk finishes and "has one been chosen" changes under the pointer.
+   */
+  #syncImportButton() {
+    const button = this.#element(BUTTON_IMPORT_ID);
+    if (!button) {
+      return;
+    }
+    const offered = !!this.#zenProfiles?.length;
+    button.hidden = !offered;
+    button.disabled = !this.#answers.importFrom;
+    // `.primary` is the first button's by position, and the first button is
+    // this one. With nothing to import it is not on the page at all, so the
+    // emphasis has to move to whatever is now first.
+    const wizard = button.nextElementSibling;
+    wizard?.classList.toggle("primary", !offered);
+    button.classList.toggle("primary", offered);
   }
 
   /**
@@ -1578,6 +1631,7 @@ export class TranceOnboarding extends TranceFeature {
     if (this.#zenProfiles.length) {
       this.#renderZenProfiles(container);
     }
+    this.#syncImportButton();
 
     const group = doc.createElement("div");
     group.className = "trance-onboarding-choices";
@@ -1655,6 +1709,7 @@ export class TranceOnboarding extends TranceFeature {
     this.#choiceGroup(container, options, this.#answers.importFrom, value => {
       this.#answers.importFrom = value;
       tabsToggle.hidden = !value;
+      this.#syncImportButton();
     });
     container.appendChild(tabsToggle);
   }

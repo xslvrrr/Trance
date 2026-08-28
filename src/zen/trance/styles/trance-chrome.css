@@ -278,6 +278,30 @@
     & #zen-sidebar-top-buttons:focus-within {
       margin-block-end: 0;
     }
+
+    /* ── Collapsed sidebar: always shown ──────────────────────────────────
+     *
+     * The reveal exists to buy vertical space back for the tab list, and a
+     * collapsed sidebar is not spending any: it is a rail of icons, the strip
+     * is the top of it, and there is no list being pushed down. What the hover
+     * bought there was a rail whose window buttons and collapse toggle had to
+     * be hunted for — and the collapse toggle is the one control that gets you
+     * *out* of the mode, which is the worst thing to hide inside it.
+     *
+     * `zen-sidebar-expanded` is Zen's own flag for the expanded sidebar, so
+     * "not expanded" is collapsed however it got that way — the compact-mode
+     * toggle or a drag of the splitter. */
+    &:not([zen-sidebar-expanded="true"]) {
+      & #zen-sidebar-top-buttons .titlebar-buttonbox-container,
+      & #zen-toggle-compact-mode {
+        opacity: 1;
+        transform: none;
+      }
+
+      & #zen-sidebar-top-buttons {
+        margin-block-end: 0;
+      }
+    }
   }
 
   /* ── Menus and panels ────────────────────────────────────────────────────

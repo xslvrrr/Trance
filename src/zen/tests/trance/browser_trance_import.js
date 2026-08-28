@@ -319,3 +319,142 @@ add_task(async function a_profile_that_cannot_be_read_stages_nothing() {
     "and leaves no file behind either"
   );
 });
+
+/* ── The confirm button ──────────────────────────────────────────────────────
+ *
+ * The regression this exists to stop coming back: the import page used to have
+ * two buttons, "import from another browser" — which opens a wizard and stays
+ * put — and "skip". So the only button that left the page was the one labelled
+ * *skip*, and leaving the page is what committed the Zen import. Choosing a
+ * profile and pressing skip imported it.
+ *
+ * The assertions below hold on a machine with no Zen installed, which is what a
+ * CI worker is: the confirm button is on the page either way, and skipping must
+ * stage nothing either way.
+ */
+
+const ONBOARDING_ROOT_ID = "trance-onboarding";
+const CONFIRM_ID = "trance-onboarding-import-confirm";
+
+function onboarding() {
+  return window.gTrance.features.find(f => f.name === "Onboarding");
+}
+
+/** Clicks the primary button until the import page is up, or gives up. */
+async function reachImportPage() {
+  Services.prefs.setBoolPref("trance.onboarding.completed", false);
+  onboarding().start();
+  const root = document.getElementById(ONBOARDING_ROOT_ID);
+  if (!root) {
+    return null;
+  }
+  document.getElementById("trance-onboarding-start")?.click();
+  // The splash's button starts the first page build, which is async. Until it
+  // lands the button row is empty and there is nothing to click.
+  await TestUtils.waitForCondition(
+    () =>
+      root.querySelectorAll(
+        "#trance-onboarding-buttons .trance-onboarding-button"
+      ).length,
+    "the first page is up"
+  ).catch(() => {});
+
+  // Ten pages, so ten clicks is more than the flow can need. Each one waits for
+  // the page to actually change rather than for a duration — the flow commits,
+  // fades out, builds and fades in, and none of that is a fixed length.
+  for (let i = 0; i < 30; i++) {
+    const confirm = document.getElementById(CONFIRM_ID);
+    if (confirm) {
+      return confirm;
+    }
+    // The *last* button, not the primary one. Two pages before this one have a
+    // primary that deliberately does not advance — "Open Zen Internet" is the
+    // whole point of its page — so clicking the emphasised button ten times
+    // would sit on page five forever.
+    await TestUtils.waitForCondition(
+      () =>
+        root.querySelectorAll(
+          "#trance-onboarding-buttons .trance-onboarding-button"
+        ).length,
+      `page ${i} has buttons`
+    ).catch(() => {});
+    const row = [
+      ...root.querySelectorAll(
+        "#trance-onboarding-buttons .trance-onboarding-button"
+      ),
+    ];
+    const primary = row.at(-1);
+    if (!primary) {
+      info(`no buttons on page ${i}; giving up`);
+      return null;
+    }
+    // The copy, not the content pane: `#next` clears the pane on the way out
+    // and fills it on the way in, so an innerHTML comparison goes true during
+    // the fade — and a click that lands mid-transition is dropped by the
+    // flow's own re-entrancy guard, which is how ten clicks moved three pages.
+    const before = root
+      .querySelector("#trance-onboarding-copy")
+      ?.textContent?.trim();
+    primary.click();
+    await TestUtils.waitForCondition(
+      () => {
+        if (document.getElementById(CONFIRM_ID)) {
+          return true;
+        }
+        const now = root
+          .querySelector("#trance-onboarding-copy")
+          ?.textContent?.trim();
+        return (
+          now &&
+          now !== before &&
+          root.querySelectorAll(
+            "#trance-onboarding-buttons .trance-onboarding-button"
+          ).length
+        );
+      },
+      `page ${i} advanced`,
+      100,
+      50
+    ).catch(() => {});
+  }
+  return document.getElementById(CONFIRM_ID);
+}
+
+add_task(async function skipping_the_import_page_imports_nothing() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.onboarding.enabled", true]],
+  });
+
+  const confirm = await reachImportPage();
+  ok(confirm, "the import page has a confirm button of its own");
+
+  if (confirm) {
+    ok(
+      confirm.disabled,
+      "which is inert until a profile has actually been chosen"
+    );
+
+    const buttons = [
+      ...confirm.parentElement.querySelectorAll(".trance-onboarding-button"),
+    ];
+    const skip = buttons.at(-1);
+    isnot(skip, confirm, "skip is a different button from the confirm");
+
+    skip.click();
+    await TestUtils.waitForCondition(
+      () => !document.getElementById(CONFIRM_ID),
+      "skip leaves the import page"
+    ).catch(() => {});
+  }
+
+  Assert.ok(
+    !Services.prefs.getBoolPref(PREF_STAGED, false),
+    "and leaving by skip stages no import"
+  );
+  Assert.ok(!(await IOUtils.exists(STAGED_PATH)), "and writes no staging file");
+
+  Services.prefs.setBoolPref("trance.onboarding.enabled", false);
+  Services.prefs.clearUserPref("trance.onboarding.enabled");
+  Services.prefs.clearUserPref("trance.onboarding.completed");
+  await SpecialPowers.popPrefEnv();
+});

@@ -14,7 +14,7 @@ index 83e52b260c380b8a4fdcb9146c36a048adffba68..f55844c294bc0a0e648fd6fc09f63218
  #if defined(XP_WIN)
  @BINPATH@/@DLL_PREFIX@mozwer@DLL_SUFFIX@
  #endif
-@@ -469,6 +469,10 @@ bin/libfreebl_64int_3.so
+@@ -469,6 +469,25 @@ bin/libfreebl_64int_3.so
  @BINPATH@/desktop-launcher/desktop-launcher@BIN_SUFFIX@
  #endif
 
@@ -26,4 +26,19 @@ index 83e52b260c380b8a4fdcb9146c36a048adffba68..f55844c294bc0a0e648fd6fc09f63218
 +; build, so the guard has to go. ADR-052.
  @RESPATH@/distribution/*
 -#endif
++
++; The Sine mod manager, provisioned into dist/bin by scripts/trance-cosine.py
++; before packaging. Autoconfig reads config.js from the resource directory
++; before the UI exists, config-prefs.js is what turns that on, and
++; trance-cosine/ is the profile payload config.js seeds a new profile from.
++;
++; These are required, not optional: the packager treats a manifest line that
++; matches nothing as an error and fails the package. That is deliberate here.
++; `npm run package` provisions first, so the only way to reach this line with
++; nothing behind it is to call `surfer package` directly - and a Trance package
++; with no mod manager in it is the bug this entry exists to fix, so failing is
++; the right answer rather than shipping the same empty .dmg again. ADR-055.
++@RESPATH@/config.js
++@RESPATH@/defaults/pref/config-prefs.js
++@RESPATH@/trance-cosine/*
 +; <<< TRANCE

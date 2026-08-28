@@ -156,6 +156,27 @@
   color: var(--trance-fg-on-accent);
 }
 
+/* The import page's confirm, before a profile has been chosen. It stays on the
+ * page rather than appearing with the first selection: a button that materialises
+ * under the pointer is the same failure the top-button strip was rebuilt to
+ * avoid, and the greyed-out one is what tells you the choice above is a choice. */
+.trance-onboarding-button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.trance-onboarding-button[disabled]:hover {
+  background-color: var(--trance-surface-tint);
+}
+
+.trance-onboarding-button.primary[disabled]:hover {
+  background-color: var(--trance-accent-vivid);
+}
+
+.trance-onboarding-button[hidden] {
+  display: none;
+}
+
 /* ── Choice cards ────────────────────────────────────────────────────────── */
 
 .trance-onboarding-choices {

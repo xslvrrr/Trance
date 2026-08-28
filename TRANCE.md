@@ -1426,6 +1426,18 @@ better-new-tab-button,hide-extension-name,zen-custom-urlbar}.md`.
 - [x] `TranceChrome.mjs`, eleven prefs; `prefs/trance/chrome.yaml`; a **Chrome** section in
       `about:preferences#trance`
 - [x] Browser mochitests at `src/zen/tests/trance/browser_trance_chrome.js`
+- [x] The top-button strip's activation area, retuned (2026-08-28, ADR-057). One band was doing two
+      jobs at one size: generous enough to hold the buttons up while a pointer travelled towards
+      them, and therefore generous enough to open them on the way to anything else — crossing the
+      top of the sidebar revealed three buttons and shifted the whole tab list down. Opening now
+      takes 30% of the band, centred on the strip; keeping it open is the band unchanged. And a
+      collapsed sidebar shows both permanently: the reveal exists to give vertical space back to the
+      tab list, a rail has no list being pushed down, and the compact-mode toggle is the way *out*
+      of the mode — the worst control to hide inside it
+- [x] The address bar's exit animation, removed (2026-08-28, ADR-056). `#urlbar` is one element in
+      both states, so playing the search panel's entry backwards faded and blurred the address bar
+      that was staying on screen. Measured over Marionette at `opacity 0.217` / `blur(11.7px)` in
+      the frame after dismissal; `none` / `1` now
 
 **Three decisions worth recording:**
 
@@ -1835,6 +1847,21 @@ surfer's AUS step writes a distribution URL of
 `0.1.0` and not `v0.1.0`. No MAR is uploaded — updates are off by policy, and shipping the artefact
 would advertise an update path that does not exist.
 
+**What 0.1.0 taught, twice (2026-08-28).** It shipped with neither the extension policy nor the mod
+manager, for the same underlying reason both times: *a file being in the build is not the same as a
+file being in the package.* `policies.json` was in `dist/bin` and absent from the manifest
+(ADR-052); Sine was in the manifest's blind spot **and** provisioned into the wrong tree — the
+`.app` that `./mach run` launches rather than the `dist/bin` the packager walks (ADR-055). Both were
+invisible to `npm start`, which is the only way either had ever been exercised.
+
+The standing conclusion for the rest of this phase: **anything Trance claims to ship has to be
+asserted against the packaged artefact**, not against the development build. That assertion belongs
+in the CI matrix above, and until the matrix exists it is a manual step on every release.
+
+`npm run package` now runs `npm run provision` first, so packaging needs the network. That is a real
+cost, taken deliberately: Sine is not vendored (§7), and a package that silently lacks half of what
+the browser advertises is worse than one that refuses to build.
+
 **Acceptance:** a downloadable, installable, self-updating (or explicitly non-updating) Trance
 build on at least macOS arm64. *Met for macOS arm64 as of 0.1.0; the CI matrix, signing and the
 channel decision are still open.*
@@ -1877,8 +1904,13 @@ person sees is this flow.*
       sidebar object is built before any window exists and its setter is private, so an import
       cannot be applied to a running browser; onboarding restarts once at the end of the flow
 - [x] `prefs/trance/import.yaml`: `import.staged`, `import.source`
-- [x] `browser_trance_import.js` — 25 assertions over fixture profile directories, covering the
+- [x] `browser_trance_import.js` — 30 assertions over fixture profile directories, covering the
       three shapes `compatibility.ini` takes and the four ways a donor profile can be unreadable
+- [x] A confirm button on the import page (2026-08-28). The page shipped with two buttons — "import
+      from another browser", which opens a wizard and stays put, and "skip" — so the only button
+      that *left* the page was the one labelled skip, and leaving is what committed the import.
+      Choosing a Zen profile and pressing skip imported it. There is now an "Import" primary that is
+      inert until a profile has been chosen and hidden when no Zen is installed, and skip means skip
 
 **Acceptance:** a fresh profile runs Trance's flow rather than Zen's; every answer is a pref that is
 still reachable in Settings afterwards; turning the feature off restores Zen's welcome exactly;
@@ -1888,35 +1920,26 @@ name, with its spaces and folders arriving intact on the restart that follows.
 *Known gap: the five Trance pages are English. Trance has no locale pipeline of its own, and
 building one for ten strings is a Phase 12 decision — see §16.*
 
-*Open defect, found 2026-08-28 while running this suite: **every Trance build ships the twilight
-defaults**, which is the opposite of what ADR-006 and the channel page above assume.
-`tools/ffprefs/src/main.rs:321` resolves `@IS_TWILIGHT@` with*
+*Fixed 2026-08-28, ADR-054: **every Trance build had been shipping the twilight defaults**, which is
+the opposite of what ADR-006 and the channel page above assume. `tools/ffprefs` resolved
+`@IS_TWILIGHT@` as "the brand is not `release`", which is the same question as "the brand is
+twilight" only for a fork with exactly Zen's two brands. Trance's one brand is neither, so it fell
+on the twilight side, and the channel page had been writing `true` over a default that was already
+`true` since the day it was written. Touchpoint 26.*
 
-```rust
-return !content.contains("\"release\"");
-```
+*The reason it went unseen: **the suite had never been run whole.** The last time mochitests were
+run, five files existed and all 196 assertions passed. Phases 8 to 13 added six more without
+executing them. Running all eleven on 2026-08-28 gave **766 passed, 23 failed**; with ADR-054 and the
+import-page fixes it is **804 passed, 21 failed**.*
 
-*against `.surfer/dynamicConfig.brand.json`, whose contents are `"trance"`. Zen's two brands are
-`release` and `twilight`, so "not release" means twilight; Trance's one brand is neither, and falls
-on the twilight side of a test written for a fork with exactly two. `zen.view.context-menu.refresh`,
-`zen.theme.acrylic-elements` and `zen.theme.styled-status-panel` therefore default to `true` in
-every build, and `browser_trance_onboarding.js`'s `test_twilight_writes_and_stable_clears` fails on
-all three — the channel page writes `true` over a default that is already `true`, so no user value
-is created and "stable" has nothing to clear. The fix is one line and a new touchpoint in a tool
-Trance does not own; it changes three browser-wide defaults, so it is recorded here rather than
-taken in passing.*
-
-*And the reason it went unseen: **the suite has never been run whole.** The last time mochitests
-were run, five files existed and all 196 assertions passed. Phases 8 to 13 added six more files
-without executing them, and running all eleven on 2026-08-28 gives **766 passed, 23 failed**. The
-three above are the channel page's. The other twenty are spread across Phases 3 to 9 and are
-unexamined — the first-run panel's `popup is null` in three tasks, the app-menu mark's three, the
-theme translucency slider's two, edgeless's two, and one each in surfaces, tabstrip, chrome and
-settings. A separate run of `browser_trance_feedback.js` three times over shows a further four that
-fail every time, with the burst's bubble-count assertion migrating between two task names run to
-run — flaky in attribution, not in outcome. None of this is a regression: it is work that was
-committed without the tests that were written for it ever being executed, which is the same class of
-mistake as ADR-052's, found the same day and for the same reason.*
+*The twenty that remain are spread across Phases 3 to 9 and are still unexamined — the first-run
+panel's `popup is null` in three tasks, the app-menu mark's three, the theme translucency slider's
+two, edgeless's two, and one each in surfaces, tabstrip, chrome and settings. A separate run of
+`browser_trance_feedback.js` three times over shows four that fail every time, with the burst's
+bubble-count assertion migrating between two task names run to run — flaky in attribution, not in
+outcome. None is a regression: it is work that was committed without the tests written for it ever
+being executed, which is the same class of mistake as ADR-052's and ADR-055's, all three found the
+same day and for the same reason. **Clearing them is the next piece of work this plan owes.***
 
 ---
 

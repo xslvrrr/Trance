@@ -2528,3 +2528,180 @@ startup" is a few seconds away rather than a thing the user has to be told to do
   claim bookmarks that do not exist.
 - Detection is `detectIn(root)` rather than a private method, so the suite can point it at a fixture
   directory. A test that reads the real `~/Library/Application Support/zen` tests the machine.
+
+---
+
+## ADR-054 — `@IS_TWILIGHT@` asks whether the brand is twilight, not whether it is unlike release
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+Zen resolves the build-time constant `@IS_TWILIGHT@` in `tools/ffprefs`, from the brand surfer
+recorded in `.surfer/dynamicConfig.brand.json`:
+
+```rust
+return !content.contains("\"release\"");
+```
+
+Upstream ships exactly two brands, `release` and `twilight`, so "not release" and "twilight" are the
+same question there and the test is correct. ADR-006 reduced Trance to **one** brand, named neither
+of them. `"trance"` does not contain `"release"`, so every Trance build that has ever been made
+resolved the constant to *true* and shipped the twilight defaults.
+
+That is the opposite of what this project says about itself in three places.
+`prefs/trance/onboarding.yaml` describes the twilight-gated prefs as "resolved to the stable value
+with no way back"; ADR-051 built a whole onboarding page to offer twilight as an opt-in; and
+`TranceOnboarding.#applyChannel` clears the user branch for "stable" precisely so the *default* can
+be inherited — a default that was twilight the whole time. `browser_trance_onboarding.js`'s
+`test_twilight_writes_and_stable_clears` had been failing on all three prefs since the day it was
+written, because choosing twilight wrote `true` over a default that was already `true` and so
+created no user value at all.
+
+**Decision:** ask the question the constant is named after. Touchpoint 26, two lines in
+`tools/ffprefs/src/main.rs`.
+
+The unreadable-file fallback flips with it, from `true` to `false`. That path is reached when
+ffprefs runs before surfer has written the brand file, and "assume the pre-release feature set" is
+the wrong half of a guess to take by default in a browser whose stable channel is the product.
+
+**Consequences:**
+- `zen.view.context-menu.refresh`, `zen.theme.acrylic-elements` and `zen.view.*`'s twilight siblings
+  now default to `false`; `services.sync.engine.spaces` resolves to the locked `false` its stable
+  side declares. Confirmed by reading the generated `engine/browser/app/profile/zen.js`.
+- `zen.theme.styled-status-panel` is unchanged on macOS and only there, because `prefs/zen/theme.yaml`
+  declares it a second time under `defined(XP_MACOSX)` and that entry wins. This is the same
+  asymmetry `TWILIGHT_ONLY_PREFS` in `TranceOnboarding` already documents, arrived at from the other
+  end.
+- The onboarding channel page becomes a real switch rather than a no-op: "twilight" now writes a
+  user value over a `false` default, and "stable" has something to clear.
+- Anyone who has been running a Trance build has been running the twilight feature set. Turning it
+  on in onboarding is now a decision rather than a description.
+
+---
+
+## ADR-055 — Sine is provisioned into the tree the packager reads, and named in the manifest
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+ADR-018 ships the Sine mod manager preinstalled on its Cosine channel. `scripts/trance-cosine.py`
+fetches it and writes the autoconfig bootloader (`config.js`, `defaults/pref/config-prefs.js`) plus
+the staged profile payload (`trance-cosine/`) into the built browser.
+
+The 0.1.0 release contained none of it, and neither does any package built from this tree. Two
+independent reasons, and each alone was enough:
+
+1. **It provisioned the wrong tree.** On macOS the build assembles two copies of the browser:
+   `dist/Trance.app`, which `./mach run` launches, and `dist/bin`, which the packager walks.
+   `default_app()` returned the first. Every development build had Sine; no package ever could.
+2. **The manifest did not list it.** Even provisioned into `dist/bin`, `package-manifest.in` names
+   every file that enters the package, and none of these three were in it — the same failure as
+   ADR-052, found the same day and in the same file.
+
+**Decision:** fix both ends, and make the order impossible to get wrong.
+
+`trance-cosine.py` grows `--for-package`, which resolves `dist/bin` instead of the `.app` and no
+longer requires a `--profile` (it uses a scratch directory, because `install_engine` patches the
+engine in a profile before staging the patched copy). `npm run package` becomes
+`npm run provision && surfer package`.
+
+The three manifest entries are **required**, not globbed to tolerate absence. The packager treats a
+line matching nothing as an error and fails the package, and that is the wanted behaviour: the only
+way to reach them empty is to call `surfer package` directly, and a Trance package with no mod
+manager is exactly the bug this fixes. Failing loudly beats shipping the same empty `.dmg` twice.
+
+**Consequences:**
+- `npm run package` now needs the network, because provisioning fetches Sine from its own releases
+  exactly as its installer would. A build that cannot reach GitHub cannot be packaged. That is a real
+  cost and it is the smaller one: Sine is not vendored into this tree (TRANCE.md §7) and packaging a
+  browser that silently lacks half of what it advertises is worse.
+- The order is now **test, then package**. `config.js` is autoconfig — it runs with chrome privileges
+  before the UI in every profile including the throwaway one `mach test` builds, and Marionette never
+  comes up. `trance-cosine.py`'s own docstring has warned about this since Phase 7; it now applies to
+  `dist/bin` as well, which is the tree the harness launches.
+- `npm run provision` exists on its own for the same reason `npm run ffprefs` does: the composite
+  script should not be the only way to run half of it.
+
+---
+
+## ADR-056 — The address bar has no exit animation, because there is nothing leaving
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+`TranceFeedback.#animateSearch` watched `[breakout-extend]` on `#urlbar` and played an animation in
+both directions: on the way in, the search panel arrived from `scale(0.98) blur(4px) opacity(0)`; on
+the way out, it played the same keyframes backwards.
+
+The exit was wrong, and wrong in a way that reads as a bug in something else. `#urlbar` is **one
+element in both states** — the floating search panel *is* the address bar in the toolbar, wearing an
+extra attribute. So "animate the search panel out" fades and blurs a control that is not leaving the
+screen. Pressing Escape blurred the sidebar's address bar down to 20% opacity and then snapped it
+back when the animation ended.
+
+Measured rather than reasoned about, over Marionette, in the frame after the attribute is removed:
+
+| Element | Before | After |
+|---|---|---|
+| `#urlbar` | `blur(11.74px)`, `opacity 0.217` | `none`, `opacity 1` |
+| `#zen-tabbox-wrapper` | `blur(1.04px) brightness(0.979)` | `blur(1.57px) brightness(0.969)` |
+
+The page's own recede — the `filter` on `#zen-tabbox-wrapper` from ADR's urlbar dim/blur — was
+correct throughout and is untouched. The address bar is a sibling subtree of that element, so it was
+never the page effect leaking; it was a second animation nobody had looked at.
+
+**Decision:** animate the entry only. The cancel-running-animations pass still runs in both
+directions, because an entry still in flight when the bar is dismissed would otherwise finish
+against an element that has gone back to being a toolbar control and leave its `will-change` behind
+on it.
+
+**Consequences:**
+- Dismissing search is now Zen's own geometry animation and nothing else. Trance adds nothing to a
+  transition it does not own, which is the general rule this had quietly broken.
+- The entry keeps its gesture, because there the thing being animated is the thing that appeared.
+- The asymmetry is the point and is commented as such, so that "the exit is missing" reads as a
+  decision rather than an oversight.
+
+---
+
+## ADR-057 — The top-button strip opens on a third of the band that keeps it open
+
+**Date:** 2026-08-28
+**Status:** Accepted
+
+**Context:**
+
+ADR-015's reveal shows the window buttons and the compact-mode toggle while the pointer is in a band
+at the top of the sidebar — the strip's own height plus 8px of grace, tracked by `TranceChrome`
+because on macOS the platform's traffic lights are not Gecko's and `:hover` cannot see them.
+
+One region was doing two jobs with one size. Large enough to hold the buttons up while a pointer
+travels towards them, it was also large enough to open them on the way to anything else: crossing
+the top of the sidebar revealed three buttons and shifted the whole tab list down.
+
+And in a collapsed sidebar the reveal was buying nothing at all. It exists to give vertical space
+back to the tab list; a collapsed rail has no list being pushed down. What the hover cost there was
+a rail whose window buttons and collapse toggle had to be hunted for — including the toggle that is
+the way *out* of the mode.
+
+**Decision:** two thresholds and one exemption.
+
+Opening the strip needs the pointer inside 30% of the band, centred on the strip. Keeping it open is
+the band unchanged. Ordinary hysteresis: hard to trip, easy to hold. The state is read back off the
+attribute rather than kept in a field, so the CSS and the tracker cannot disagree about which
+threshold applies.
+
+In a collapsed sidebar — `:root:not([zen-sidebar-expanded="true"])`, Zen's own flag, so it covers the
+compact-mode toggle and a splitter drag alike — both are simply shown.
+
+**Consequences:**
+- The reveal is still one `mousemove` doing one rect comparison, attached only while the pointer is
+  in the sidebar and only while the sub-feature is on.
+- A collapsed sidebar pays no reveal cost at all: the rules that hide the buttons stop applying, so
+  there is no animation to run and no margin to collapse.

@@ -324,9 +324,24 @@ fn is_twilight_build() -> bool {
     dynamic_config_path.push(".surfer");
     dynamic_config_path.push("dynamicConfig.brand.json");
     if let Ok(content) = fs::read_to_string(&dynamic_config_path) {
-        return !content.contains("\"release\"");
+        // >>> TRANCE
+        // Ask whether the brand *is* twilight, not whether it is anything other
+        // than release. Upstream Zen ships exactly two brands, so "not release"
+        // and "twilight" are the same question there. Trance ships one, named
+        // neither of them (ADR-006), and fell on the twilight side of the test
+        // — so every Trance build resolved `@IS_TWILIGHT@` to true and shipped
+        // the twilight defaults the "Stable or Twilight" onboarding page exists
+        // to let a user opt *into*. ADR-054.
+        return content.contains("\"twilight\"");
+        // <<< TRANCE
     }
-    true
+    // >>> TRANCE
+    // And an unreadable brand file is not a twilight build either. This is
+    // reached when ffprefs runs before `surfer` has written the file at all,
+    // where "assume the pre-release feature set" is the wrong half of a guess
+    // to take by default.
+    false
+    // <<< TRANCE
 }
 
 fn get_env_values() -> HashMap<String, bool> {

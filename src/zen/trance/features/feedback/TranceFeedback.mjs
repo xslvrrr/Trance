@@ -804,6 +804,22 @@ export class TranceFeedback extends TranceFeature {
    * The address bar, settling — the same gesture with the scale the other side
    * of 1, so opening search reads as the opposite of changing tab rather than
    * as the same effect twice.
+   *
+   * ── Why there is no exit animation ───────────────────────────────────────
+   *
+   * There used to be: removing `[breakout-extend]` played the entry backwards,
+   * so the bar scaled up, blurred and faded to nothing. It looked wrong because
+   * it was wrong. `#urlbar` is one element in both states — the floating search
+   * panel *is* the toolbar's address bar, wearing a different attribute — so
+   * "animate the search panel out" fades a control that is not leaving. What
+   * the user sees is the address bar in the sidebar blurring away to 20% opacity
+   * every time they press Escape, and then snapping back when the animation
+   * ends.
+   *
+   * The entry keeps its animation because there the gesture is real: the panel
+   * arrives, and the thing being animated is the thing that appeared. On the way
+   * out the panel does not disappear, it *becomes* the toolbar bar, and Zen
+   * already animates that geometry itself. Trance's job there is to add nothing.
    */
   #animateSearch() {
     if (!Services.prefs.getBoolPref(PREF_ANIM_SEARCH, true)) {
@@ -813,28 +829,26 @@ export class TranceFeedback extends TranceFeature {
     if (!urlbar) {
       return;
     }
+    // Cancel unconditionally, including on the way out: an entry that is still
+    // running when the bar is dismissed would otherwise finish against an
+    // element that has gone back to being a toolbar control, and leave its
+    // `will-change` behind on it.
     for (const animation of urlbar.getAnimations()) {
       animation.cancel();
     }
+    if (!urlbar.hasAttribute("breakout-extend")) {
+      return;
+    }
     this.context.motion.animate(
       urlbar,
-      urlbar.hasAttribute("breakout-extend")
-        ? [
-            {
-              transform: `scale(${SEARCH_SCALE})`,
-              filter: `blur(${ARRIVAL_BLUR}px)`,
-              opacity: 0,
-            },
-            { transform: "none", filter: "blur(0px)", opacity: 1 },
-          ]
-        : [
-            { transform: "none", filter: "blur(0px)", opacity: 1 },
-            {
-              transform: `scale(${SEARCH_SCALE})`,
-              filter: `blur(${ARRIVAL_BLUR}px)`,
-              opacity: 0,
-            },
-          ],
+      [
+        {
+          transform: `scale(${SEARCH_SCALE})`,
+          filter: `blur(${ARRIVAL_BLUR}px)`,
+          opacity: 0,
+        },
+        { transform: "none", filter: "blur(0px)", opacity: 1 },
+      ],
       {
         duration: this.#durationOf("--trance-dur-arrival"),
         easing: this.#token("--trance-ease-standard"),

@@ -346,18 +346,34 @@ def resolve_app_root(app: Path) -> Path:
     return app
 
 
-def default_app() -> Path:
+def objdir_dist() -> Path:
     objdir = {
         ("Darwin", "arm64"): "obj-aarch64-apple-darwin",
         ("Darwin", "x86_64"): "obj-x86_64-apple-darwin",
     }.get((platform.system(), platform.machine()))
     root = Path(__file__).resolve().parent.parent / "engine"
     if objdir:
-        return root / objdir / "dist" / "Trance.app"
+        return root / objdir / "dist"
     matches = sorted(root.glob("obj-*/dist"))
     if not matches:
         raise SystemExit("could not find a built Trance; pass --app explicitly")
     return matches[0]
+
+
+def default_app() -> Path:
+    return objdir_dist() / "Trance.app"
+
+
+def package_app() -> Path:
+    """The tree `mach package` reads, which is not the one `npm start` runs.
+
+    On macOS the build assembles two copies of the same browser: `dist/Trance.app`,
+    which is what `./mach run` launches, and `dist/bin`, which is what the
+    packager walks to build the `.dmg`. Provisioning only ever touched the first,
+    so Sine was in every development build and in no release — the same shape of
+    bug as ADR-052, and found the same way.
+    """
+    return objdir_dist() / "bin"
 
 
 def replace_tree(source: Path, destination: Path) -> None:
@@ -762,10 +778,18 @@ def main() -> int:
     parser.add_argument(
         "--profile",
         type=Path,
-        required=True,
+        default=None,
         help="Profile directory to install the engine into. Other profiles, "
         "including ones created later, are seeded from the copy this stages "
-        "inside the app.",
+        "inside the app. Optional with --for-package, which is provisioning a "
+        "build rather than a browser anybody is about to run.",
+    )
+    parser.add_argument(
+        "--for-package",
+        action="store_true",
+        help="Provision the tree `mach package` reads (dist/bin) instead of "
+        "the one `npm start` launches. Run this before `npm run package`, or "
+        "the `.dmg` ships without Sine.",
     )
     parser.add_argument(
         "--channel",
@@ -776,12 +800,20 @@ def main() -> int:
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
 
-    app = args.app or default_app()
+    app = args.app or (package_app() if args.for_package else default_app())
     app_root = resolve_app_root(app)
     if not app_root.is_dir():
         raise SystemExit(f"not a directory: {app_root}")
 
+    # A packaging run still writes a profile half, because `install_engine`
+    # patches the engine in the profile and stages the patched copy. The
+    # scratch directory is that intermediate and nothing else — it is not
+    # packaged, and `mach package` never looks at it.
     profile = args.profile
+    if profile is None:
+        if not args.for_package:
+            raise SystemExit("--profile is required without --for-package")
+        profile = objdir_dist() / "trance-cosine-scratch"
     profile.mkdir(parents=True, exist_ok=True)
 
     if args.uninstall:
