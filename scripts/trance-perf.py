@@ -53,6 +53,14 @@
 # So this script does not demand a special build. It refuses only on a genuine
 # `--enable-debug` build, and stamps the build's provenance either way.
 #
+# ── Gate versus diagnostic mode ───────────────────────────────────────────
+#
+# The Gecko profiler is invaluable for explaining a regression, but its
+# sampling, stack walking and memory tracking change the idle CPU, memory and
+# energy being measured. The default `gate` mode therefore removes inherited
+# profiler settings. `--mode diagnostic` enables the profiler and evaluates
+# only profile-derived rows; its other readings are context, never baselines.
+#
 # ── Do not leave Cosine installed while running this ──────────────────────
 #
 # Same reason `scripts/trance-cosine.py` gives for the mochitests: `config.js`
@@ -63,14 +71,17 @@
 #       ADR-034 (the two budgets whose measurement had to be redefined)
 
 import argparse
+import hashlib
 import json
 import os
+import platform
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -102,7 +113,7 @@ class Marionette:
 
     # -- connection ---------------------------------------------------------
 
-    def connect(self, timeout=CONNECT_TIMEOUT_S):
+    def connect(self, timeout=CONNECT_TIMEOUT_S, process=None):
         deadline = time.monotonic() + timeout
         last = None
         while time.monotonic() < deadline:
@@ -120,6 +131,11 @@ class Marionette:
                 if self.sock:
                     self.sock.close()
                     self.sock = None
+                if process is not None and process.poll() is not None:
+                    raise MarionetteError(
+                        "browser exited before Marionette connected "
+                        f"(status {process.returncode})"
+                    ) from exc
                 time.sleep(0.5)
         raise MarionetteError(f"no Marionette on {self.host}:{self.port}: {last}")
 
@@ -207,6 +223,9 @@ PROBE_BUILD_CONFIG = """
     debugBuild: AppConstants.DEBUG,
     officialBuild: AppConstants.MOZILLA_OFFICIAL,
     version: AppConstants.MOZ_APP_VERSION_DISPLAY,
+    appBuildID: Services.appinfo.appBuildID,
+    platformBuildID: Services.appinfo.platformBuildID,
+    updateChannel: AppConstants.MOZ_UPDATE_CHANNEL,
     workspacesDebug: Services.prefs.getBoolPref("zen.workspaces.debug", false),
     tranceEnabled: Services.prefs.getBoolPref("trance.enabled", false),
     surfacesEnabled: Services.prefs.getBoolPref("trance.surface.enabled", false),
@@ -302,13 +321,13 @@ PROBE_COMPOSITOR_SURFACES = """
 PROBE_PROCINFO = """
   const done = arguments[arguments.length - 1];
   ChromeUtils.requestProcInfo().then(info => {
-    // `memory` is the resident figure ProcInfo actually reports on macOS.
-    // `residentSetSize`/`residentUniqueSize` are documented but come back null
-    // here, which is how the first version of this harness measured 0 MB.
+    // `memory` is Gecko's best system-monitor-compatible process measure. On
+    // macOS ProcInfo.mm fills it from TASK_VM_INFO.phys_footprint, the same
+    // value Activity Monitor labels "Memory". It is not RSS.
     const flatten = p => ({
       type: p.type,
       pid: p.pid,
-      memory: p.memory ?? p.residentUniqueSize ?? p.residentSetSize ?? 0,
+      memory: p.memory ?? 0,
       cpuTime: p.cpuTime,
       origin: p.origin ?? null,
     });
@@ -607,19 +626,19 @@ BUDGETS = [
         "measured_as": "TranceScheduler.timerCount + frameSubscriberCount at idle",
     },
     {
-        "id": "resident_mb_one_tab",
+        "id": "process_memory_mb_one_tab",
         "budget": "record only",
         "limit": None,
         "compare": None,
-        "measured_as": "sum of residentUniqueSize across all processes, 1 tab. "
-        "Not a §12.1 row; added in Phase 11 because the memory claim needs one",
+        "measured_as": "sum of ChromeUtils.requestProcInfo().memory across all "
+        "processes, 1 tab. On macOS this is phys_footprint, not RSS",
     },
     {
-        "id": "resident_mb_twenty_tabs",
+        "id": "process_memory_mb_twenty_tabs",
         "budget": "record only",
         "limit": None,
         "compare": None,
-        "measured_as": "same, after the 20-tab workload",
+        "measured_as": "same ProcInfo.memory measure after the 20-tab workload",
     },
 ]
 
@@ -787,9 +806,105 @@ def style_flushes_in(profile, window):
 # ──────────────────────────────── the run ──────────────────────────────────
 
 
+def command_output(*command):
+    """Return one line of diagnostic command output without failing the run."""
+    try:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    return completed.stdout.strip() or None
+
+
+def git_provenance(path):
+    commit = command_output("git", "-C", str(path), "rev-parse", "HEAD")
+    if commit is None:
+        return None
+    status = command_output("git", "-C", str(path), "status", "--porcelain")
+    return {
+        "commit": commit,
+        "branch": command_output(
+            "git", "-C", str(path), "branch", "--show-current"
+        ),
+        "dirty": bool(status),
+        "changedPaths": len(status.splitlines()) if status else 0,
+    }
+
+
+def binary_application_metadata(binary):
+    candidates = [binary.parent / "application.ini"]
+    if binary.parent.name == "MacOS" and binary.parent.parent.name == "Contents":
+        candidates.insert(0, binary.parent.parent / "Resources" / "application.ini")
+    application_ini = next((path for path in candidates if path.is_file()), None)
+    if application_ini is None:
+        return None
+    wanted = {"BuildID", "Name", "SourceRepository", "SourceStamp", "Version"}
+    values = {}
+    for line in application_ini.read_text(errors="replace").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key in wanted:
+            values[key[0].lower() + key[1:]] = value
+    values["path"] = str(application_ini.resolve())
+    return values
+
+
+def collect_provenance(binary, args):
+    script = Path(__file__).resolve()
+    binary_stat = binary.stat()
+    return {
+        "capturedAt": datetime.now(timezone.utc).isoformat(),
+        "source": {
+            "trance": git_provenance(REPO),
+            "firefoxEngine": git_provenance(REPO / "engine"),
+        },
+        "binary": {
+            "path": str(binary.resolve()),
+            "sizeBytes": binary_stat.st_size,
+            "modifiedNs": binary_stat.st_mtime_ns,
+            "application": binary_application_metadata(binary),
+        },
+        "harness": {
+            "path": str(script),
+            "sha256": hashlib.sha256(script.read_bytes()).hexdigest(),
+        },
+        "host": {
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "python": platform.python_version(),
+            "hardwareModel": command_output("sysctl", "-n", "hw.model"),
+            "cpuBrand": command_output(
+                "sysctl", "-n", "machdep.cpu.brand_string"
+            ),
+            "logicalCpuCount": os.cpu_count(),
+            "memoryBytes": command_output("sysctl", "-n", "hw.memsize"),
+            "osBuild": command_output("sw_vers", "-buildVersion"),
+            "powerSource": command_output("pmset", "-g", "batt"),
+        },
+        "workload": {
+            "mode": args.mode,
+            "extensions": args.extensions,
+            "tranceEnabled": not args.disable_trance,
+            "tabs": args.tabs,
+            "spaceSwitches": args.space_switches,
+            "idleSeconds": args.idle,
+            "settleTimeoutSeconds": args.settle_timeout,
+            "settleThresholdPercent": args.settle_threshold,
+        },
+        "memoryMetric": {
+            "field": "ChromeUtils.requestProcInfo().memory",
+            "macOSBacking": "TASK_VM_INFO.phys_footprint",
+        },
+    }
+
+
 def find_binary(explicit):
     if explicit:
-        path = Path(explicit)
+        path = Path(explicit).expanduser().resolve()
         if not path.exists():
             sys.exit(f"trance-perf: no binary at {path}")
         return path
@@ -843,22 +958,41 @@ def write_profile_prefs(profile_dir, extensions_mode, trance_enabled):
     (profile_dir / "user.js").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def launch(binary, profile_dir, gecko_profile_path, extra_env=None, log_path=None):
+def launch(
+    binary,
+    profile_dir,
+    gecko_profile_path,
+    profiler_enabled=False,
+    extra_env=None,
+    log_path=None,
+):
     env = dict(os.environ)
-    env.update(
-        {
-            "MOZ_PROFILER_STARTUP": "1",
-            "MOZ_PROFILER_STARTUP_FEATURES": "js,stackwalk,cpu,memory",
-            # Without an explicit filter the compositor threads are not
-            # sampled, the profile contains no Composite markers at all, and
-            # the "GPU frames while minimised" row silently reads 0.
-            "MOZ_PROFILER_STARTUP_FILTERS": "GeckoMain,Compositor,Renderer",
-            "MOZ_PROFILER_STARTUP_INTERVAL": "2",
-            "MOZ_PROFILER_SHUTDOWN": str(gecko_profile_path),
-            # A crash reporter dialog would hang the run forever.
-            "MOZ_CRASHREPORTER_DISABLE": "1",
-        }
-    )
+    # A developer shell may already have startup profiling enabled. Gate runs
+    # must actively remove every relevant variable or their CPU, memory and
+    # energy numbers are profiler-biased despite asking for the clean mode.
+    for name in (
+        "MOZ_PROFILER_STARTUP",
+        "MOZ_PROFILER_STARTUP_FEATURES",
+        "MOZ_PROFILER_STARTUP_FILTERS",
+        "MOZ_PROFILER_STARTUP_INTERVAL",
+        "MOZ_PROFILER_SHUTDOWN",
+    ):
+        env.pop(name, None)
+    if profiler_enabled:
+        env.update(
+            {
+                "MOZ_PROFILER_STARTUP": "1",
+                "MOZ_PROFILER_STARTUP_FEATURES": "js,stackwalk,cpu,memory",
+                # Without an explicit filter the compositor threads are not
+                # sampled, the profile contains no Composite markers at all,
+                # and the "GPU frames while minimised" row silently reads 0.
+                "MOZ_PROFILER_STARTUP_FILTERS": "GeckoMain,Compositor,Renderer",
+                "MOZ_PROFILER_STARTUP_INTERVAL": "2",
+                "MOZ_PROFILER_SHUTDOWN": str(gecko_profile_path),
+            }
+        )
+    # A crash reporter dialog would hang the run forever.
+    env["MOZ_CRASHREPORTER_DISABLE"] = "1"
     if extra_env:
         env.update(extra_env)
     # The browser's own output is the only diagnosis available when Marionette
@@ -932,7 +1066,7 @@ def cpu_by_process(before, after, seconds):
     return rows[:10]
 
 
-def resident_by_process(procinfo):
+def memory_by_process(procinfo):
     rows = [
         {
             "pid": entry.get("pid"),
@@ -946,7 +1080,7 @@ def resident_by_process(procinfo):
     return rows[:12]
 
 
-def total_resident_mb(procinfo):
+def total_process_memory_mb(procinfo):
     if not procinfo or "error" in procinfo:
         return None
     total = procinfo["parent"].get("memory") or 0
@@ -1006,6 +1140,8 @@ def run_workload(client, args, results):
 
     results["build"] = client.script(PROBE_BUILD_CONFIG)
     results["trance_initial"] = client.script(PROBE_TRANCE_STATE)
+    if results["build"].get("debugBuild") and not args.allow_debug_build:
+        return results
 
     # --- settle -----------------------------------------------------------
     #
@@ -1021,6 +1157,8 @@ def run_workload(client, args, results):
     # went quiet" is itself the answer to a §12.1 question.
     print(f"  settling (up to {args.settle_timeout}s)...")
     results["settle"] = wait_until_quiet(client, args)
+    if not results["settle"].get("settled"):
+        return results
 
     # --- idle, focused, one tab -------------------------------------------
     print(f"  idle, focused, 1 tab ({args.idle}s)...")
@@ -1034,8 +1172,8 @@ def run_workload(client, args, results):
     )
     # A red idle row is only useful if it says which process was busy.
     results["idle_cpu_by_process"] = cpu_by_process(before, after, elapsed)
-    results["resident_mb_one_tab"] = total_resident_mb(after)
-    results["resident_mb_by_process"] = resident_by_process(after)
+    results["process_memory_mb_one_tab"] = total_process_memory_mb(after)
+    results["memory_mb_by_process"] = memory_by_process(after)
     results["surfaces_idle"] = client.script(PROBE_COMPOSITOR_SURFACES)
     results["trance_at_idle"] = client.script(PROBE_TRANCE_STATE)
 
@@ -1049,7 +1187,7 @@ def run_workload(client, args, results):
     callbacks = (opened.get("counters") or {}).get("observer.mutation.callbacks")
     if callbacks is not None and args.tabs:
         results["mutation_callbacks_per_tab_open"] = round(callbacks / args.tabs, 3)
-    results["resident_mb_twenty_tabs"] = total_resident_mb(
+    results["process_memory_mb_twenty_tabs"] = total_process_memory_mb(
         client.script(PROBE_PROCINFO)
     )
 
@@ -1084,7 +1222,17 @@ def run_workload(client, args, results):
     return results
 
 
-def build_scorecard(results, profile_data, notes):
+PROFILE_METRICS = {
+    "composite_markers_minimized",
+    "style_flush_tab_switch_ms",
+    "style_flush_space_switch_ms",
+    "style_total_space_switch_ms",
+}
+
+
+def build_scorecard(
+    results, profile_data, notes, mode, provenance, invalid_reasons
+):
     idle = results.get("trance_at_idle") or {}
     timers = idle.get("timerCount")
     frames = idle.get("frameSubscriberCount")
@@ -1118,25 +1266,74 @@ def build_scorecard(results, profile_data, notes):
             "mutation_callbacks_per_tab_open"
         ),
         "trance_timers_at_idle": trance_timers,
-        "resident_mb_one_tab": results.get("resident_mb_one_tab"),
-        "resident_mb_twenty_tabs": results.get("resident_mb_twenty_tabs"),
+        "process_memory_mb_one_tab": results.get("process_memory_mb_one_tab"),
+        "process_memory_mb_twenty_tabs": results.get(
+            "process_memory_mb_twenty_tabs"
+        ),
     }
 
     rows = []
     for budget in BUDGETS:
         value = measured.get(budget["id"])
+        intended_mode = (
+            "diagnostic" if budget["id"] in PROFILE_METRICS else "gate"
+        )
+        comparable = mode == intended_mode
+        if comparable:
+            verdict = evaluate(value, budget)
+        elif value is None:
+            verdict = "not-measured"
+        else:
+            verdict = "diagnostic"
         rows.append(
             {
                 "id": budget["id"],
                 "budget": budget["budget"],
                 "value": value,
-                "verdict": evaluate(value, budget),
+                "verdict": verdict,
+                "measurementMode": intended_mode,
+                "comparable": comparable,
                 "measured_as": budget["measured_as"],
             }
         )
 
+    required_record_metrics = {
+        "process_memory_mb_one_tab",
+        "process_memory_mb_twenty_tabs",
+    }
+    missing = [
+        row["id"]
+        for row in rows
+        if row["comparable"]
+        and row["value"] is None
+        and (
+            next(
+                budget["compare"]
+                for budget in BUDGETS
+                if budget["id"] == row["id"]
+            )
+            is not None
+            or row["id"] in required_record_metrics
+        )
+    ]
+    if missing:
+        reason = "required measurements are missing: " + ", ".join(missing)
+        notes.append(reason)
+        invalid_reasons.append(reason)
+    if invalid_reasons:
+        for row in rows:
+            if row["comparable"]:
+                row["verdict"] = "invalid"
+
     return {
-        "schema": 1,
+        "schema": 2,
+        "measurement": {
+            "mode": mode,
+            "profilerEnabled": mode == "diagnostic",
+            "valid": not invalid_reasons,
+            "invalidReasons": invalid_reasons,
+        },
+        "provenance": provenance,
         "build": results.get("build"),
         "notes": notes,
         "geckoProfile": bool(profile_data),
@@ -1153,7 +1350,7 @@ def build_scorecard(results, profile_data, notes):
             "tranceWhileMinimized": results.get("trance_while_minimized"),
             "settle": results.get("settle"),
             "idleCpuByProcess": results.get("idle_cpu_by_process"),
-            "residentByProcess": results.get("resident_mb_by_process"),
+            "memoryByProcess": results.get("memory_mb_by_process"),
             "failedSteps": results.get("failedSteps"),
         },
     }
@@ -1164,9 +1361,19 @@ def print_scorecard(card):
     print("\n  §12.1 scorecard")
     print("  " + "-" * (width + 34))
     for row in card["rows"]:
-        mark = {"green": "PASS", "red": "FAIL", "recorded": " -- "}[row["verdict"]]
+        mark = {
+            "green": "PASS",
+            "red": "FAIL",
+            "recorded": " -- ",
+            "diagnostic": "DIAG",
+            "not-measured": " N/A",
+            "invalid": " INV",
+        }[row["verdict"]]
         value = "n/a" if row["value"] is None else row["value"]
         print(f"  [{mark}] {row['id']:<{width}}  {value}   (budget {row['budget']})")
+    validity = card["measurement"]
+    if not validity["valid"]:
+        print("\n  INVALID: " + "; ".join(validity["invalidReasons"]))
     print()
 
 
@@ -1193,13 +1400,40 @@ def note_unrested_cross_fade(results, notes):
 
 def diff_baseline(card, baseline_path):
     if not baseline_path or not Path(baseline_path).exists():
-        return []
+        return [], "baseline file is missing"
     with open(baseline_path, "r", encoding="utf-8") as handle:
         baseline = json.load(handle)
+    if baseline.get("schema") != card.get("schema"):
+        return [], (
+            f"baseline schema {baseline.get('schema')} does not match "
+            f"scorecard schema {card.get('schema')}"
+        )
+    baseline_measurement = baseline.get("measurement") or {}
+    if baseline_measurement.get("mode") != "gate":
+        return [], "baseline was not captured in profiler-off gate mode"
+    if not baseline_measurement.get("valid"):
+        return [], "baseline is marked invalid"
+    baseline_provenance = baseline.get("provenance") or {}
+    baseline_workload = baseline_provenance.get("workload")
+    current_workload = card.get("provenance", {}).get("workload")
+    if baseline_workload != current_workload:
+        return [], "baseline workload does not match this run"
+    baseline_host = baseline_provenance.get("host") or {}
+    current_host = card.get("provenance", {}).get("host") or {}
+    host_identity = ("platform", "machine", "hardwareModel", "cpuBrand", "memoryBytes")
+    if any(baseline_host.get(key) != current_host.get(key) for key in host_identity):
+        return [], "baseline host does not match this run"
+    baseline_build = baseline.get("build") or {}
+    current_build = card.get("build") or {}
+    build_identity = ("debugBuild", "officialBuild")
+    if any(baseline_build.get(key) != current_build.get(key) for key in build_identity):
+        return [], "baseline build type does not match this run"
     previous = {row["id"]: row["value"] for row in baseline.get("rows", [])}
     directions = {budget["id"]: budget["compare"] for budget in BUDGETS}
     regressions = []
     for row in card["rows"]:
+        if not row.get("comparable", True):
+            continue
         was, now = previous.get(row["id"]), row["value"]
         if was is None or now is None or not isinstance(now, (int, float)):
             continue
@@ -1214,7 +1448,7 @@ def diff_baseline(card, baseline_path):
         # gate against drift, not a stopwatch.
         if now > was * 1.10 and now - was > 0.05:
             regressions.append((row["id"], was, now))
-    return regressions
+    return regressions, None
 
 
 def main():
@@ -1222,6 +1456,12 @@ def main():
         description="Trance performance harness (TRANCE.md §12.2)."
     )
     parser.add_argument("--binary", help="Path to the built browser binary.")
+    parser.add_argument(
+        "--mode",
+        choices=["gate", "diagnostic"],
+        default="gate",
+        help="'gate' measures without the Gecko profiler; 'diagnostic' enables it.",
+    )
     parser.add_argument(
         "--baseline",
         default=str(REPO / "docs/trance/perf-baseline.json"),
@@ -1268,8 +1508,30 @@ def main():
     )
     parser.add_argument("--keep-profile", action="store_true")
     args = parser.parse_args()
+    if args.write_baseline and args.mode != "gate":
+        parser.error("--write-baseline requires --mode gate (profiler disabled)")
+    if args.write_baseline:
+        canonical = {
+            "tabs": 20,
+            "space_switches": 10,
+            "idle": 60,
+            "settle_threshold": 5.0,
+            "extensions": "all",
+            "disable_trance": False,
+        }
+        changed = [
+            name.replace("_", "-")
+            for name, expected in canonical.items()
+            if getattr(args, name) != expected
+        ]
+        if changed:
+            parser.error(
+                "--write-baseline requires the canonical workload; restore: "
+                + ", ".join(f"--{name}" for name in changed)
+            )
 
     binary = find_binary(args.binary)
+    provenance = collect_provenance(binary, args)
     profile_dir = Path(tempfile.mkdtemp(prefix="trance-perf-profile-"))
     gecko_profile = profile_dir.parent / f"{profile_dir.name}.profile.json"
 
@@ -1280,16 +1542,23 @@ def main():
 
     browser_log = profile_dir.parent / f"{profile_dir.name}.browser.log"
     print(f"trance-perf: log      {browser_log}")
-    proc = launch(binary, profile_dir, gecko_profile, log_path=browser_log)
+    proc = launch(
+        binary,
+        profile_dir,
+        gecko_profile,
+        profiler_enabled=args.mode == "diagnostic",
+        log_path=browser_log,
+    )
     client = Marionette()
     results = {}
     notes = []
+    invalid_reasons = []
     exit_code = 0
 
     try:
         print("trance-perf: waiting for Marionette...")
         try:
-            client.connect()
+            client.connect(process=proc)
         except MarionetteError:
             if browser_log.exists():
                 tail = browser_log.read_text(errors="replace").splitlines()[-25:]
@@ -1307,6 +1576,7 @@ def main():
         note_unrested_cross_fade(results, notes)
 
         build = results.get("build") or {}
+        debug_refused = build.get("debugBuild") and not args.allow_debug_build
         if build.get("debugBuild"):
             message = (
                 "this is an --enable-debug build; its numbers describe a browser "
@@ -1316,7 +1586,38 @@ def main():
             if not args.allow_debug_build:
                 print(f"\ntrance-perf: refusing to record. {message}")
                 print("trance-perf: pass --allow-debug-build to record it anyway.\n")
+                invalid_reasons.append(message)
                 exit_code = 2
+        if not debug_refused:
+            settle = results.get("settle") or {}
+            if not settle.get("settled"):
+                reason = (
+                    "startup did not settle below "
+                    f"{args.settle_threshold}% of one core within "
+                    f"{args.settle_timeout}s"
+                )
+                notes.append(reason)
+                invalid_reasons.append(reason)
+                exit_code = max(exit_code, 2)
+
+        if results.get("failedSteps"):
+            reason = "one or more workload steps failed"
+            invalid_reasons.append(reason)
+            exit_code = max(exit_code, 2)
+        source = provenance.get("source", {}).get("trance") or {}
+        application = provenance.get("binary", {}).get("application") or {}
+        source_stamp = application.get("sourceStamp")
+        if source_stamp is None:
+            reason = "binary application metadata has no source stamp"
+            invalid_reasons.append(reason)
+            exit_code = max(exit_code, 2)
+        elif source.get("commit") != source_stamp:
+            reason = (
+                "binary source stamp does not match the Trance checkout "
+                f"({source_stamp} != {source.get('commit')})"
+            )
+            invalid_reasons.append(reason)
+            exit_code = max(exit_code, 2)
         if not build.get("officialBuild"):
             # Not a refusal: optimisation is on by default and the one pref this
             # actually changed is already overridden in the harness profile.
@@ -1349,13 +1650,20 @@ def main():
                 pass
 
     profile_data = None
-    if gecko_profile.exists():
-        try:
-            profile_data = load_profile(gecko_profile)
-        except (json.JSONDecodeError, OSError) as exc:
-            notes.append(f"gecko profile unreadable: {exc}")
-    else:
-        notes.append("no gecko profile was written at shutdown")
+    if args.mode == "diagnostic":
+        if gecko_profile.exists():
+            try:
+                profile_data = load_profile(gecko_profile)
+            except (json.JSONDecodeError, OSError) as exc:
+                reason = f"gecko profile unreadable: {exc}"
+                notes.append(reason)
+                invalid_reasons.append(reason)
+                exit_code = max(exit_code, 2)
+        else:
+            reason = "diagnostic mode did not write a Gecko profile at shutdown"
+            notes.append(reason)
+            invalid_reasons.append(reason)
+            exit_code = max(exit_code, 2)
 
     if profile_data:
         results["style_flush_tab_switch_ms"] = longest_style_flush_near_tab_switch(
@@ -1386,12 +1694,29 @@ def main():
                 "zero. Check MOZ_PROFILER_STARTUP_FILTERS."
             )
 
-    card = build_scorecard(results, profile_data, notes)
+    card = build_scorecard(
+        results,
+        profile_data,
+        notes,
+        args.mode,
+        provenance,
+        invalid_reasons,
+    )
+    if not card["measurement"]["valid"]:
+        exit_code = max(exit_code, 2)
     print_scorecard(card)
     for note in notes:
         print(f"  note: {note}")
 
-    regressions = diff_baseline(card, args.baseline)
+    regressions = []
+    if card["measurement"]["valid"] and args.mode == "gate":
+        regressions, baseline_skip = diff_baseline(card, args.baseline)
+        if baseline_skip:
+            print(f"  baseline diff skipped: {baseline_skip}")
+    elif args.mode == "diagnostic":
+        print("  baseline diff skipped: diagnostic mode enables the profiler")
+    else:
+        print("  baseline diff skipped: run is invalid")
     for name, was, now in regressions:
         print(f"  REGRESSION {name}: {was} -> {now}")
         exit_code = max(exit_code, 1)
