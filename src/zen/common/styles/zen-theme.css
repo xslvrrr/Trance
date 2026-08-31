@@ -92,7 +92,11 @@
   --in-content-accent-color-active: currentColor !important;
 
   /* This is like the secondary button */
-  --in-content-button-background: transparent !important;
+  --in-content-button-background: color-mix(
+    in srgb,
+    currentColor,
+    transparent 90%
+  ) !important;
   --in-content-button-text-color: var(--zen-secondary-btn-color) !important;
   --in-content-button-background-hover: color-mix(
     in srgb,
@@ -213,6 +217,16 @@
   --toolbarbutton-border-radius: 6px;
   --urlbar-margin-inline: 1px !important;
 
+  --zen-squircle-value: 1.3;
+
+  @media (-moz-platform: windows) {
+    --zen-squircle-value: 2.1;
+  }
+
+  @media (-moz-platform: linux) {
+    --zen-squircle-value: 1.2;
+  }
+
   --tab-icon-overlay-stroke: light-dark(white, black) !important;
   --tab-close-button-padding: 4px !important;
 
@@ -272,7 +286,7 @@
        * 1. If the native radius - the separation is less than 4px, use 4px.
        * 2. Otherwise, use the the calculated value (inner radius = outer radius - separation).
      */
-      max(5px, calc(var(--zen-border-radius) - var(--zen-element-separation) / 2))
+      max(5px, calc((var(--zen-border-radius) - var(--zen-element-separation) / 2) * var(--zen-squircle-value)))
   );
 
   /** Other theme-related styles */
@@ -344,3 +358,11 @@
 }
 
 %include zen-buttons.css
+
+@media (-moz-pref('layout.css.corner-shape.enabled')) {
+  *:not(.no-squircles),
+  .zen-squircle-before::before,
+  .zen-squircle-after::after {
+    corner-shape: superellipse(var(--zen-squircle-value));
+  }
+}

@@ -34,7 +34,7 @@ index 61660d27e8376270f2bece694f774e4e209a3723..5a2defd126b2ac925dee10dc36657cdc
 +      </html:moz-page-nav-button>
 +      <html:moz-page-nav-button id="category-zen-CKS"
 +        view="paneZenCKS"
-+        iconsrc="chrome://browser/skin/quickactions.svg"
++        iconsrc="chrome://browser/skin/preferences/category-accessibility.svg"
 +        data-l10n-id="pane-zen-CKS-title">
 +      </html:moz-page-nav-button>
 +      <html:moz-page-nav-button id="category-zen-marketplace"
