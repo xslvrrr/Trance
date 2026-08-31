@@ -31,11 +31,50 @@ else
 fi
 
 # --- Node 22 -----------------------------------------------------------------
-if [ -s "$HOME/.nvm/nvm.sh" ]; then
-  # shellcheck disable=SC1091
-  . "$HOME/.nvm/nvm.sh"
-  nvm use >/dev/null 2>&1 || echo "trance-env: nvm use failed; run 'nvm install' once." >&2
+# Surfer's branding dependency still calls fs.rmdir({ recursive: true }), which
+# Node 26 removed. A wrong Node version therefore fails halfway through import,
+# after the generated engine has already been modified. Prefer an existing
+# Node 22 from PATH, then let nvm honour .nvmrc, and fail before touching the
+# engine if neither can provide the pinned major.
+_trance_node_major() {
+  node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true
+}
+
+if [ "$(_trance_node_major)" != "22" ]; then
+  _trance_node22_dir=""
+  _trance_node_candidates="$(which -a node 2>/dev/null || true)"
+  while IFS= read -r _trance_node_path; do
+    [ -x "$_trance_node_path" ] || continue
+    if [ "$("$_trance_node_path" -p 'process.versions.node.split(".")[0]' 2>/dev/null)" = "22" ]; then
+      _trance_node22_dir="$(dirname "$_trance_node_path")"
+      break
+    fi
+  done <<EOF
+$_trance_node_candidates
+EOF
+
+  if [ -n "$_trance_node22_dir" ]; then
+    export PATH="$_trance_node22_dir:$PATH"
+  elif [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+    if ! nvm use 22 >/dev/null 2>&1; then
+      echo "trance-env: nvm could not activate Node 22 from .nvmrc." >&2
+    fi
+  fi
+
+  unset _trance_node22_dir _trance_node_candidates _trance_node_path
 fi
+
+if [ "$(_trance_node_major)" != "22" ]; then
+  echo "trance-env: Node 22 is required; found $(node -v 2>/dev/null || echo 'none')." >&2
+  echo "            Install Node 22 or activate it with nvm/asdf/mise/Volta." >&2
+  unset -f _trance_node_major 2>/dev/null || true
+  unset _trance_root _trance_py311
+  set +u
+  return 1 2>/dev/null || exit 1
+fi
+unset -f _trance_node_major 2>/dev/null || true
 
 # --- Rust --------------------------------------------------------------------
 # Note: rustup only auto-reads `rust-toolchain` / `rust-toolchain.toml`. Zen's
@@ -64,7 +103,7 @@ fi
 # question the browser asks and the build system cannot honour is a question
 # worth not asking.
 #
-#   TRANCE_ARCH=x86_64 source scripts/trance-env.sh && npm run build
+#   TRANCE_ARCH=x86_64 source scripts/trance-env.sh && bun run build
 #
 # Defaults to the machine's own architecture, so the common case needs nothing.
 _trance_arch="${TRANCE_ARCH:-$(uname -m)}"
@@ -98,19 +137,20 @@ unset _trance_dep
 _trance_brand_file="$_trance_root/.surfer/dynamicConfig.brand.json"
 if [ -d "$_trance_root/node_modules/@zen-browser/surfer" ]; then
   if ! grep -q '"trance"' "$_trance_brand_file" 2>/dev/null; then
-    if (cd "$_trance_root" && npx --no-install surfer set brand trance >/dev/null 2>&1); then
+    if (cd "$_trance_root" && ./node_modules/.bin/surfer set brand trance >/dev/null 2>&1); then
       echo "trance-env: surfer brand set to 'trance'"
     else
-      echo "trance-env: could not set surfer brand; run 'npx surfer set brand trance'" >&2
+      echo "trance-env: could not set surfer brand; run 'bunx surfer set brand trance'" >&2
     fi
   fi
 fi
 unset _trance_brand_file
 
 # --- Report ------------------------------------------------------------------
-printf 'trance-env: python %s | node %s | rustc %s | target %s\n' \
+printf 'trance-env: python %s | node %s (%s) | rustc %s | target %s\n' \
   "$(python3 -V 2>&1 | awk '{print $2}')" \
   "$(node -v 2>/dev/null || echo '-')" \
+  "$(command -v node 2>/dev/null || echo '-')" \
   "$(rustc -V 2>/dev/null | awk '{print $2}' || echo '-')" \
   "${SURFER_COMPAT:-arm64}"
 

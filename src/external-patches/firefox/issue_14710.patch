@@ -1,7 +1,7 @@
 diff --git a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs b/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs
 --- a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs
 +++ b/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs
-@@ -119,10 +119,19 @@
+@@ -119,9 +119,18 @@
        }
        case "PictureInPicture:VideoTabHidden": {
          if (!lazy.PIP_ENABLED || !lazy.PIP_WHEN_SWITCHING_TABS) {
@@ -20,7 +20,6 @@ diff --git a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs b/tool
          if (browser.documentGlobal.gBrowser.selectedBrowser == browser) {
            break;
          }
-         let actor = browsingContext.currentWindowGlobal.getActor(
 @@ -261,10 +270,12 @@
    maxConcurrentPlayerCount: 0,
  
@@ -52,4 +51,3 @@ diff --git a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs b/tool
  
      Glean.pictureinpicture["closedMethod" + reason].record();
      await this.closePipWindow(win);
-
