@@ -26,6 +26,8 @@ line into a sine wave as it rises, and a grain knob. What the mod adds on top:
 
 - [x] B1 — A **lightness/darkness slider**, separate from the wheel.
 - [x] B2 — A second slider for **translucency**, in the same stack as B1.
+- [x] B8 — A **knob for the frost blur radius**, next to B2. Not the mod's; the
+      user's, once B2 stopped being an alpha.
 - [x] B3 — A **knob for the gradient angle**, alongside Zen's grain knob.
 - [x] B4 — A **palette button** that switches between preset slider
       configurations — monochrome, dark, pastel, full and others.
@@ -44,7 +46,8 @@ they named. Nothing is dropped; one thing is *not built*.
 | Behaviour | Keep? | Reason |
 |---|---|---|
 | B1 lightness slider | Keep | The one real gap in Zen's picker. See §5. |
-| B2 translucency slider | **Not built** | Zen's picker already has exactly this slider, writing to exactly this value. Building a second one is the two-owners problem this project exists to remove (`TRANCE.md` §3.1). The requirement is met by what is already there, and the palettes drive *that* slider. |
+| B2 translucency slider | **Built, differently** | First answered by Zen's own slider: it already existed and already wrote this value, so a second one over it was the two-owners problem this project exists to remove. That answer was half right. Zen's slider writes an *alpha*, so it was simultaneously tint and transparency and could give neither on its own. Zen's now means tint strength only, and transparency is the master opacity slider in Trance's second row, writing `trance.surface.opacity` — the browser's one surface, not the space's. Still one owner per value; the value it was asking for turned out to be a different one (ADR-081). |
+| B8 master blur knob | Keep | Not in the mod, and not in the settings page either on a platform whose window is natively translucent, where the row is hidden. The blur radius belongs next to the opacity it composes with. Inert where the operating system owns the frost, and it says so (ADR-081). |
 | B3 angle knob | Keep | Zen hard-codes `-45deg` with a `TODO` next to it. |
 | B4 palettes | Keep | Widened to eight: full, vivid, pastel, muted, dark, light, neon, monochrome. |
 | B5 saved themes | Keep | Including the extra page at the start of the pager. |
@@ -109,7 +112,7 @@ no prototype is touched:
 | Method | What Trance does with it |
 |---|---|
 | `getColorFromPosition` | Applies the lightness slider and the palette's saturation to the RGB Zen computed. The greyscale preset page is exempt: its dots encode lightness as position deliberately. |
-| `getGradient` | Rotates the CSS Zen produced. Every `linear-gradient()` angle moves by the same delta and every `radial-gradient(circle at x% y%)` centre rotates about the middle of the box by it. |
+| `getGradient` | Two rewrites of the CSS Zen produced, in one seam. Rotation: every `linear-gradient()` angle moves by the same delta and every `radial-gradient(circle at x% y%)` centre rotates about the middle of the box by it. Tint strength: every partial `rgba()` alpha is composited against the browser's own chrome colour and emitted opaque, so the slider that writes it changes how much colour there is and never how transparent the chrome is (ADR-081). `transparent` stops, exact colours and the default theme are untouched. |
 | `getGradientForWorkspace` | Renders another space at *that* space's angle, so previews in the space switcher are not rotated by the space you happen to be in. |
 | `onWorkspaceChange` | Notices that the active space changed and reloads Trance's three values from the new theme. |
 | `updateCurrentWorkspace` | Coalesces preview repaints onto one animation frame and keeps the knob and the heart in step with a drag. See below. |

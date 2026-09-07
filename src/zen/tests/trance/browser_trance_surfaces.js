@@ -129,6 +129,93 @@ add_task(async function test_blur_budget_is_respected() {
   }
 });
 
+add_task(
+  async function test_blur_follows_the_platform_switch_not_the_platform() {
+    // Where the window is translucent in its own right the frost is produced
+    // behind Gecko by the compositor, and a `backdrop-filter` there replaces it
+    // with a flat rectangle rather than softening it — which is why the Blur
+    // section is gated at all.
+    //
+    // The gate used to be `(-moz-platform: macos)`, unconditionally, so on that
+    // platform `trance.surface.blur.radius` had no consumer *even with
+    // transparency turned off* — where the window is opaque, Gecko is painting
+    // the backdrop and the blur is both correct and the only frost available.
+    // The gate is the switch now, and this is that difference.
+    await SimpleTest.promiseFocus(window);
+    const wrapper = document.querySelector("#zen-main-app-wrapper");
+    if (
+      !wrapper ||
+      window.matchMedia("(prefers-reduced-transparency: reduce)").matches
+    ) {
+      ok(true, "no chrome surface to blur on this configuration");
+      return;
+    }
+
+    // Mica is not a pref this can flip: `-moz-windows-mica` reports what is in
+    // effect, which is what makes it the right question to ask there.
+    if (window.matchMedia("(-moz-windows-mica)").matches) {
+      is(
+        window.getComputedStyle(wrapper).backdropFilter,
+        "none",
+        "Mica owns the frost, so Gecko adds no pass"
+      );
+      return;
+    }
+
+    const switches = [
+      ["(-moz-platform: macos)", "zen.widget.macos.window-vibrancy"],
+      ["(-moz-platform: linux)", "zen.widget.linux.transparency"],
+    ].filter(([media]) => window.matchMedia(media).matches);
+
+    if (!switches.length) {
+      isnot(
+        window.getComputedStyle(wrapper).backdropFilter,
+        "none",
+        "a window that can never be natively translucent gets Gecko's blur"
+      );
+      return;
+    }
+
+    // `-moz-pref()` invalidation goes through
+    // `LookAndFeel::NotifyChangedAllWindows`, which posts rather than restyles
+    // in place, so the pref write has to be given a turn of the event loop and a
+    // flush before the computed value is asked for. Without the settle this
+    // reads the previous frame's answer and fails on a stylesheet that is
+    // correct.
+    const settle = async () => {
+      await new Promise(resolve =>
+        window.requestAnimationFrame(() =>
+          window.requestAnimationFrame(resolve)
+        )
+      );
+      await window.promiseDocumentFlushed(() => {});
+    };
+
+    for (const [, pref] of switches) {
+      const original = Services.prefs.getBoolPref(pref, false);
+      try {
+        Services.prefs.setBoolPref(pref, false);
+        await settle();
+        isnot(
+          window.getComputedStyle(wrapper).backdropFilter,
+          "none",
+          `${pref} off: the window is opaque, so Gecko's blur is the frost`
+        );
+
+        Services.prefs.setBoolPref(pref, true);
+        await settle();
+        is(
+          window.getComputedStyle(wrapper).backdropFilter,
+          "none",
+          `${pref} on: the operating system's frost is left alone`
+        );
+      } finally {
+        Services.prefs.setBoolPref(pref, original);
+      }
+    }
+  }
+);
+
 add_task(async function test_sidebar_region_is_translucency_not_a_tint() {
   // The regression this guards: the first implementation painted a
   // 62%-opaque near-black on #navigator-toolbox and called it frosting, which

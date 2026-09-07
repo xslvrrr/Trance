@@ -37,6 +37,31 @@
 // is restored, every node is removed, and the panel is stock Zen's again — node
 // for node, which is what the mochitest checks.
 //
+// ── Tint strength, and the two master controls ────────────────────────────
+//
+// Zen's translucency slider writes `currentOpacity`, and that number is the
+// *alpha* of every colour the gradient is built from. So one control answered
+// two questions at once — how much colour the chrome carries, and how much of
+// the window shows through it — and neither could be answered on its own. A
+// flat opaque theme and a heavily tinted sheet of glass are the same slider
+// position with a different platform underneath.
+//
+// Trance separates them. The wrap on `getGradient` composites the alpha Zen
+// emitted down against the browser's own chrome colour, which turns that
+// slider into tint strength: 0 is the neutral chrome with no colour in it, 1
+// is the colour at full strength, and both are opaque. How much of the window
+// shows through is `--trance-surface-alpha`, which the master opacity slider
+// writes; how soft what shows through is is `--trance-surface-blur`, which the
+// master blur knob writes. Pure flat to fully transparent is two numbers now,
+// instead of one number that could only ever be halfway through both.
+//
+// Those two are prefs rather than theme fields, deliberately: they describe
+// one surface for the whole browser (ADR-041), not a property of a space, and
+// they already existed with the settings page as their only surface. The
+// picker is a second *surface* for the same pref, not a second owner of the
+// value — it writes the pref and then reads its own controls back from it,
+// exactly like the settings page does.
+
 // ── Why the extra state lives in the theme, not in a pref ─────────────────
 //
 // Lightness, angle and palette are per-space, exactly like the colours are. A
@@ -64,6 +89,44 @@ const PREF_SAVED = "trance.theme.saved.enabled";
 const PREF_SAVED_THEMES = "trance.theme.saved.themes";
 const PREF_NOTIFICATIONS = "trance.theme.notifications";
 
+/**
+ * The two master surface controls: the opacity slider and the blur knob.
+ *
+ * One pref for both, because they are one idea — the surface the whole browser
+ * shares, reachable from the panel where the rest of the look is decided —
+ * and splitting one decision into parts is what ADR-041 removed.
+ */
+const PREF_MASTER = "trance.theme.controls.master";
+
+/** The two `trance.surface.*` values the master controls write. */
+const PREF_SURFACE_OPACITY = "trance.surface.opacity";
+const PREF_SURFACE_BLUR = "trance.surface.blur.radius";
+
+/** The frost's own switch. With it off nothing consumes the blur radius. */
+const PREF_SURFACE_ENABLED = "trance.surface.enabled";
+
+/**
+ * The platform switches that make the *window* translucent, and the media
+ * condition under which each one means anything.
+ *
+ * Where one of them is on, the frost is produced behind Gecko by the
+ * compositor at a radius the operating system owns, and `--trance-surface-blur`
+ * has no consumer — see the Blur section of trance-surfaces.css, which is
+ * gated on exactly this. Windows is absent because Mica answers for itself
+ * through `-moz-windows-mica`, which reports whether it is actually in effect
+ * rather than whether it was asked for.
+ */
+const PLATFORM_TRANSLUCENCY = Object.freeze([
+  {
+    pref: "zen.widget.macos.window-vibrancy",
+    media: "(-moz-platform: macos)",
+  },
+  {
+    pref: "zen.widget.linux.transparency",
+    media: "(-moz-platform: linux)",
+  },
+]);
+
 /** Zen's own switch for the custom-colour list. Claimed and released. */
 const PREF_ZEN_CUSTOM_COLORS = "zen.theme.gradient.show-custom-colors";
 
@@ -72,6 +135,28 @@ const EXPLICIT_BLACKWHITE_TYPE = "explicit-black-white";
 
 /** Degrees per press of an arrow key on the angle knob. */
 const ANGLE_STEP = 15;
+
+/**
+ * The blur knob's ceiling, in pixels, and the arc it turns through.
+ *
+ * 60 is the settings page's own maximum, so the two controls for this pref
+ * cannot disagree about what its top is. The sweep is 270° rather than a full
+ * turn because a blur radius has ends: on a full circle 0px and 60px would
+ * share a position and a drag past the maximum would wrap to nothing, which is
+ * the one thing a bounded dial must not do. The gap sits at the bottom, so the
+ * handle travels from the lower left round to the lower right.
+ */
+const MAX_BLUR = 60;
+const BLUR_SWEEP = 270;
+
+/** Pixels per press of an arrow key on the blur knob, and per haptic tick. */
+const BLUR_STEP = 2;
+
+/** The blur knob's tooltip, in each of the two states it has. */
+const BLUR_TITLE = "Frost blur — drag to turn, or use the arrow keys";
+const BLUR_TITLE_INERT =
+  "Frost blur — inert here: this window is translucent in its own right, so " +
+  "the operating system produces the frost at a radius it owns";
 
 /**
  * How many slots the saved page draws.
@@ -203,7 +288,8 @@ const ZEN_TOOLTIPS = Object.freeze({
   "PanelUI-zen-gradient-generator-color-page-left": "Previous presets",
   "PanelUI-zen-gradient-generator-color-page-right": "More presets",
   "PanelUI-zen-gradient-generator-texture-wrapper": "Grain",
-  "PanelUI-zen-gradient-generator-opacity": "Tint strength",
+  "PanelUI-zen-gradient-generator-opacity":
+    "Tint strength — how much colour the chrome carries, from none to full",
   "PanelUI-zen-gradient-generator-custom-opacity": "Opacity of the colour",
 });
 
@@ -579,7 +665,7 @@ export class TranceTheme extends TranceFeature {
   }
 
   /**
-   * The gradient angle.
+   * The gradient angle, and tint strength.
    *
    * Zen hard-codes `const rotation = -45` and builds every gradient string
    * around it, with a `TODO: Detect rotation based on the accent color` next to
@@ -593,13 +679,76 @@ export class TranceTheme extends TranceFeature {
    *
    * A single flat colour has no angle, which is why the knob is inert until the
    * theme is actually a gradient.
+   *
+   * The same string is also where tint strength is separated from
+   * transparency, for the same reason: one seam that every gradient already
+   * passes through beats owning `getGradient`'s three layout cases. See
+   * `#flattenTint`.
    */
   #wrapGradient() {
     this.#patch(
       "getGradient",
       original =>
         (colors, forToolbar = false) =>
-          this.#rotate(original(colors, forToolbar))
+          this.#rotate(this.#flattenTint(original(colors, forToolbar), colors))
+    );
+  }
+
+  /**
+   * Tint strength, taken back out of Zen's alpha channel.
+   *
+   * `currentOpacity` reaches the CSS as the alpha of every wheel colour, so the
+   * slider that names it was simultaneously the tint control and the
+   * transparency control — and the two want opposite things. "A strong colour
+   * that you can see the desktop through" and "a flat opaque colour" were both
+   * unreachable, because asking for either meant giving up the other.
+   *
+   * This composites that alpha down against the browser's own chrome colour
+   * and emits an opaque `rgb()`. The arithmetic is not Trance's: it is exactly
+   * what Zen already does on a platform whose window cannot be transparent
+   * (`blendColors(colour, base, opacity * 100)`, then alpha 1), applied
+   * everywhere rather than only there — so the slider means one thing on every
+   * platform, and it means the thing its label says.
+   *
+   * Transparency then comes from `--trance-surface-alpha` alone, which is one
+   * `opacity` on Zen's background elements and the master slider's value.
+   *
+   * Three things are deliberately left alone:
+   *
+   *   - `transparent` stops, which are the *shape* of a multi-colour gradient
+   *     rather than its strength — flattening those would fill the fade;
+   *   - exact colours, which Zen emits verbatim as `#RRGGBB` or `#RRGGBBAA`.
+   *     Their alpha is a digit the user typed, not a slider position, and the
+   *     hex field promises it will be used as typed. The pattern below matches
+   *     `rgba()` only, which is what the wheel produces and customs never are;
+   *   - the default theme, which has no colours at all. Its `rgba(0, 0, 0, 0.4)`
+   *     is a hard-coded fallback rather than anything the slider wrote, so
+   *     `colors` being empty is the gate.
+   *
+   * @param {string|Array} css Whatever Zen's `getGradient` returned.
+   * @param {Array} colors The colours it was given.
+   * @returns {string|Array}
+   */
+  #flattenTint(css, colors) {
+    if (typeof css !== "string" || !colors?.filter(Boolean).length) {
+      return css;
+    }
+    const picker = this.#picker;
+    const base = picker.getToolbarModifiedBaseRaw().slice(0, 3);
+    return css.replace(
+      /rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g,
+      (match, red, green, blue, rawAlpha) => {
+        const strength = parseFloat(rawAlpha);
+        if (!(strength < 1)) {
+          return match;
+        }
+        const [r, g, b] = picker.blendColors(
+          [parseFloat(red), parseFloat(green), parseFloat(blue)],
+          base,
+          strength * 100
+        );
+        return `rgb(${r}, ${g}, ${b})`;
+      }
     );
   }
 
@@ -990,20 +1139,55 @@ export class TranceTheme extends TranceFeature {
   }
 
   /**
-   * The lightness slider and the angle knob.
+   * The two Trance rows, under Zen's own.
    *
-   * One row under Zen's own, so the two sliders stack on the left and the two
-   * knobs stack on the right: translucency and grain are Zen's, lightness and
-   * angle are Trance's, and nothing was moved to achieve it.
+   * The column structure is Zen's and is the whole reason there are rows at
+   * all: a slider on the left, a knob on the right. Zen's row is translucency
+   * and grain; the first Trance row is lightness and gradient angle; the
+   * second is the two master controls — surface opacity and frost blur. So the
+   * sliders stack in one column and the knobs stack in another, three deep,
+   * and nothing of Zen's was moved to achieve it.
+   *
+   * The order within that is not arbitrary either. Reading down the slider
+   * column: how much colour (Zen's), how light that colour is, how much of the
+   * window shows through. Each one is a narrower question than the one above.
    *
    * @param {Document} doc
    * @param {Element} panel
    */
   #buildControls(doc, panel) {
+    const controls = panel.querySelector(
+      "#PanelUI-zen-gradient-generator-controls"
+    );
+    if (!controls) {
+      return;
+    }
+    let after = controls;
+    for (const [role, row] of [
+      ["row", this.#buildThemeRow(doc)],
+      ["masterRow", this.#buildMasterRow(doc)],
+    ]) {
+      if (!row) {
+        continue;
+      }
+      after.after(row);
+      after = row;
+      this.#nodes[role] = row;
+    }
+  }
+
+  /**
+   * The lightness slider and the gradient-angle knob — the two per-space
+   * controls, which is why they share a row.
+   *
+   * @param {Document} doc
+   * @returns {Element|null}
+   */
+  #buildThemeRow(doc) {
     const wantLightness = Services.prefs.getBoolPref(PREF_LIGHTNESS, true);
     const wantAngle = Services.prefs.getBoolPref(PREF_ANGLE, true);
     if (!wantLightness && !wantAngle) {
-      return;
+      return null;
     }
 
     const row = doc.createElement("div");
@@ -1034,44 +1218,135 @@ export class TranceTheme extends TranceFeature {
     }
 
     if (wantAngle) {
-      row.appendChild(this.#buildKnob(doc));
+      const { knob, handle, value } = this.#buildKnob(doc, {
+        role: "angle",
+        label: "Gradient angle",
+        title: "Gradient angle — drag to turn, or use the arrow keys",
+        max: 359,
+      });
+      this.addListener(knob, "mousedown", event =>
+        this.#onKnobDown(event, knob, {
+          apply: degrees => this.#setAngle(degrees),
+          commit: () => this.#commit(),
+        })
+      );
+      this.addListener(knob, "keydown", event => this.#onAngleKey(event));
+      this.#nodes.knob = knob;
+      this.#nodes.knobHandle = handle;
+      this.#nodes.knobValue = value;
+      row.appendChild(knob);
     }
 
-    const controls = panel.querySelector(
-      "#PanelUI-zen-gradient-generator-controls"
-    );
-    if (!controls) {
-      return;
-    }
-    controls.after(row);
-    this.#nodes.row = row;
+    return row;
   }
 
   /**
-   * The angle knob: a continuous ring, a handle that follows the pointer, and
-   * the angle itself in the middle.
+   * The master opacity slider and the master blur knob.
    *
-   * An angle is a number, and the knob says the number. The alternative — a
-   * swatch of the gradient inside the ring — was a second, smaller, rotated
-   * copy of the thing the panel is already showing full-size behind it, which
-   * is decoration where a readout belongs. Detent dots went with it: they
-   * quantised the value to twenty-four positions for no reason other than that
-   * Zen's grain knob has sixteen, and a gradient angle has no detents.
+   * Both write a `trance.surface.*` pref, so both are global where everything
+   * else in this panel is per-space — and that is the correct shape rather
+   * than an inconsistency. There is one surface for the whole browser
+   * (ADR-041); a per-space blur radius would be a different sheet of glass per
+   * space, which is the seam this project exists to remove, and a per-space
+   * transparency would make switching space a change of *material*.
    *
-   * It is keyboard-reachable, which Zen's is not — a knob that can only be
-   * dragged is a control some people cannot use at all. Arrow keys still move
-   * in `ANGLE_STEP` degrees, because a key press has to be worth something.
+   * They are here because this is the panel where the look is decided. The
+   * settings page has had both sliders all along and they were the wrong
+   * distance from the colour they act on: the answer to "why is this too
+   * strong" was two windows away from the thing that was too strong. Neither
+   * control owns its value — the pref does, both surfaces write it, and each
+   * reads itself back from it through an observer.
    *
    * @param {Document} doc
-   * @returns {Element}
+   * @returns {Element|null}
    */
-  #buildKnob(doc) {
+  #buildMasterRow(doc) {
+    if (!Services.prefs.getBoolPref(PREF_MASTER, true)) {
+      return null;
+    }
+
+    const row = doc.createElement("div");
+    row.className = "trance-theme-row";
+
+    const wrapper = doc.createElement("div");
+    wrapper.className =
+      "trance-theme-slider-wrapper trance-theme-master-wrapper";
+    const slider = doc.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = "100";
+    slider.step = "1";
+    slider.className = "trance-theme-slider";
+    slider.setAttribute("aria-label", "Surface opacity");
+    slider.title =
+      "Surface opacity — how much of the window shows through the chrome. " +
+      "100% is a flat, solid theme";
+    // The pref is the value. Writing it on `input` is what makes the control
+    // live, and it costs one custom property per window through TranceTokens —
+    // no stylesheet is rebuilt and no rule is re-matched.
+    this.addListener(slider, "input", () =>
+      Services.prefs.setIntPref(PREF_SURFACE_OPACITY, Number(slider.value))
+    );
+    wrapper.appendChild(slider);
+    row.appendChild(wrapper);
+    this.#nodes.masterSlider = slider;
+
+    const { knob, handle, value } = this.#buildKnob(doc, {
+      role: "blur",
+      label: "Frost blur",
+      title: BLUR_TITLE,
+      max: MAX_BLUR,
+    });
+    this.addListener(knob, "mousedown", event =>
+      this.#onKnobDown(event, knob, {
+        apply: degrees => this.#setBlurFromBearing(degrees),
+      })
+    );
+    this.addListener(knob, "keydown", event => this.#onBlurKey(event));
+    this.#nodes.blurKnob = knob;
+    this.#nodes.blurKnobHandle = handle;
+    this.#nodes.blurKnobValue = value;
+    row.appendChild(knob);
+
+    return row;
+  }
+
+  /**
+   * A knob: a continuous ring, a handle that follows the pointer, and the
+   * value itself in the middle.
+   *
+   * A number, and the knob says the number. The alternative the angle knob
+   * started with — a swatch of the gradient inside the ring — was a second,
+   * smaller, rotated copy of the thing the panel is already showing full-size
+   * behind it, which is decoration where a readout belongs. Detent dots went
+   * with it: they quantised the value to twenty-four positions for no reason
+   * other than that Zen's grain knob has sixteen.
+   *
+   * Both knobs are keyboard-reachable, which Zen's is not — a knob that can
+   * only be dragged is a control some people cannot use at all.
+   *
+   * The two differ in what they do with the pointer's bearing and in nothing
+   * else, so the element, the ring, the readout and the gesture are written
+   * once and the caller supplies the reading.
+   *
+   * @param {Document} doc
+   * @param {object} spec
+   * @param {string} spec.role Suffix for the class, so CSS and tests can tell
+   *   the two apart.
+   * @param {string} spec.label
+   * @param {string} spec.title
+   * @param {number} spec.max The top of the range, for assistive technology.
+   * @returns {{knob: Element, handle: Element, value: Element}}
+   */
+  #buildKnob(doc, { role, label, title, max }) {
     const knob = doc.createElement("div");
-    knob.className = "trance-theme-knob";
+    knob.className = `trance-theme-knob trance-theme-knob-${role}`;
     knob.tabIndex = 0;
     knob.setAttribute("role", "slider");
-    knob.setAttribute("aria-label", "Gradient angle");
-    knob.title = "Gradient angle — drag to turn, or use the arrow keys";
+    knob.setAttribute("aria-label", label);
+    knob.setAttribute("aria-valuemin", "0");
+    knob.setAttribute("aria-valuemax", String(max));
+    knob.title = title;
 
     const value = doc.createElement("span");
     value.className = "trance-theme-knob-value";
@@ -1081,13 +1356,7 @@ export class TranceTheme extends TranceFeature {
     handle.className = "trance-theme-knob-handle";
     knob.appendChild(handle);
 
-    this.addListener(knob, "mousedown", event => this.#onKnobDown(event));
-    this.addListener(knob, "keydown", event => this.#onKnobKey(event));
-
-    this.#nodes.knob = knob;
-    this.#nodes.knobHandle = handle;
-    this.#nodes.knobValue = value;
-    return knob;
+    return { knob, handle, value };
   }
 
   /**
@@ -1234,38 +1503,82 @@ export class TranceTheme extends TranceFeature {
     });
   }
 
-  // --- The angle knob --------------------------------------------------------
+  // --- The knobs -------------------------------------------------------------
 
-  #onKnobDown(event) {
-    if (event.button !== 0 || !this.#isGradient) {
+  /**
+   * One drag gesture, shared.
+   *
+   * Press anywhere in the circle and the knob is yours — not only on the
+   * handle, which is the thing Zen's grain knob gets wrong and which this
+   * feature already fixes for Zen's own control in `#observe`.
+   *
+   * The `disabled` attribute is the guard rather than each knob's own
+   * condition, because it is the same answer: `#syncLive` and `#syncMaster`
+   * decide when a knob is inert, and the CSS that greys it also stops it
+   * receiving the press. This is the belt to that pair of braces.
+   *
+   * @param {MouseEvent} event
+   * @param {Element} knob
+   * @param {object} handlers
+   * @param {(degrees: number) => void} handlers.apply Bearing to value.
+   * @param {() => void} [handlers.commit] End of gesture. Omitted where the
+   *   value is a pref, which is already persistent by the time it is read.
+   */
+  #onKnobDown(event, knob, { apply, commit }) {
+    if (event.button !== 0 || knob.hasAttribute("disabled")) {
       return;
     }
     event.preventDefault();
     const doc = this.context.document;
-    const move = moveEvent => this.#onKnobMove(moveEvent);
+    const move = moveEvent => apply(this.#bearing(moveEvent, knob));
     const up = () => {
       doc.removeEventListener("mousemove", move);
       doc.removeEventListener("mouseup", up);
-      this.#commit();
+      commit?.();
     };
     doc.addEventListener("mousemove", move);
     doc.addEventListener("mouseup", up);
-    this.#onKnobMove(event);
+    apply(this.#bearing(event, knob));
   }
 
-  #onKnobMove(event) {
-    const knob = this.#nodes.knob;
+  /**
+   * Where the pointer is, as a bearing in degrees clockwise from "up".
+   *
+   * @param {MouseEvent} event
+   * @param {Element} knob
+   * @returns {number} Greater than −180, up to and including 180.
+   */
+  #bearing(event, knob) {
     const rect = this.context.window.windowUtils.getBoundsWithoutFlushing(knob);
     const radians = Math.atan2(
       event.clientY - rect.top - rect.height / 2,
       event.clientX - rect.left - rect.width / 2
     );
-    // atan2 measures from the +x axis; a gradient angle measures from "up".
+    // atan2 measures from the +x axis; a dial measures from "up".
     const degrees = (radians * 180) / Math.PI + 90;
-    this.#setAngle(degrees);
+    return ((((degrees + 180) % 360) + 360) % 360) - 180;
   }
 
-  #onKnobKey(event) {
+  /**
+   * Puts a handle on the ring at a bearing.
+   *
+   * @param {Element} knob
+   * @param {Element} handle
+   * @param {number} degrees Clockwise from "up".
+   */
+  #placeHandle(knob, handle, degrees) {
+    const size =
+      this.context.window.windowUtils.getBoundsWithoutFlushing(knob).width;
+    if (!size) {
+      return;
+    }
+    const radians = ((degrees - 90) * Math.PI) / 180;
+    handle.style.transform = `rotate(${degrees}deg)`;
+    handle.style.left = `${size / 2 + Math.cos(radians) * (size / 2) - 3}px`;
+    handle.style.top = `${size / 2 + Math.sin(radians) * (size / 2) - 6}px`;
+  }
+
+  #onAngleKey(event) {
     const delta = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[
       event.key
     ];
@@ -1292,6 +1605,102 @@ export class TranceTheme extends TranceFeature {
       Services.zen.playHapticFeedback();
     }
     this.#repaint();
+  }
+
+  #onBlurKey(event) {
+    const delta = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[
+      event.key
+    ];
+    if (!delta || this.#nodes.blurKnob?.hasAttribute("disabled")) {
+      return;
+    }
+    event.preventDefault();
+    this.#setBlur(this.#blur + delta * BLUR_STEP);
+  }
+
+  /**
+   * The blur knob's 270° arc, in pixels.
+   *
+   * Clamped rather than wrapped, which is the difference between a dial with
+   * ends and a dial without: dragging into the gap at the bottom holds at
+   * whichever end you came from instead of jumping to the other one.
+   *
+   * @param {number} degrees Bearing, clockwise from "up".
+   */
+  #setBlurFromBearing(degrees) {
+    const half = BLUR_SWEEP / 2;
+    const clamped = Math.max(-half, Math.min(half, degrees));
+    this.#setBlur(((clamped + half) / BLUR_SWEEP) * MAX_BLUR);
+  }
+
+  /**
+   * @param {number} pixels
+   */
+  #setBlur(pixels) {
+    const next = Math.round(Math.max(0, Math.min(MAX_BLUR, pixels)));
+    const previous = this.#blur;
+    if (next === previous) {
+      return;
+    }
+    // The pref observer is what moves the knob: writing it is synchronous, so
+    // by the time this returns the readout, the handle and every window's
+    // `--trance-surface-blur` already agree. One owner for the value.
+    Services.prefs.setIntPref(PREF_SURFACE_BLUR, next);
+    if (Math.round(next / BLUR_STEP) !== Math.round(previous / BLUR_STEP)) {
+      Services.zen.playHapticFeedback();
+    }
+  }
+
+  // --- The master surface values ---------------------------------------------
+
+  /** @returns {number} The blur radius in pixels, inside the knob's range. */
+  get #blur() {
+    const pixels = Services.prefs.getIntPref(PREF_SURFACE_BLUR, 24);
+    return Math.max(0, Math.min(MAX_BLUR, pixels));
+  }
+
+  /** @returns {number} Surface opacity as a percentage. */
+  get #masterOpacity() {
+    const percent = Services.prefs.getIntPref(PREF_SURFACE_OPACITY, 20);
+    return Math.max(0, Math.min(100, percent));
+  }
+
+  /**
+   * Whether `--trance-surface-blur` has anything reading it in this window.
+   *
+   * This is the JavaScript half of the media query the Blur section of
+   * trance-surfaces.css is gated on, and it has to stay the same question:
+   * where the *window* is translucent in its own right — macOS vibrancy,
+   * Windows Mica, a transparent GTK window — the frost is produced behind
+   * Gecko by the compositor at a radius the operating system owns, and a
+   * `backdrop-filter` there replaces that frost with a flat rectangle instead
+   * of softening it. So on those platforms nothing consumes the radius, and a
+   * knob that wrote it anyway would be a control with no effect.
+   *
+   * It goes inert instead, and says why in its tooltip. Turning transparency
+   * off — which is what "pure flat" means — hands the frost back to Gecko and
+   * the knob back to the user.
+   *
+   * Mica is asked through `-moz-windows-mica` rather than through its pref
+   * because the pref is a request and the media feature is the answer.
+   *
+   * @returns {boolean}
+   */
+  #blurHasConsumer() {
+    const win = this.context.window;
+    if (!Services.prefs.getBoolPref(PREF_SURFACE_ENABLED, true)) {
+      return false;
+    }
+    if (
+      win.matchMedia("(prefers-reduced-transparency: reduce)").matches ||
+      win.matchMedia("(-moz-windows-mica)").matches
+    ) {
+      return false;
+    }
+    return !PLATFORM_TRANSLUCENCY.some(
+      ({ pref, media }) =>
+        win.matchMedia(media).matches && Services.prefs.getBoolPref(pref, false)
+    );
   }
 
   // --- The palette and the heart ---------------------------------------------
@@ -1562,6 +1971,30 @@ export class TranceTheme extends TranceFeature {
       Services.prefs.addObserver(pref, prefObserver);
       this.addDisposer(() => Services.prefs.removeObserver(pref, prefObserver));
     }
+
+    // The master controls' prefs, and the platform switches that decide
+    // whether the blur one has a consumer. These get `#syncMaster` rather than
+    // `#sync`: they are written from a drag, and the full sync recomputes the
+    // lightness track and the saved-theme keys, none of which a surface value
+    // can have changed. The settings page writes the same prefs, so this is
+    // also what keeps the two surfaces agreeing while both are open.
+    if (this.#nodes.masterSlider || this.#nodes.blurKnob) {
+      const platform = PLATFORM_TRANSLUCENCY.filter(
+        ({ media }) => this.context.window.matchMedia(media).matches
+      ).map(({ pref }) => pref);
+      for (const pref of [
+        PREF_SURFACE_OPACITY,
+        PREF_SURFACE_BLUR,
+        PREF_SURFACE_ENABLED,
+        ...platform,
+      ]) {
+        const prefObserver = { observe: () => this.#syncMaster() };
+        Services.prefs.addObserver(pref, prefObserver);
+        this.addDisposer(() =>
+          Services.prefs.removeObserver(pref, prefObserver)
+        );
+      }
+    }
   }
 
   /** Repaints without saving, which is what a drag wants. */
@@ -1641,6 +2074,8 @@ export class TranceTheme extends TranceFeature {
       );
       this.#nodes.palette.setAttribute("data-palette", palette.id);
     }
+
+    this.#syncMaster();
 
     this.#syncLive(isGradient, true);
     if (savedChanged) {
@@ -1749,15 +2184,7 @@ export class TranceTheme extends TranceFeature {
       knob.setAttribute("aria-valuenow", String(angle));
       knob.setAttribute("aria-valuetext", `${angle} degrees`);
       this.#nodes.knobValue.textContent = `${angle}°`;
-      const handle = this.#nodes.knobHandle;
-      const size =
-        this.context.window.windowUtils.getBoundsWithoutFlushing(knob).width;
-      if (size) {
-        const radians = ((angle - 90) * Math.PI) / 180;
-        handle.style.transform = `rotate(${angle}deg)`;
-        handle.style.left = `${size / 2 + Math.cos(radians) * (size / 2) - 3}px`;
-        handle.style.top = `${size / 2 + Math.sin(radians) * (size / 2) - 6}px`;
-      }
+      this.#placeHandle(knob, this.#nodes.knobHandle, angle);
     }
 
     const heart = this.#nodes.heart;
@@ -1775,6 +2202,43 @@ export class TranceTheme extends TranceFeature {
       // is the only rule about when they are dead.
       heart.disabled = false;
     }
+  }
+
+  /**
+   * The two master controls, pulled back into agreement with their prefs.
+   *
+   * Not part of `#syncLive`, and not called from it: nothing about the surface
+   * changes while a colour dot is being dragged, so this belongs on the paths
+   * where a *pref* changed — the panel opening, and the observers in
+   * `#observe`. That includes this feature's own writes, which is why neither
+   * `#setBlur` nor the opacity slider's listener touches a node: they write the
+   * pref, the observer fires synchronously, and the control follows. One owner
+   * for the value, and no path where the knob and the window disagree.
+   */
+  #syncMaster() {
+    const slider = this.#nodes.masterSlider;
+    if (slider) {
+      const percent = this.#masterOpacity;
+      slider.value = String(percent);
+      slider.setAttribute("aria-valuetext", `${percent} per cent`);
+    }
+
+    const knob = this.#nodes.blurKnob;
+    if (!knob) {
+      return;
+    }
+    const live = this.#blurHasConsumer();
+    const pixels = this.#blur;
+    knob.toggleAttribute("disabled", !live);
+    knob.setAttribute("aria-valuenow", String(pixels));
+    knob.setAttribute("aria-valuetext", `${pixels} pixels`);
+    knob.title = live ? BLUR_TITLE : BLUR_TITLE_INERT;
+    this.#nodes.blurKnobValue.textContent = `${pixels}px`;
+    this.#placeHandle(
+      knob,
+      this.#nodes.blurKnobHandle,
+      -BLUR_SWEEP / 2 + (pixels / MAX_BLUR) * BLUR_SWEEP
+    );
   }
 
   /**

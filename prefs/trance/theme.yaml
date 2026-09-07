@@ -11,11 +11,19 @@
 # (ADR-031).
 #
 # There is deliberately **no** `trance.theme.translucency` pref, and no Trance
-# translucency slider. Zen's picker already has one, it already writes into the
-# theme, and a second slider over the same value is the two-owners problem this
-# project exists to remove. Requirement 2 of the phase brief was met by the
-# thing that was already there — which is also why the palettes below move
-# *Zen's* slider rather than one of their own.
+# translucency slider. Zen's picker already has one — and since 0.2.0 it means
+# only one thing: tint strength. `currentOpacity` used to reach the CSS as the
+# alpha of every wheel colour, so that slider was simultaneously the tint
+# control and the transparency control, and asking for either meant giving up
+# the other. `TranceTheme` now composites that alpha down against the browser's
+# own chrome colour, so 0 is the neutral chrome and 1 is the colour at full
+# strength, both opaque.
+#
+# Transparency is `trance.surface.opacity` and blur is
+# `trance.surface.blur.radius` — one surface for the whole browser (ADR-041),
+# which is why they are prefs and not theme fields. `trance.theme.controls.master`
+# below puts both in the picker as well, where the look is actually decided.
+# A second *surface* for one pref, not a second owner of the value.
 #
 # Per-space values — lightness, gradient angle and the selected palette — are
 # not prefs. They belong to the space, exactly like its colours do, so they are
@@ -46,6 +54,26 @@
 # because a flat colour has no angle — Zen hard-codes -45 degrees for every
 # gradient it builds, and this is the control for that number.
 - name: trance.theme.controls.angle
+  value: true
+
+# The two master controls in the picker: a surface-opacity slider and a
+# frost-blur knob, in a row under the lightness slider and the angle knob.
+#
+# One pref for both, because they are one idea — the surface the whole browser
+# shares, reachable from the panel where the rest of the look is decided.
+# Splitting one decision into per-part switches is what ADR-041 removed.
+#
+# They write `trance.surface.opacity` and `trance.surface.blur.radius`, which
+# the settings page has always had; the picker is the second surface for the
+# same two values, and each reads itself back through a pref observer so the two
+# cannot disagree while both are open.
+#
+# The blur knob goes inert where `--trance-surface-blur` has no consumer —
+# where the *window* is translucent in its own right, the frost is produced
+# behind Gecko at a radius the operating system owns. It says so in its tooltip
+# rather than pretending, and turning `trance.surface.transparency` off hands
+# the blur back. See the Blur section of trance-surfaces.css.
+- name: trance.theme.controls.master
   value: true
 
 # The exact-colour row: type a hex code and it is used verbatim, rather than

@@ -110,10 +110,18 @@ add_task(async function test_the_blur_slider_is_absent_where_it_cannot_work() {
   await withSettings(win => {
     const doc = win.document;
     // Same condition trance-surfaces.css uses to decide whether to ship any
-    // `backdrop-filter` at all (ADR-022). The two must never disagree: a
-    // control that provably cannot do anything is worse than an absent one.
+    // `backdrop-filter` at all (ADR-022, ADR-081). The two must never
+    // disagree: a control that provably cannot do anything is worse than an
+    // absent one.
+    //
+    // The condition is the platform *switch*, not the platform. It used to be
+    // `(-moz-platform: macos)` unconditionally, which hid this row on that
+    // platform even with transparency turned off — where the window is opaque,
+    // the browser paints the backdrop and the radius is the only frost there
+    // is.
     const translucentWindow = win.matchMedia(
-      "(-moz-windows-mica) or (-moz-platform: macos) or " +
+      "(-moz-windows-mica) or " +
+        "((-moz-platform: macos) and (-moz-pref('zen.widget.macos.window-vibrancy'))) or " +
         "((-moz-platform: linux) and (-moz-pref('zen.widget.linux.transparency')))"
     ).matches;
 

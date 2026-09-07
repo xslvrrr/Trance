@@ -1551,8 +1551,12 @@ stock Zen's again, node for node.
 
 **Deliverables**
 - `TranceTheme` — lightness slider, gradient-angle knob (live only while the theme *is* a
-  gradient), eight palettes, saved themes, exact hex entry, and an in-panel toast that names what
-  each button just did
+  gradient), master surface-opacity slider and master blur knob, eight palettes, saved themes,
+  exact hex entry, and an in-panel toast that names what each button just did
+- Zen's own top slider redefined as **tint strength**: the wrap on `getGradient` composites its
+  alpha against the browser's chrome colour, so how much colour the chrome carries and how much of
+  the window shows through it are two controls instead of one overloaded one. Pure flat to fully
+  transparent (ADR-081, 0.2.0)
 - `trance-theme.css` and the picker's tokens
 - Ties `--trance-accent` to the chosen gradient — already true through `--zen-primary-color`, and
   now true of the lightness and palette controls too
@@ -1835,7 +1839,8 @@ tell which of them were decisions and which were defects.
       in `src/zen/trance/distribution/policies.json` (Phase 9)
 - [ ] Release channel decision: single `trance` channel, or `release` + `twilight` equivalents
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] A downloadable macOS arm64 build: the `0.1.0` prerelease, built locally rather than in CI
+- [x] A downloadable macOS arm64 build: the `0.1.0` prerelease, built locally rather than in CI,
+      then `0.1.1` and `0.2.0` the same way
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user

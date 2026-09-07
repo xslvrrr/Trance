@@ -2760,3 +2760,336 @@ development profile keeps its real name, because nothing scans a profile for man
   `dist/bin` left autoconfig behind there and the entire mochitest suite died on "Timed out waiting
   for connection on 127.0.0.1:2828", which is the failure `trance-cosine.py`'s docstring has warned
   about since Phase 7 arriving from a direction it did not cover.
+
+---
+
+> **ADR-059 to ADR-075 are referenced and not yet written.** They are the decisions of AUDIT.md
+> phases 1 to 5 — the ownership rewrites (`TranceGlobalPrefs`, `TranceNavigation`, `TranceMaterial`,
+> `TranceObserverHub`, `TranceTabCache`), the feature-lifecycle fix, and the Phase 5 build work.
+> AUDIT.md cites them by number and this file does not define them. Writing them is outstanding
+> work, recorded here so the gap is a known debt rather than a numbering accident.
+
+## ADR-076 — The drag-and-drop teardown is restored, and the patch gets smaller for it
+
+**Date:** 2026-09-03
+**Status:** Accepted
+
+**Context:**
+
+`src/browser/components/tabbrowser/content/drag-and-drop-js.patch` is Zen's patch over Firefox's
+tab drag-and-drop. Among other things it opens `_updateTabStylesOnDrag` with an unconditional
+`return;`, which makes the rest of that method unreachable — and it also deletes, from three *other*
+methods, the statements that undo what the dead method used to apply:
+
+- the per-tab reset of `style.pointerEvents`, `dragtarget` and `small-stack`;
+- the drag-label reset of `maxWidth`, `height`, `left`, `pointerEvents` and `dragtarget`;
+- the move-together reset of `transform` and `multiselected-move-together`.
+
+Read as "the setter is dead, so the resetter is dead too" this is consistent. It is still wrong,
+because the attributes and inline styles being reset are not written only by the dead method —
+CSS and other drag paths set `dragtarget` and the transforms, and nothing else clears them. The
+AUDIT.md Phase 6 item is "restore complete drag-and-drop teardown".
+
+**Decision:**
+
+Restore the three teardown blocks, by editing `engine/browser/components/tabbrowser/content/
+drag-and-drop.js` and re-exporting the patch — never by hand-editing the `.patch`.
+
+Leave the unconditional `return;` in `_updateTabStylesOnDrag` alone. That is Zen's decision about
+Zen's feature, and removing it would turn a dead method back on.
+
+**Consequences:**
+- The patch is **28 lines smaller**: three hunks disappear entirely, because the restored code is
+  Firefox's own and the patch no longer has to delete it. A touchpoint that reduces divergence from
+  upstream is the only kind worth adding, and this is one.
+- The dead `_updateTabStylesOnDrag` body is now recorded rather than removed, in
+  `docs/trance/patch-manifest.json` under `deadPaths`. The rule that decided it, and that
+  `scripts/trance-patches.py` states in full: *remove a dead path when removing it makes the patch
+  smaller; leave it, recorded, when removing it makes the patch bigger.* Deleting an upstream method
+  body is a bigger patch and a bigger conflict on every rebase.
+- Recorded as touchpoint #23.
+
+---
+
+## ADR-077 — A pref value Trance disagrees with is re-declared, not edited in place
+
+**Date:** 2026-09-03
+**Status:** Accepted
+
+**Context:**
+
+Four upstream touchpoints existed only to change a pref *value*: `prefs/zen/mods.yaml`,
+`prefs/zen/view.yaml`, `prefs/zen/zen-urlbar.yaml`, `prefs/firefox/urlbar.yaml`. Each was a
+one-line edit inside a file Zen or Firefox owns, and each cost a rebase conflict for as long as it
+existed.
+
+They were edited in place because the alternative did not work. `tools/ffprefs` walked
+`prefs/**/*.yaml` in `fs::read_dir` order and, for a pref declared twice, emitted whichever it
+happened to read last — a property of the filesystem, so a re-declaration in `prefs/trance/` was
+not an override, it was a coin flip that could land differently on another machine.
+
+**Decision:**
+
+Make the resolution deterministic, then move the values.
+
+`ffprefs` now sorts pref files by `(precedence, path)`, where precedence is 1 for any file under a
+`trance/` directory and 0 for everything else, and de-duplicates by keeping the **last** declaration
+of each `(name, condition, type)`.
+
+The key is the triple, not the name. Keying on the name alone — which the first version of this did
+— means the `type: static` declaration of `zen.haptic-feedback.enabled` in `prefs/zen/static.yaml`
+is dropped in favour of the plain one in `prefs/zen/zen.yaml`, deleting a C++ `StaticPrefs` getter
+that other code compiles against, and the official/non-official pair of
+`zen.injections.match-urls` collapses to one arbitrary half.
+
+All four values then moved to `prefs/trance/overrides.yaml`, and the four upstream files were
+restored to `upstream/dev` byte-for-byte.
+
+**Consequences:**
+- Four touchpoints retired (AUDIT.md Phase 6.9). The list stands at 25.
+- `prefs/trance/overrides.yaml` may only re-declare a pref that an upstream file already declares.
+  A pref Trance *introduces* belongs to its feature's own file. Without that rule the new file
+  becomes a second place to look for every default.
+- The reasoning moved with the values. It used to sit in four files somebody else owns, where a
+  rebase conflict resolves by taking one side or the other and the prose is what gets lost.
+- A Trance file can now silently change an upstream default. That is the point, and it is also the
+  risk: `overrides.yaml` is the first place to look when a pref does not have the value its
+  declaring file says it has.
+
+---
+
+## ADR-078 — The patch set gets an integrity gate, not a description
+
+**Date:** 2026-09-03
+**Status:** Accepted
+
+**Context:**
+
+The fork carries 256 patches over 300 engine files, applied by surfer in the order tiny-glob
+returns them — readdir order, a property of the filesystem. Nothing recorded which patches existed,
+which files had more than one owner, whether a patch that was declared had actually applied, or
+where a third-party patch came from. `engine/` also accumulated 1390 absolute symlinks, so a moved
+checkout produced a tree that still built and no longer pointed at this repository.
+
+AUDIT.md Phase 6 asks for a canonical ordered manifest, a failure when a declared patch is not
+reflected in the engine, no absolute symlinks, resolved overlapping owners, pinned external
+patches, and reproducible generated inventories.
+
+**Decision:**
+
+`scripts/trance-patches.py`, with `manifest`, `verify`, `relink` and `overlaps`, plus
+`scripts/trance-inventory.py check`. `npm run import` runs relink, `manifest --check`, `verify` and
+`inventory:check` after surfer, so an import that produces a tree the manifest does not describe
+fails there rather than at build time or later.
+
+The reflection test is `git apply -R --check` with surfer's own flags, not a hash comparison.
+A blob hash proves the engine file is byte-identical to the tree the patch was exported from,
+which stops being true the moment Firefox is bumped underneath it: 152 of 256 patches fail that
+test today and every one of them is correctly applied. Hash comparison is kept behind
+`--strict-hashes` as a provenance report.
+
+**Consequences:**
+- Overlapping files are declared with a reason (`KNOWN_OVERLAPS`), and an undeclared seventh fails.
+  Resolving an overlap does not mean merging it: folding a third-party Firefox patch into a fork
+  patch destroys the provenance that lets it be dropped when Firefox lands the fix.
+- Of the six overlaps, two are *order-sensitive* — two patches editing the same region — which is
+  computed from the hunk headers rather than assumed. Each must be ruled on in `ORDER_RULES`.
+  Surfer cannot be made to read the canonical order without forking it; what is achievable is that
+  the places where order can matter are enumerated, and that a wrong order cannot pass unnoticed,
+  because a patch applied over text another patch rewrote does not reverse-apply cleanly.
+- External patches are pinned by content hash, and their origins are read from
+  `src/external-patches/manifest.json`. An entry whose type is not understood, or a patch file with
+  no entry, is a hard failure — an unpinned `{"type": "?"}` in the manifest would be ignorance
+  written down and called a pin.
+- Dead paths a patch *introduces* are recorded rather than removed, under the rule ADR-076 states.
+- `mods-inventory.json` called itself generated and was written by hand. `trance-inventory.py`
+  makes every mechanical field in it checkable against the owner that decides it — the provisioner,
+  `policies.json`, the investigation docs on disk — and the `generatedAt` field it never earned is
+  gone. It found two real drifts on its first run and a third (a shipped version that disagreed
+  with the provisioner) once it learned to compare versions and pins.
+
+---
+
+## ADR-079 — Session store keeps upstream's private-browsing guards
+
+**Date:** 2026-09-03
+**Status:** Accepted
+
+**Context:**
+
+Three of Zen's session-store patches disabled upstream code with a constant rather than deleting
+it:
+
+- `SessionSaver.sys.mjs`: `if (lazy.PrivateBrowsingUtils.permanentPrivateBrowsing)` → `if (false)`,
+  around the block that declines to save or even collect session state;
+- `SessionStartup.sys.mjs`: the same guard on init, → `if (false)`, and
+  `isAutomaticRestoreEnabled()` → `true`;
+- `SessionStore.sys.mjs`: three `&& false` conditions inside the restore path.
+
+AUDIT.md Phase 6 asks for unreachable `false &&`, `if (false)` and unconditional-return paths to be
+removed. Two things are true of these at once: they are dead code, and they are *how a feature was
+turned off* — so removing one is not a cleanup, it is a decision about behaviour.
+
+**Decision:**
+
+Restore the real conditions in the two files where the constant was gating permanent private
+browsing, and leave the three `&& false` conditions in `SessionStore.sys.mjs` in place, recorded.
+
+The difference is what the constant was standing in for. `permanentPrivateBrowsing` is a user's
+explicit "never persist anything" setting; overriding it means a browser that writes session state
+for a profile configured never to keep any. Trance ships the whole of `prefs/privatefox/` and three
+privacy extensions on first run, and would be writing tabs to disk in the one mode where a user has
+said not to. `isAutomaticRestoreEnabled()` keeps Zen's always-restore intent, minus that override:
+`!permanentPrivateBrowsing` rather than `true`.
+
+The three in `SessionStore.sys.mjs` gate pinned-tab and tab-group restore paths that Zen replaces
+with its own workspace restore. Removing them means deleting upstream branches the patch currently
+only neutralises, which makes the patch bigger and the next rebase harder — the rule ADR-076 states.
+
+**Consequences:**
+- With `browser.privatebrowsing.autostart` true, Trance no longer saves or collects session state,
+  and no longer auto-restores. That is a behaviour change from Zen and the upstream default.
+- All three patches got smaller. `SessionSaver` and `SessionStartup` lost a hunk each.
+- The remaining three dead paths are in `docs/trance/patch-manifest.json` under `deadPaths`, and
+  `verify` fails on a *new* one, so the set can only shrink without a deliberate decision.
+- Recorded as touchpoints #26 to #28.
+
+---
+
+## ADR-080 — Zen's motion tokens are claimed, and layout transitions are linted rather than banned
+
+**Date:** 2026-09-04
+**Status:** Accepted
+
+**Context:**
+
+"Animations do not feel as smooth as they do in a Chromium browser" was reported against the
+Firefox 155 build. The usual answers — vsync, ProMotion, a compositor fallback — are all wrong here,
+and `docs/trance/motion-smoothness.md` has the measurements. On the machine it was reported on the
+browser holds 120.0 Hz with zero dropped frames, and its frame pacing is within a tenth of a
+percentage point of Chrome's on the same display in the same minute (cv 5.9 % against 5.8 %).
+
+Two things about the browser UI are genuinely different from a Chromium browser's, and neither is
+an engine property:
+
+1. Zen times its own motion at 0.08–0.2 s on `ease` / `ease-in-out` / `linear`. Two tokens in
+   `zen-theme.css` carry most of it and 43 further declarations write the duration inline. At
+   120 Hz, 0.1 s of a symmetric curve is twelve frames of a gesture that leaves and arrives at the
+   same speed.
+2. Sixteen transitions in Zen's sheets and three in Trance's animate a layout property. Measured in
+   the chrome window at 120 Hz, one animated element costs three whole-document style flushes, two
+   synchronous reflows and two display-list rebuilds *per frame*, and the figure does not change
+   with the number of elements because it is the document being reflowed. `transform` and `opacity`
+   cost zero. An Apple-silicon laptop absorbs 150 of them without dropping a frame, which is why
+   this has never been caught: it is battery and it is other people's machines.
+
+**Decision:**
+
+Claim Zen's three motion tokens in `trance-tokens.css` — the same technique ADR-015 used for the
+collapsed rail and the icon scale — and add a stylelint rule for the second problem rather than a
+prohibition.
+
+`--zen-tabbox-element-indent-transition`, `--zen-hidden-toolbar-transition-duration` and
+`--zen-hidden-toolbar-transition` are re-declared on `:root[trance="true"]` in terms of
+`--trance-dur-fast`, `--trance-dur-base` and `--trance-ease-standard`. The animated *property* is
+left as Zen wrote it: `margin-inline-start` is what indents a tab inside its folder, and a
+`translate` would move the tab without narrowing it, which is a different layout rather than the
+same one composited. That is Zen's geometry to change, not a token's.
+
+`trance/no-layout-transition` rejects a transition or animation naming a layout-affecting property
+under `zen/trance/**`, and is overridable per line with a stated reason. It is a rule with an escape
+hatch rather than a ban because some gestures genuinely are layout — a strip that collapses has to
+give its height back to what is below it — and a rule that cannot be answered gets deleted rather
+than argued with. Three of Trance's own declarations carry the comment; the fourth, a `height` on
+the theme picker's knob handle, converted to `scale`.
+
+`scripts/trance-motion-bench.py` is the harness, so the next version of this claim is measured
+rather than felt.
+
+**Consequences:**
+- Zen's transitions now shorten at motion level 1 and disappear at level 0, which they did not
+  before: they resolve through `--trance-dur-*`, which the level rewrites.
+- The tab indent goes from 100 ms to 140 ms and the hidden-toolbar reveal from 150 ms to 220 ms,
+  both on `cubic-bezier(0.2, 0, 0, 1)`. Turning Trance off restores Zen's values.
+- The 43 inline durations in Zen's sheets are untouched and still a second motion system. Fixing
+  them needs a second pair of Zen tokens and an upstream touchpoint.
+- The rule does not run on Zen's sheets, so the sixteen layout transitions that cost the most are
+  the ones it cannot see. Extending it is listed as remaining work rather than done.
+- No upstream file was edited. `src/-stylelintrc-js.patch` grew by one line, inside its existing
+  `>>> TRANCE` block.
+
+---
+
+## ADR-081 — Zen's translucency slider is tint strength, and transparency is its own control
+
+**Date:** 2026-09-07 · **Status:** accepted
+
+**Context:** `gZenThemePicker.currentOpacity` reaches the CSS as the *alpha* of every colour the
+workspace gradient is built from (`#getSingleRGBColor` → `blendWithWhiteOverlay` →
+`rgba(r, g, b, currentOpacity)`). One slider therefore answered two questions at once — how much
+colour the chrome carries, and how much of the window shows through it — and neither could be
+answered without giving up the other. "A strong colour you can see the desktop through" and "a flat
+opaque theme" were both unreachable positions on a control whose ends Trance had already widened to
+0 and 1 (ADR-031).
+
+Trance already owned the other half of the answer: `--trance-surface-alpha` is an `opacity` on
+Zen's background elements, and `--trance-surface-blur` is the frost radius. Both were prefs whose
+only surface was `about:preferences#trance` — two windows away from the colour they act on.
+
+**Decision:** Three changes, one idea.
+
+1. The wrap on `getGradient` composites Zen's alpha down against the browser's own chrome colour
+   and emits an opaque `rgb()`. The arithmetic is Zen's, not Trance's: it is exactly what
+   `#getSingleRGBColor` already does on a platform whose window cannot be transparent
+   (`blendColors(colour, getToolbarModifiedBaseRaw(), opacity * 100)`, then alpha 1), applied
+   everywhere rather than only there. The slider now means one thing on every platform, and it
+   means what its label says.
+
+   Three things are left alone: `transparent` stops, which are the *shape* of a multi-colour
+   gradient rather than its strength; exact colours, whose alpha is a digit the user typed into the
+   hex field and which Zen emits verbatim as `#RRGGBBAA` (the rewrite matches `rgba()` only); and
+   the default theme, whose `rgba(0, 0, 0, 0.4)` is a hard-coded fallback rather than a slider
+   position, gated out by `colors` being empty.
+
+2. A second Trance row in the picker: a master opacity slider writing `trance.surface.opacity` and
+   a master blur knob writing `trance.surface.blur.radius`, behind one pref
+   (`trance.theme.controls.master`). One pref for both because they are one idea — the surface the
+   whole browser shares — and splitting a decision into per-part switches is what ADR-041 removed.
+   Neither control owns its value: the pref does, the settings page writes the same one, and each
+   surface reads itself back through an observer, so the two cannot disagree while both are open.
+
+   The blur knob is the angle knob's construction with a different reading of the pointer: 270° of
+   arc, clamped at both ends rather than wrapped, with the radius in pixels in the middle. A full
+   turn would put 0px and 60px in the same place and let a drag past the maximum fall to nothing,
+   which is the one thing a bounded dial must not do.
+
+3. The Blur section of `trance-surfaces.css` is gated on the platform *switch* rather than on the
+   platform. It was `(-moz-platform: macos)` unconditionally, so `trance.surface.blur.radius` had
+   no consumer on that platform **even with transparency turned off** — where the window is opaque,
+   Gecko paints the backdrop and `backdrop-filter` is both correct and the only frost available.
+   macOS and Linux now ask `-moz-pref()` on the switch `TranceSurfaces` claims; Mica keeps
+   answering through `-moz-windows-mica`, which reports what is in effect rather than what was
+   requested. `TranceTheme#blurHasConsumer` is the same question in JavaScript, and the settings
+   page's row/note swap uses the same condition. The reasoning of ADR-022 is unchanged and is why
+   the gate exists at all: a `backdrop-filter` over a natively translucent window replaces the
+   compositor's frost with a flat rectangle instead of softening it.
+
+**Consequences:**
+- Existing themes read as more colourful. Tint strength was previously multiplied by the surface
+  alpha; at 0.5 tint and 20% surface a theme now shows the same colour at 20% instead of at 10%.
+  The two numbers are independent, so the old appearance is reachable — it is just no longer the
+  only thing reachable.
+- The blur knob is inert wherever the operating system owns the frost, which on a macOS build with
+  vibrancy on is the shipped default. It says so in its tooltip rather than accepting a drag that
+  changes nothing, and turning transparency off makes it live. That is the honest state of the
+  platform, not a limitation of the control; an adjustable radius for an `NSVisualEffectView` is
+  not something CSS can ask for.
+- The picker's three sliders now write three different values, so the "exactly two sliders"
+  assertion in `browser_trance_theme.js` became "exactly three". The count stays asserted so a
+  fourth has to be justified rather than merely added.
+- `trance.theme.controls.master` is a fourth control pref on a panel that already has three. It
+  earns it the same way they do: TRANCE.md §6.6 requires every `trance.*` pref on the settings
+  page, and a person who does not want the browser's global surface reachable from a per-space
+  panel needs a way to say so.
+- No upstream file was edited. Every change is inside `src/zen/trance/`, `prefs/trance/` or
+  `src/zen/tests/trance/`, and the picker changes remain reversible node-for-node on disable.

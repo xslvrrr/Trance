@@ -800,7 +800,10 @@ checkbox.trance-switch {
  * rectangle instead of softening it. trance-surfaces.css therefore ships no
  * blur surfaces there at all, so these controls would be controls that provably
  * cannot do anything. A note takes their place, and the two swap over on
- * exactly the same condition the stylesheet uses.
+ * exactly the same condition the stylesheet uses — which is whether the
+ * platform switch is *on*, not which platform this is. Turning transparency
+ * off makes the window opaque, which hands the backdrop back to Gecko and
+ * these two rows back to the user.
  */
 
 #tranceSurfaceBlurNote,
@@ -809,7 +812,7 @@ checkbox.trance-switch {
 }
 
 /* stylelint-disable-next-line media-query-no-invalid */
-@media (-moz-windows-mica) or (-moz-platform: macos) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')) {
+@media (-moz-windows-mica) or ((-moz-platform: macos) and -moz-pref('zen.widget.macos.window-vibrancy')) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')) {
   #tranceSurfaceBlurRow,
   #tranceInternalBlurRow {
     display: none;

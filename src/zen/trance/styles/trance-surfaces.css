@@ -735,13 +735,24 @@
  * black", "the area around the tab window is unfrosted", and "blur radius does
  * nothing". The blur was not doing nothing. It was the thing painting the black.
  *
- * So on those platforms the blur budget is zero surfaces and the operating
- * system is the whole effect, which is also the cheapest possible outcome
- * (TRANCE.md §3.3). On the platforms where Gecko does paint the backdrop, the
- * budget is the same three regions it always was.
+ * So where one of those materials is actually in effect the blur budget is
+ * zero surfaces and the operating system is the whole effect, which is also
+ * the cheapest possible outcome (TRANCE.md §3.3). Where Gecko paints the
+ * backdrop, the budget is the same three regions it always was.
  *
- * `flat` opts out of blur even there: translucency without a single Gaussian
- * pass.
+ * The gate is therefore "is this window translucent in its own right", not "is
+ * this macOS". It used to be the second, and that made `trance.surface.blur.radius`
+ * a pref with no consumer on a whole platform *even with transparency turned
+ * off* — where the window is opaque, Gecko is painting the backdrop and the
+ * blur is both correct and the only frost available. macOS and Linux are now
+ * asked through `-moz-pref()` on the platform switch `TranceSurfaces` claims;
+ * Mica answers through `-moz-windows-mica`, which reports what is in effect
+ * rather than what was requested. `TranceTheme#blurHasConsumer` is the same
+ * question in JavaScript, and it is what makes the master blur knob go inert
+ * instead of writing a number nothing reads.
+ *
+ * `flat` opts out of blur even where it would work: translucency without a
+ * single Gaussian pass.
  *
  * The other half of the "blur does nothing" report was a plain bug:
  * `trance-surface-visible` was never set at startup, because `TranceSurfaces`
@@ -751,7 +762,7 @@
  */
 
 /* stylelint-disable-next-line media-query-no-invalid */
-@media (prefers-reduced-transparency: no-preference) and (not ((-moz-windows-mica) or (-moz-platform: macos) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')))) {
+@media (prefers-reduced-transparency: no-preference) and (not ((-moz-windows-mica) or ((-moz-platform: macos) and -moz-pref('zen.widget.macos.window-vibrancy')) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')))) {
   :root[trance="true"][trance-surface-visible="true"] {
     /* One surface for the whole browser. `#zen-main-app-wrapper` spans the
      * sidebar, the toolbar and the space around the page, so this is the whole

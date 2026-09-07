@@ -159,6 +159,42 @@
   --trance-anim-fade-in: trance-fade-in;
   --trance-anim-fade-out: trance-fade-out;
 
+  /* ---- Zen's motion tokens, claimed -------------------------------------- */
+  /*
+   * Zen declares its own two timing tokens in zen-theme.css, at 0.1s and 0.15s
+   * with `ease-in-out`, and every transition in the sidebar, the folder tree,
+   * the split-view group and the compact-mode toolbar reads one of them. That
+   * is a second motion system inside a browser whose stated goal is one
+   * (TRANCE.md §1), and it is the one the user actually sees most often.
+   *
+   * The two values are also the answer to "why does this not feel as smooth as
+   * a Chromium browser", which is not a frame-rate question — measured with
+   * `scripts/trance-motion-bench.py` this build holds 120 Hz with the same
+   * inter-frame variance as Chrome on the same display, to within a tenth of a
+   * percentage point (docs/trance/motion-smoothness.md). What differs is the
+   * shape of the motion: 100 ms of `ease-in-out` is twelve frames of a
+   * symmetric curve, which reads as a jump with a blur on it, while the
+   * browsers being compared against move over roughly twice as long on a curve
+   * that leaves fast and arrives slowly.
+   *
+   * So: the durations become Trance's, and the easing becomes the standard
+   * curve. The animated *properties* are left exactly as Zen wrote them —
+   * `margin-inline-start` here is what indents a tab inside its folder, and
+   * substituting a `translate` would move the tab without narrowing it, which
+   * is a different layout rather than the same one composited. That cost is
+   * real and it is measured in the bench, but it is Zen's geometry to change,
+   * not a token's.
+   *
+   * Both are inside `:root[trance="true"]`, so turning Trance off gives Zen's
+   * own values back, and both resolve through `--trance-dur-*`, so the motion
+   * level clamps them with everything else.
+   */
+  --zen-tabbox-element-indent-transition: margin-inline-start
+    var(--trance-dur-fast) var(--trance-ease-standard);
+  --zen-hidden-toolbar-transition-duration: var(--trance-dur-base);
+  --zen-hidden-toolbar-transition: var(--zen-hidden-toolbar-transition-duration)
+    var(--trance-ease-standard);
+
   /* ---- Elevation --------------------------------------------------------- */
   /* Resolved to shadows here so no feature writes an ad-hoc box-shadow.
    *
@@ -752,6 +788,23 @@
     color-mix(in oklch, var(--trance-accent) 25%, #000000),
     var(--trance-accent) 50%,
     color-mix(in oklch, var(--trance-accent) 25%, #ffffff)
+  );
+
+  /* The master opacity slider's track: the accent arriving out of nothing.
+   *
+   * The empty end is genuinely `transparent` rather than a chequerboard,
+   * because at that setting the chrome genuinely is not there — what shows
+   * through the track is the panel, which is the space's own gradient over the
+   * window, which is the thing the setting reveals. A chequerboard would be a
+   * diagram of transparency drawn on top of the real one.
+   *
+   * It needs no runtime half, unlike the lightness track above: this slider
+   * does not change the accent, so the ramp cannot slide out from under its
+   * own thumb. */
+  --trance-picker-alpha-track: linear-gradient(
+    to right,
+    transparent,
+    var(--trance-accent)
   );
 
   /* How long an in-panel notification lives, start to finish. A duration

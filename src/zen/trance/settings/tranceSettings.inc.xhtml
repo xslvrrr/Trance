@@ -173,10 +173,13 @@
   </html:div>
 
   <description id="tranceSurfaceBlurNote" class="trance-note">
-    On this system the frost is produced by the operating system, behind
-    everything the browser draws, so there is no blur radius to set — asking the
-    browser to blur it again would replace it with a flat rectangle rather than
-    soften it. Chrome opacity is the setting that changes how much of it you see.
+    While this window is translucent the frost is produced by the operating
+    system, behind everything the browser draws, so there is no blur radius to
+    set — asking the browser to blur it again would replace it with a flat
+    rectangle rather than soften it. Surface opacity is the setting that changes
+    how much of it you see; turning
+    <html:strong>Transparency</html:strong> off makes the window opaque, which
+    hands the frost back to the browser and this slider back to you.
   </description>
 
   <html:div class="trance-row trance-row-child">
@@ -1223,6 +1226,25 @@
     </html:div>
     <html:div class="trance-row-control">
       <checkbox id="tranceThemeAngle" class="trance-switch" preference="trance.theme.controls.angle"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceThemeMaster">Surface opacity and blur in the picker</label>
+      <description>
+        Zen's own top slider is tint strength — how much colour the chrome
+        carries. How much of the window shows through it, and how soft what
+        shows through is, are the two controls in the row below it: they write
+        <html:strong>Frosting → Surface opacity</html:strong> and
+        <html:strong>Blur radius</html:strong> on this page, so a theme can be
+        taken from flat and solid to fully transparent without leaving the
+        panel. The blur knob goes inert where the operating system produces the
+        frost itself, and says so.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceThemeMaster" class="trance-switch" preference="trance.theme.controls.master"/>
     </html:div>
   </html:div>
 

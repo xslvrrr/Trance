@@ -190,7 +190,7 @@
   opacity: 0.55;
 }
 
-/* ---- The gradient-angle knob --------------------------------------------- */
+/* ---- The knobs ----------------------------------------------------------- */
 
 .trance-theme-knob {
   position: relative;
@@ -205,18 +205,27 @@
   }
 }
 
-/* A flat colour has no angle. The knob is not hidden when the theme is one —
- * a control that appears and disappears makes the panel jump — it goes inert,
- * which is also what Zen does to its own buttons in the same situation. */
+/* Both knobs have a state in which they cannot answer: a flat colour has no
+ * angle, and a window the operating system frosts itself has no blur radius
+ * Gecko can set. Neither is hidden when it arrives — a control that appears
+ * and disappears makes the panel jump — so both go inert, which is what Zen
+ * does to its own buttons in the same situation. The blur knob says why in its
+ * tooltip, because "your platform owns this" is not deducible from grey. */
 .trance-theme-knob[disabled] {
   opacity: 0.4;
   pointer-events: none;
 }
 
 /* The track the handle runs on: one continuous ring at the full radius, rather
- * than the twenty-four dots that used to stand in for one. The knob turns
- * freely now, so a ring is the honest picture of what it can do — dots drew
- * detents that no longer exist. */
+ * than the twenty-four dots that used to stand in for one. The angle knob
+ * turns freely, so a ring is the honest picture of what it can do — dots drew
+ * detents that no longer exist.
+ *
+ * The blur knob turns through 270° of it and holds at the ends, so the bottom
+ * of its ring is track the handle never reaches. That is deliberate: the ring
+ * is the shape of the control, the handle's own travel is what says where the
+ * ends are, and a three-quarter arc drawn as an arc would make the two knobs
+ * two different shapes in one column for a fact one drag teaches. */
 .trance-theme-knob::before {
   content: "";
   position: absolute;
@@ -260,11 +269,47 @@
   border-radius: var(--trance-radius-sm);
   background: var(--trance-picker-thumb);
   cursor: pointer;
-  transition: height var(--trance-dur-instant) var(--trance-ease-standard);
+  /* `scale`, not `height`. The handle is a 6x12 bar inside an absolutely
+   * positioned knob, so growing it changes nothing else's geometry — but a
+   * `height` transition is still resolved on the main thread, and Gecko
+   * reflows and rebuilds the display list for the whole browser UI once per
+   * frame while it runs (docs/trance/motion-smoothness.md). A `scale` is the
+   * same 12px-to-14px gesture on the compositor, and the radius is small
+   * enough relative to the bar that the 1.17 factor does not read on it.
+   *
+   * It also lands the growth where the knob wants it. TranceTheme positions the
+   * handle by its centre (`top` less half its height), so growing `height` used
+   * to push the extra two pixels downwards and move that centre; `scale` grows
+   * about it. The `scale` property composes before `transform`, so the
+   * `rotate()` the module writes still applies to the taller bar exactly as it
+   * did before. */
+  transition: scale var(--trance-dur-instant) var(--trance-ease-standard);
 }
 
 .trance-theme-knob:hover .trance-theme-knob-handle {
-  height: 14px;
+  scale: 1 calc(14 / 12);
+}
+
+/* ---- The master controls ------------------------------------------------- */
+
+/* The master opacity slider's track. The lightness track above shows a colour
+ * ramp because lightness is a colour question; this one shows the accent
+ * arriving out of nothing, because "0" here genuinely means the chrome is not
+ * there. The empty end is `transparent` rather than a chequerboard: the panel
+ * behind it is the space's own gradient over the window, which is the actual
+ * thing that shows through at that setting. The control is a picture of its
+ * own effect. */
+.trance-theme-master-wrapper::before {
+  background: var(--trance-picker-alpha-track);
+}
+
+/* The blur readout carries a unit, so it is two characters wider than the
+ * angle's `0°`–`359°`. The disc it sits in is 60% of a 5rem knob — 48px — and
+ * `60px` at the panel's `small` does not fit that with the default letter
+ * spacing to spare. Tightening the tracking is cheaper than growing the knob,
+ * which would break the column it shares with the angle knob above it. */
+.trance-theme-knob-blur .trance-theme-knob-value {
+  letter-spacing: -0.02em;
 }
 
 /* ---- The palette, heart and add buttons ---------------------------------- */

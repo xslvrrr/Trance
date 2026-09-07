@@ -168,6 +168,7 @@ Preferences.addAll([
   { id: "trance.theme.enabled", type: "bool", default: true },
   { id: "trance.theme.controls.lightness", type: "bool", default: true },
   { id: "trance.theme.controls.angle", type: "bool", default: true },
+  { id: "trance.theme.controls.master", type: "bool", default: true },
   { id: "trance.theme.controls.hex", type: "bool", default: true },
   { id: "trance.theme.palettes.enabled", type: "bool", default: true },
   { id: "trance.theme.saved.enabled", type: "bool", default: true },

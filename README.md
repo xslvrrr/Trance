@@ -17,7 +17,7 @@ loader, without the conflicts, and without the power drain.**
 
 ## Download
 
-[**Trance 0.1.1 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.1.1)
+[**Trance 0.2.0 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.2.0)
 
 A development build: no PGO, no LTO, **not signed and not notarised**. Gatekeeper will refuse to
 open it until you clear the quarantine attribute yourself:
