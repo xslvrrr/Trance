@@ -55,10 +55,7 @@ jobs:
 
       - name: Setup surfer CI
         if: steps.check-upstream-branch.outputs.branch_exists == 'false'
-        run: |
-          if [ "${{ github.event.inputs.release_candidate }}" = "false" ]; then
-            npm run surfer -- ci --brand release 
-          fi
+        run: npm run surfer -- ci --brand trance
 
       - name: Restore Surfer engine cache
         id: surfer-engine-cache

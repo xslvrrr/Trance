@@ -21,61 +21,51 @@
 //
 // Replacing that means owning the gradient engine, the theme format and the
 // migration path for everyone's existing spaces — an enormous amount of surface
-// to buy four controls. So Trance does not replace it. `TranceTheme` appends its
-// own controls to the existing panel and wraps four methods on
-// `gZenThemePicker`:
+// to buy four controls. Trance does not replace it. `TranceTheme` is the
+// popup-owned half: it appends controls to the existing panel and owns only
+// their DOM, gestures and live repaint scheduling. `TranceThemeState` is the
+// always-loaded half and owns the startup renderer and per-space serialization
+// that must work while this panel is closed.
 //
-//   getGradient            → rotates the CSS Zen produced by the chosen angle
-//   getColorFromPosition   → applies the lightness slider and the palette
-//   getGradientForWorkspace→ renders another space at *that* space's angle
-//   onWorkspaceChange      → notices a space change and reloads Trance's state
-//   static getTheme        → stamps Trance's three extra fields into the theme
-//
-// Zen keeps owning the dots, the harmonies, the saving and the repaint. Trance
-// owns exactly what it adds, which is the one-owner-per-thing rule this project
-// is built on (TRANCE.md §3.1) applied to itself. With the pref off, every wrap
-// is restored, every node is removed, and the panel is stock Zen's again — node
-// for node, which is what the mochitest checks.
+// Zen keeps owning the dots, harmonies and persistence. The two Trance owners
+// divide the seams by lifetime: state wraps are installed before session
+// restore, while this feature's one repaint wrapper exists only while the
+// controls exist. With the pref off, every wrap is restored, every node is
+// removed, and the panel is stock Zen's again — node for node.
 //
 // ── Tint strength, and the two master controls ────────────────────────────
 //
 // Zen's translucency slider writes `currentOpacity`, and that number is the
-// *alpha* of every colour the gradient is built from. So one control answered
-// two questions at once — how much colour the chrome carries, and how much of
-// the window shows through it — and neither could be answered on its own. A
-// flat opaque theme and a heavily tinted sheet of glass are the same slider
-// position with a different platform underneath.
-//
-// Trance separates them. The wrap on `getGradient` composites the alpha Zen
-// emitted down against the browser's own chrome colour, which turns that
-// slider into tint strength: 0 is the neutral chrome with no colour in it, 1
-// is the colour at full strength, and both are opaque. How much of the window
-// shows through is `--trance-surface-alpha`, which the master opacity slider
-// writes; how soft what shows through is is `--trance-surface-blur`, which the
-// master blur knob writes. Pure flat to fully transparent is two numbers now,
-// instead of one number that could only ever be halfway through both.
+// *alpha* of every colour the gradient is built from. The always-loaded state
+// owner composites that alpha against the browser's own chrome colour, making
+// the slider tint strength: 0 is neutral chrome, 1 is full-strength colour,
+// and both are opaque. Transparency comes from `--trance-surface-alpha`, which
+// this popup's master opacity slider writes; blur comes from its master knob.
 //
 // Those two are prefs rather than theme fields, deliberately: they describe
 // one surface for the whole browser (ADR-041), not a property of a space, and
 // they already existed with the settings page as their only surface. The
-// picker is a second *surface* for the same pref, not a second owner of the
-// value — it writes the pref and then reads its own controls back from it,
-// exactly like the settings page does.
-
+// picker is a second surface for the same pref, not a second owner of the
+// value — it writes the pref and then reads its controls back from it.
+//
 // ── Why the extra state lives in the theme, not in a pref ─────────────────
 //
 // Lightness, angle and palette are per-space, exactly like the colours are. A
 // pref would be one global value for all of them, and a pref *per space* would
 // be an unbounded set of prefs that TRANCE.md §6.6 could not surface. They are
 // therefore three extra fields on the theme object Zen already saves, written
-// by the one seam every theme passes through — the static `getTheme`. A theme
-// that has never seen Trance simply has none of them, and reads as "auto".
+// by the state owner's static `getTheme` seam. A theme that has never seen
+// Trance simply has none of them, and reads as "auto".
 //
 // Refs: TRANCE.md §3.1, §6.2, §6.5, §6.6, §8.1, §13 Phase 8; ADR-031;
 // docs/trance/mods/better-zen-gradient-picker.md
 
 import { TranceFeature } from "chrome://browser/content/trance-components/TranceFeature.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
+import {
+  PALETTES,
+  TranceThemeState,
+} from "chrome://browser/content/trance-components/TranceThemeState.mjs";
 
 const NS = "Theme";
 
@@ -130,8 +120,7 @@ const PLATFORM_TRANSLUCENCY = Object.freeze([
 /** Zen's own switch for the custom-colour list. Claimed and released. */
 const PREF_ZEN_CUSTOM_COLORS = "zen.theme.gradient.show-custom-colors";
 
-/** Zen's dot type for the greyscale preset page. Left entirely alone. */
-const EXPLICIT_BLACKWHITE_TYPE = "explicit-black-white";
+/** Zen's dot type for the greyscale preset page. State leaves it alone. */
 
 /** Degrees per press of an arrow key on the angle knob. */
 const ANGLE_STEP = 15;
@@ -171,85 +160,8 @@ const SAVED_SLOTS = 8;
 /** How many saved themes the extra page holds before the oldest is dropped. */
 const MAX_SAVED = 24;
 
-/**
- * The palettes.
- *
- * A palette is not a set of colours — it is a *slider configuration*, which is
- * the only definition that survives contact with a picker whose colours come
- * from where you click. `saturation` and `lightness` are absolute targets in
- * percent, or null to leave Zen's own value alone; `opacity` is Zen's
- * translucency slider, or null to leave it where the user put it.
- *
- * "Full" is the identity palette: it is what a space that has never met Trance
- * already has, so switching to it is how you get stock Zen's behaviour back
- * without turning the feature off.
- */
-const PALETTES = Object.freeze([
-  {
-    id: "full",
-    label: "Full colour",
-    hint: "Zen's own behaviour — lightness follows the wheel",
-    saturation: null,
-    lightness: null,
-    opacity: null,
-  },
-  {
-    id: "vivid",
-    label: "Vivid",
-    hint: "Saturated, mid lightness",
-    saturation: 100,
-    lightness: 55,
-    opacity: null,
-  },
-  {
-    id: "pastel",
-    label: "Pastel",
-    hint: "Soft and light",
-    saturation: 45,
-    lightness: 82,
-    opacity: 0.45,
-  },
-  {
-    id: "muted",
-    label: "Muted",
-    hint: "Low saturation, mid lightness",
-    saturation: 25,
-    lightness: 58,
-    opacity: null,
-  },
-  {
-    id: "dark",
-    label: "Dark",
-    hint: "Deep colour, heavier tint",
-    saturation: 60,
-    lightness: 18,
-    opacity: 0.75,
-  },
-  {
-    id: "light",
-    label: "Light",
-    hint: "Pale colour, lighter tint",
-    saturation: 55,
-    lightness: 88,
-    opacity: 0.4,
-  },
-  {
-    id: "neon",
-    label: "Neon",
-    hint: "Maximum saturation, bright",
-    saturation: 100,
-    lightness: 66,
-    opacity: 0.6,
-  },
-  {
-    id: "monochrome",
-    label: "Monochrome",
-    hint: "No hue at all",
-    saturation: 0,
-    lightness: null,
-    opacity: null,
-  },
-]);
+// Palette definitions are owned by TranceThemeState so startup rendering and
+// popup controls always read the same immutable configurations.
 
 /**
  * Zen's harmony ids, in the words the panel should use for them.
@@ -313,16 +225,14 @@ export class TranceTheme extends TranceFeature {
    * `lightness: null` means auto — Zen derives it from how far the dot is from
    * the centre of the wheel, which is what a space with no Trance state does.
    */
-  #state = { lightness: null, angle: 0, palette: "full" };
+  get #stateOwner() {
+    return TranceThemeState.forWindow(this.context.window);
+  }
 
-  /** The space `#state` was loaded from, so a space change is noticeable. */
-  #uuid = null;
-
-  /**
-   * The angle to render with, while rendering a space that is not the current
-   * one. See `#wrapGradientForWorkspace`.
-   */
-  #renderAngle = null;
+  /** The mutable per-space state shared with the always-loaded owner. */
+  get #state() {
+    return this.#stateOwner?.state;
+  }
 
   /** Zen's value for the pref below, held while Trance has it claimed. */
   #previousCustomColors = null;
@@ -343,15 +253,6 @@ export class TranceTheme extends TranceFeature {
 
   /** Scheduler handle for the coalesced repaint, or 0 when none is armed. */
   #repaintHandle = 0;
-
-  /**
-   * Whether this window's translucency range has ever been widened.
-   *
-   * Survives a disable, because what it really records is what Zen cached: once
-   * the ends have been read as 0 and 1, they stay 0 and 1 for the life of the
-   * window, and widening again on re-enable is right rather than risky.
-   */
-  #widenedRange = false;
 
   // --- Lifecycle -------------------------------------------------------------
 
@@ -382,8 +283,6 @@ export class TranceTheme extends TranceFeature {
       Services.obs.removeObserver(observer, "zen-space-gradient-update")
     );
 
-    // Before `#attach`, and deliberately: see `#widenOpacitySlider`.
-    this.#widenOpacitySlider();
     this.#attach();
   }
 
@@ -406,7 +305,7 @@ export class TranceTheme extends TranceFeature {
   }
 
   #attach() {
-    const picker = this.context.window.gZenThemePicker;
+    const picker = this.#stateOwner?.picker;
     if (this.#picker || !picker?.panel) {
       return;
     }
@@ -414,17 +313,14 @@ export class TranceTheme extends TranceFeature {
     picker.panel.setAttribute(ATTR_ROOT, "true");
 
     this.#claimCustomColorsPref();
-    this.#loadState();
     this.#build();
     this.#addTooltips();
     this.#wrap();
     this.#observe();
     this.#sync();
 
-    // Zen has already painted this space once, before any of the wraps above
-    // existed, so a saved angle or lightness would not show until something
-    // else asked for a repaint. One is asked for here instead — `skipSave`
-    // defaults to true, so this writes nothing and notifies nothing.
+    // Zen painted this space before the popup owner existed. Repaint once
+    // through the state owner's startup wrappers so saved values show now.
     this.#repaint();
     TranceLog.log(NS, "attached to the gradient picker");
   }
@@ -492,71 +388,6 @@ export class TranceTheme extends TranceFeature {
     this.#previousCustomColors = null;
   }
 
-  // --- Zen's translucency slider ---------------------------------------------
-
-  /**
-   * Gives the translucency slider its whole range back.
-   *
-   * Zen pins the ends at 0.25 and 0.9 (0.30 on macOS), so the slider can never
-   * say "no tint" and can never say "solid" — the two answers people most often
-   * want from it. The numbers are only the slider's ends: `currentOpacity` is
-   * the alpha of the background colour and every consumer of it already handles
-   * 0 and 1, which is what the default theme (no tint at all) and an opaque
-   * custom colour already produce by other routes.
-   *
-   * ── Why this runs from `onEnable`, before there is a picker to attach to ──
-   *
-   * Zen does not read the ends off the element when it needs them. It reads
-   * them *once*, through two `ChromeUtils.defineLazyGetter`s on a module-local
-   * object that no one outside `ZenGradientGenerator.mjs` can reach, and every
-   * later use — the wave that fills behind the thumb, the thumb's own size, the
-   * blend on macOS and Mica — is computed against that first reading.
-   *
-   * Widening the element after the first read therefore moves the thumb without
-   * moving anything that was scaled to the old ends: at 0.5 the thumb sits at
-   * the middle of the track and the wave fills to 38% of it. That is the
-   * "the fill moves differently to the knob" bug, and it is a *timing* bug, not
-   * a drawing one.
-   *
-   * The read happens inside `gZenThemePicker`'s own first repaint, so widening
-   * before that object exists makes the cached ends 0 and 1 and every one of
-   * Zen's own calculations correct again. `onEnable` runs at
-   * `MozBeforeInitialXULLayout`, which is after the whole panel is parsed and
-   * long before session restore constructs the picker, so the element is there
-   * and the getters are not yet resolved.
-   *
-   * If the picker already exists, this is a mid-session pref flip and the ends
-   * are already cached: widening now would produce exactly the mismatch above,
-   * so it is skipped and the next window Trance opens gets the wide slider.
-   *
-   * The attributes are restored on disable, like every other borrowed thing
-   * here, so a Trance-less panel is stock Zen's again.
-   */
-  #widenOpacitySlider() {
-    const slider = this.context.document.getElementById(
-      "PanelUI-zen-gradient-generator-opacity"
-    );
-    if (!slider) {
-      return;
-    }
-    if (this.context.window.gZenThemePicker && !this.#widenedRange) {
-      TranceLog.log(
-        NS,
-        "the picker already cached the translucency range; leaving it alone"
-      );
-      return;
-    }
-    const min = slider.getAttribute("min");
-    const max = slider.getAttribute("max");
-    slider.setAttribute("min", "0");
-    slider.setAttribute("max", "1");
-    this.#widenedRange = true;
-    this.#undo.push(() => {
-      slider.setAttribute("min", min);
-      slider.setAttribute("max", max);
-    });
-  }
-
   // --- Zen's unlabelled buttons ----------------------------------------------
 
   /**
@@ -587,12 +418,7 @@ export class TranceTheme extends TranceFeature {
   // --- Method wraps ----------------------------------------------------------
 
   #wrap() {
-    this.#wrapColorFromPosition();
-    this.#wrapGradient();
-    this.#wrapGradientForWorkspace();
-    this.#wrapWorkspaceChange();
     this.#wrapUpdateCurrentWorkspace();
-    this.#wrapGetTheme();
   }
 
   /**
@@ -610,242 +436,6 @@ export class TranceTheme extends TranceFeature {
     const original = picker[methodName].bind(picker);
     picker[methodName] = make(original);
     this.#undo.push(() => delete picker[methodName]);
-  }
-
-  /**
-   * Lightness and palette.
-   *
-   * Zen derives both hue and lightness from where the dot is: the angle around
-   * the wheel is the hue, and the distance from the centre is the lightness.
-   * That is a defensible design and it is exactly why the mod this replaces
-   * exists — it means there is no way to say "this hue, but darker" without
-   * moving the dot somewhere it no longer means the hue you wanted.
-   *
-   * So while a lightness is set, Trance owns lightness and the wheel is hue and
-   * saturation only. That is a real behaviour change, it is the point of the
-   * control, and "Full colour" hands it straight back.
-   *
-   * The greyscale preset page is left alone: its dots encode lightness as
-   * position deliberately, and forcing a lightness onto them would collapse the
-   * whole page to one colour.
-   */
-  #wrapColorFromPosition() {
-    this.#patch(
-      "getColorFromPosition",
-      original =>
-        (x, y, type = undefined) => {
-          const rgb = original(x, y, type);
-          if (type === EXPLICIT_BLACKWHITE_TYPE) {
-            return rgb;
-          }
-          return this.#applyPalette(rgb);
-        }
-    );
-  }
-
-  /**
-   * @param {number[]} rgb
-   * @returns {number[]}
-   */
-  #applyPalette(rgb) {
-    const palette = this.#palette;
-    const lightness = this.#state.lightness ?? palette.lightness;
-    if (palette.saturation === null && lightness === null) {
-      return rgb;
-    }
-    const picker = this.#picker;
-    /* eslint-disable no-unused-vars */
-    const [hue, saturation, currentLightness] = picker.rgbToHsl(...rgb);
-    const nextSaturation =
-      palette.saturation === null ? saturation : palette.saturation / 100;
-    const nextLightness =
-      lightness === null ? currentLightness : lightness / 100;
-    const next = picker.hslToRgb(hue / 360, nextSaturation, nextLightness);
-    return next.map(channel => Math.min(255, Math.max(0, channel)));
-  }
-
-  /**
-   * The gradient angle, and tint strength.
-   *
-   * Zen hard-codes `const rotation = -45` and builds every gradient string
-   * around it, with a `TODO: Detect rotation based on the accent color` next to
-   * it. Rather than reimplement `getGradient` — which would mean owning three
-   * layout cases and every future one — Trance rotates the CSS it produced:
-   * each `linear-gradient()` angle moves by the same delta, and each
-   * `radial-gradient(circle at x% y%)` centre rotates about the middle of the
-   * box by the same delta. Both use clockwise-positive degrees (CSS angles
-   * increase clockwise; screen coordinates have y pointing down, which makes
-   * the standard rotation matrix clockwise too), so one delta drives both.
-   *
-   * A single flat colour has no angle, which is why the knob is inert until the
-   * theme is actually a gradient.
-   *
-   * The same string is also where tint strength is separated from
-   * transparency, for the same reason: one seam that every gradient already
-   * passes through beats owning `getGradient`'s three layout cases. See
-   * `#flattenTint`.
-   */
-  #wrapGradient() {
-    this.#patch(
-      "getGradient",
-      original =>
-        (colors, forToolbar = false) =>
-          this.#rotate(this.#flattenTint(original(colors, forToolbar), colors))
-    );
-  }
-
-  /**
-   * Tint strength, taken back out of Zen's alpha channel.
-   *
-   * `currentOpacity` reaches the CSS as the alpha of every wheel colour, so the
-   * slider that names it was simultaneously the tint control and the
-   * transparency control — and the two want opposite things. "A strong colour
-   * that you can see the desktop through" and "a flat opaque colour" were both
-   * unreachable, because asking for either meant giving up the other.
-   *
-   * This composites that alpha down against the browser's own chrome colour
-   * and emits an opaque `rgb()`. The arithmetic is not Trance's: it is exactly
-   * what Zen already does on a platform whose window cannot be transparent
-   * (`blendColors(colour, base, opacity * 100)`, then alpha 1), applied
-   * everywhere rather than only there — so the slider means one thing on every
-   * platform, and it means the thing its label says.
-   *
-   * Transparency then comes from `--trance-surface-alpha` alone, which is one
-   * `opacity` on Zen's background elements and the master slider's value.
-   *
-   * Three things are deliberately left alone:
-   *
-   *   - `transparent` stops, which are the *shape* of a multi-colour gradient
-   *     rather than its strength — flattening those would fill the fade;
-   *   - exact colours, which Zen emits verbatim as `#RRGGBB` or `#RRGGBBAA`.
-   *     Their alpha is a digit the user typed, not a slider position, and the
-   *     hex field promises it will be used as typed. The pattern below matches
-   *     `rgba()` only, which is what the wheel produces and customs never are;
-   *   - the default theme, which has no colours at all. Its `rgba(0, 0, 0, 0.4)`
-   *     is a hard-coded fallback rather than anything the slider wrote, so
-   *     `colors` being empty is the gate.
-   *
-   * @param {string|Array} css Whatever Zen's `getGradient` returned.
-   * @param {Array} colors The colours it was given.
-   * @returns {string|Array}
-   */
-  #flattenTint(css, colors) {
-    if (typeof css !== "string" || !colors?.filter(Boolean).length) {
-      return css;
-    }
-    const picker = this.#picker;
-    const base = picker.getToolbarModifiedBaseRaw().slice(0, 3);
-    return css.replace(
-      /rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g,
-      (match, red, green, blue, rawAlpha) => {
-        const strength = parseFloat(rawAlpha);
-        if (!(strength < 1)) {
-          return match;
-        }
-        const [r, g, b] = picker.blendColors(
-          [parseFloat(red), parseFloat(green), parseFloat(blue)],
-          base,
-          strength * 100
-        );
-        return `rgb(${r}, ${g}, ${b})`;
-      }
-    );
-  }
-
-  /**
-   * @param {string|Array} css Whatever Zen's `getGradient` returned.
-   * @returns {string|Array}
-   */
-  #rotate(css) {
-    const degrees = this.#renderAngle ?? this.#state.angle;
-    if (!degrees || typeof css !== "string") {
-      return css;
-    }
-    const radians = (degrees * Math.PI) / 180;
-    const cos = Math.cos(radians);
-    const sin = Math.sin(radians);
-    const round = value => Math.round(value * 100) / 100;
-
-    return css
-      .replace(
-        /linear-gradient\(\s*(-?[\d.]+)deg/g,
-        (_match, angle) =>
-          `linear-gradient(${round((parseFloat(angle) + degrees) % 360)}deg`
-      )
-      .replace(
-        /radial-gradient\(\s*circle at\s+(-?[\d.]+)%\s+(-?[\d.]+)%/g,
-        (_match, rawX, rawY) => {
-          const x = parseFloat(rawX) - 50;
-          const y = parseFloat(rawY) - 50;
-          return `radial-gradient(circle at ${round(50 + x * cos - y * sin)}% ${round(50 + x * sin + y * cos)}%`;
-        }
-      );
-  }
-
-  /**
-   * Other spaces render at their own angle.
-   *
-   * `getGradientForWorkspace` is how the space switcher draws a preview of a
-   * space you are not in. Without this, every preview would be rotated by the
-   * angle of the space you happen to be looking at.
-   */
-  #wrapGradientForWorkspace() {
-    this.#patch("getGradientForWorkspace", original => (workspace, options) => {
-      const previous = this.#renderAngle;
-      this.#renderAngle = this.#angleOf(workspace?.theme);
-      try {
-        return original(workspace, options);
-      } finally {
-        this.#renderAngle = previous;
-      }
-    });
-  }
-
-  /**
-   * Reloads Trance's state when a theme arrives that Trance did not write.
-   *
-   * A space change is the obvious case, but not the only one: a saved theme
-   * applied to the current space, a session restore, or another window changing
-   * this space's theme all hand this method a theme whose Trance fields are not
-   * the ones in `#state`, with the same uuid as before. Keying only on the uuid
-   * meant the controls kept the previous space's angle and the gradient was
-   * drawn with it.
-   *
-   * This cannot loop. Every theme Trance itself causes has been through
-   * `getTheme`, which stamps `#state` into it, so its fields match by
-   * construction and nothing is reloaded.
-   */
-  #wrapWorkspaceChange() {
-    this.#patch(
-      "onWorkspaceChange",
-      original =>
-        (workspace, skipUpdate = false, theme = null) => {
-          const incoming = theme || workspace?.theme;
-          if (workspace?.uuid && this.#isForeign(workspace.uuid, incoming)) {
-            this.#loadState(incoming, workspace.uuid);
-          }
-          return original(workspace, skipUpdate, theme);
-        }
-    );
-  }
-
-  /**
-   * @param {string} uuid
-   * @param {object} [theme]
-   * @returns {boolean} Whether this theme carries values Trance did not write.
-   */
-  #isForeign(uuid, theme) {
-    if (uuid !== this.#uuid) {
-      return true;
-    }
-    if (!theme) {
-      return false;
-    }
-    return (
-      (theme.tranceLightness ?? null) !== this.#state.lightness ||
-      this.#angleOf(theme) !== this.#state.angle ||
-      (theme.trancePalette ?? "full") !== this.#state.palette
-    );
   }
 
   /**
@@ -907,68 +497,12 @@ export class TranceTheme extends TranceFeature {
     }
   }
 
-  /**
-   * The one seam every theme passes through.
-   *
-   * `updateCurrentWorkspace` builds the object that gets saved by calling this,
-   * so stamping here is the only place that catches every write — including the
-   * ones Trance did not initiate, like a drag of one of Zen's own dots.
-   *
-   * The class object is per-window: `ZenSpaceManager.mjs` is imported with
-   * `global: "current"`, so its import of `ZenGradientGenerator.mjs` resolves
-   * into this window's global and no other window sees this patch.
-   */
-  #wrapGetTheme() {
-    const klass = this.#picker.constructor;
-    const original = klass.getTheme;
-    klass.getTheme = (colors = [], opacity = 0.5, texture = 0) => {
-      const theme = original.call(klass, colors, opacity, texture);
-      theme.tranceLightness = this.#state.lightness;
-      theme.tranceAngle = this.#state.angle;
-      theme.trancePalette = this.#state.palette;
-      return theme;
-    };
-    this.#undo.push(() => {
-      klass.getTheme = original;
-    });
-  }
-
   // --- State -----------------------------------------------------------------
 
   get #palette() {
     return (
       PALETTES.find(entry => entry.id === this.#state.palette) ?? PALETTES[0]
     );
-  }
-
-  /**
-   * @param {object} [theme]
-   * @returns {number}
-   */
-  #angleOf(theme) {
-    const angle = Number(theme?.tranceAngle);
-    return Number.isFinite(angle) ? ((angle % 360) + 360) % 360 : 0;
-  }
-
-  /**
-   * @param {object} [theme] Defaults to the active space's.
-   * @param {string} [uuid]
-   */
-  #loadState(theme = undefined, uuid = undefined) {
-    const workspace = this.#activeWorkspace();
-    const source = theme ?? workspace?.theme;
-    this.#uuid = uuid ?? workspace?.uuid ?? null;
-
-    const lightness = Number(source?.tranceLightness);
-    this.#state = {
-      lightness: Number.isFinite(lightness)
-        ? Math.min(100, Math.max(0, lightness))
-        : null,
-      angle: this.#angleOf(source),
-      palette: PALETTES.some(entry => entry.id === source?.trancePalette)
-        ? source.trancePalette
-        : "full",
-    };
   }
 
   #activeWorkspace() {
@@ -1869,7 +1403,6 @@ export class TranceTheme extends TranceFeature {
     if (!saved || !workspace) {
       return;
     }
-    this.#loadState(saved, workspace.uuid);
     workspace.theme = JSON.parse(JSON.stringify(saved));
     this.context.window.gZenWorkspaces.saveWorkspace(workspace);
     this.#picker.onWorkspaceChange(workspace);

@@ -1,0 +1,52 @@
+name: Trance checks
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - "src/zen/trance/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trance-checks:
+    name: Trance checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install "$(cat .rust-toolchain)" --profile minimal
+          rustup default "$(cat .rust-toolchain)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Check patches
+        run: npm run patches:check
+
+      - name: Check inventory
+        run: npm run inventory:check

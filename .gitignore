@@ -35,3 +35,6 @@ build/signing/private_key.pem
 build/signing/private_key.p12
 
 bloat-dump.log
+
+# Agent-tool scratch files that land in the repo root and are not project state.
+WARP.md

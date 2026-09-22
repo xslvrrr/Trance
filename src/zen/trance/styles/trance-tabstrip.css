@@ -430,6 +430,11 @@
    */
 
   &[trance-tabstrip-pins-sticky="true"][zen-sidebar-expanded] {
+    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+     * "Does this section hold any pinned tab" over the section's own direct
+     * children. The alternative is an attribute maintained from JS on every
+     * pin, unpin, drag and space switch — a second source of truth for
+     * something the selector already knows. */
     & .zen-workspace-pinned-tabs-section:has(tab):not([hide-separator]) {
       position: sticky;
       inset-block-start: 0;
@@ -440,6 +445,8 @@
        scrollbox, whether it scrolls, whether it is at the top, and whether the
        section holds anything. Shortening the selector would mean dropping one
        of the conditions, and each one is a case where the slab must not paint. */
+    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+     * Same section, same one-level test; see the note above. */
     & .workspace-arrowscrollbox[overflowing]:not([scrolledtostart])
       .zen-workspace-pinned-tabs-section:has(tab) {
       background-color: var(--trance-sticky-bg);

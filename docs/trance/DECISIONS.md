@@ -537,9 +537,9 @@ the point of decision rather than in a document.
   fork table. Sine's self-updater overwrites that file, so the provisioner must be re-run after
   an engine update — and after any `npm run build:ui`, which re-stages the app bundle and drops
   `config.js`.
-- Shipping this in a packaged build still needs `config.js` and `defaults/pref/config-prefs.js`
-  placed into the bundle by the build rather than by a script. That is an upstream touchpoint
-  (`FINAL_TARGET_FILES`) and is not done yet.
+- Shipping this in a packaged build needs `config.js` and `defaults/pref/config-prefs.js`
+  placed into the bundle by the build rather than by a script. That upstream touchpoint landed in
+  ADR-055; ADR-058 records the separate staged-manifest packaging fix.
 
 ---
 
@@ -2763,11 +2763,716 @@ development profile keeps its real name, because nothing scans a profile for man
 
 ---
 
-> **ADR-059 to ADR-075 are referenced and not yet written.** They are the decisions of AUDIT.md
-> phases 1 to 5 — the ownership rewrites (`TranceGlobalPrefs`, `TranceNavigation`, `TranceMaterial`,
-> `TranceObserverHub`, `TranceTabCache`), the feature-lifecycle fix, and the Phase 5 build work.
-> AUDIT.md cites them by number and this file does not define them. Writing them is outstanding
-> work, recorded here so the gap is a known debt rather than a numbering accident.
+## ADR-059 — Process-wide preference and stylesheet ownership lives in the shared system global
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+Several Trance features claim values that belong to Zen, Firefox or the platform: the loading
+indicator must stay off while Trance draws its own bar, acrylic must stay off while Trance owns the
+blur budget, and the platform translucency switch must follow the surface intent. The claims are
+refcounted because more than one feature or window may need them. The same problem applies to the
+USER sheets that reach `about:` pages: `nsIStyleSheetService` is application-wide, not per window.
+
+The original implementation loaded Trance modules with `{ global: "current" }`. A module-scope
+registry, or a static class field, was therefore copied into every chrome window. Each window
+believed it was the first claimant, recorded the already-claimed value as the previous value, and
+could restore or unregister it while another window still needed it. A one-time write was no
+better: Zen could re-enable acrylic behind Trance's back, and an opacity change could replace an
+application-wide sheet for every document.
+
+**Decision:**
+
+`TranceGlobalPrefs.mjs` and `TranceGlobalSheets.mjs` are loaded through
+`ChromeUtils.importESModule()` without a `global` option, so their registries live in the shared
+system global and are process-wide. Preference claims are refcounted, observe changes while held,
+reassert the wanted value, and restore the first claimant's value only when the last holder
+releases it. Sheet URLs are refcounted and a varying sheet is represented by one named slot: a
+slot swaps its URL once and coalesces all window holders.
+
+The rejected alternative was one registry per window, or a one-time preference write, because
+neither owns a process-wide preference or stylesheet. The first window to tear down would still
+undo the second window's state, and a later writer could still create the two-owner race.
+
+**Consequences:**
+
+- Preference and USER-sheet ownership is now process-wide. A window cannot restore a value or
+  unregister a sheet merely because that window has stopped using it; the last holder decides.
+- A held preference pays for one observer, and a slot update pays for one unregister/register
+  pair. The shared-global import convention is load-bearing: a later static import from a window
+  global would silently recreate the bug.
+- USER sheets remain application-wide and can affect content documents. That reach is necessary
+  for `about:` pages, but it is why the owner cannot be scoped to a document.
+
+The decision is grounded in `src/zen/trance/core/TranceGlobalPrefs.mjs:16-41`,
+`src/zen/trance/core/TranceGlobalSheets.mjs:14-26`, `AUDIT.md:176-192`, and
+`AUDIT.md:298-300`.
+
+---
+
+## ADR-060 — One browser-keyed router owns top-level navigation and progress
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+Trance had three subscriptions to overlapping progress events: a tabbrowser listener for the
+loading bar and two tab-progress listeners in the surface layer. Each listener rediscovered which
+browser mattered. The browser-level listener reports the selected tab at the time of the event,
+so a background tab could finish loading and drive the selected tab's loading gesture. Progress
+callbacks also accepted subresource byte counts, although the visible bar represents a document.
+
+**Decision:**
+
+`TranceNavigation` is the one `addTabsProgressListener` router for the window. Every state entry
+is keyed by the browser passed with the event. State and location callbacks return early unless
+`webProgress.isTopLevel`; progress also requires network progress and a positive total. Subscribers
+declare whether they want every browser or only the selected browser, and the router flushes dirty
+state at most once per frame.
+
+The rejected alternative was to keep a browser-level listener and let each feature filter events,
+because that repeats the selected-tab ambiguity and makes correctness depend on every subscriber
+remembering the same top-level check. Keeping three listeners was rejected because it multiplies
+event handling and style work at network-event rate.
+
+**Consequences:**
+
+- Background loads no longer animate selected-tab UI, and subresource progress no longer moves the
+  document progress bar. This is a deliberate behaviour correction, not merely a coalescing
+  optimisation.
+- A subscriber that needs selected-tab behaviour pays no filtering cost of its own, while a
+  subscriber that needs all browsers receives browser-specific state.
+- Progress updates are delayed until the next frame. That removes repeated style work, but a
+  consumer must not expect a callback for every network event. Browser state is explicitly removed
+  on `TabClose`.
+
+The decision is grounded in `src/zen/trance/core/TranceNavigation.mjs:7-34`,
+`src/zen/trance/core/TranceNavigation.mjs:236-295`, `AUDIT.md:176-178`, and
+`AUDIT.md:302`.
+
+---
+
+## ADR-061 — Window material is one owner addressed by intent
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The question "is this window translucent?" was answered in several places: platform vibrancy,
+Zen acrylic, inactive-window grey-out, Firefox's transparent-browser preference, each live
+browser's `transparent` attribute, and the root CSS state. Independent switches could leave
+native vibrancy and WebRender blur owning the same material, or leave a second window with
+different claims on the same process-wide preferences.
+
+**Decision:**
+
+`TranceMaterial` is the single window-material owner. Callers supply an intent — transparency,
+blur radius, whether to keep material while unfocused, whether to suspend when unfocused, and
+whether content canvases may carry alpha. The owner resolves that intent into platform
+preferences, browser attributes, CSS state and activity-driven rendering. All global preference
+claims go through ADR-059's process-wide owner. The default intent is opaque and suspends frost
+when the window cannot be seen.
+
+On macOS, the existing native window patch supplies `ZenWindowMaterialView`; it follows
+visibility, minimisation and low-power state and applies the grey-out preference only when the
+intent asks for material while unfocused. The alternative was to let each surface feature set
+the six switches independently, because that would preserve the old call sites, but it was
+rejected: the switches are not independent and allow contradictory material owners and
+unbounded full-window work.
+
+**Consequences:**
+
+- Callers no longer control individual material switches. They state an appearance intent and
+  accept the one resolved answer. Turning the intent off returns the window to the opaque
+  baseline and releases its claims.
+- Ordinary web content remains on the opaque fast path unless a caller explicitly requests
+  content transparency. Existing browsers must be marked and unmarked because Gecko reads the
+  transparency preference when a browser is created.
+- The Cocoa implementation is an upstream touchpoint and is order-sensitive with the macOS
+  tiled-attribute patch. The native material also becomes inactive when the window is invisible
+  or Low Power Mode is enabled, so a visible-but-unfocused window can deliberately lose frost.
+
+The decision is grounded in `src/zen/trance/core/TranceMaterial.mjs:7-39`,
+`src/zen/trance/core/TranceMaterial.mjs:97-115`, `src/zen/trance/core/TranceMaterial.mjs:212-255`,
+`src/widget/cocoa/nsCocoaWindow-mm.patch:25-165`, `AUDIT.md:93-109`,
+`AUDIT.md:295`, and `docs/trance/UPSTREAM-TOUCHPOINTS.md:136-137`.
+
+---
+
+## ADR-062 — One narrow structural cache owns the live folder set
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The tab-strip mods answered "which folders exist?" by running document-wide
+`querySelectorAll()` after every tab-strip mutation. A tab opening, favicon update or busy-state
+change could therefore fan out through several observers and several full-document queries.
+Firefox and Zen already own the tab model; building a second model would recreate the ownership
+conflict rather than remove it.
+
+**Decision:**
+
+`TranceTabCache` holds only the set of live `zen-folder` elements. It observes the narrow,
+stable `#tabbrowser-arrowscrollbox` root through `TranceObserverHub`, builds the set once, and
+updates it from added and removed nodes. Inserted descendants are included because Zen constructs
+a folder or workspace subtree before inserting its root. When the window was hidden and records
+were lost, the cache performs one full rebuild rather than guessing.
+
+The rejected alternative was another document-wide query on every callback, because it preserves
+the `observers × queries` cost. A parallel tab model, or a cache promising document order, was
+also rejected: the browser already owns tab structure and no consumer needs sorting.
+
+**Consequences:**
+
+- The cache exposes a deliberately small fact, not a replacement tab model. Its `Set` preserves
+  insertion order, not document order; callers must not infer visual ordering from it.
+- A folder inserted inside a newly added subtree is now visible to the consumer. A hidden window
+  may pay one rebuild and one notification on resume because the missed mutation cannot be replayed.
+- The observer root is a dependency on Zen's tab-strip structure, and the cache must detach and
+  clear on teardown. In return, unrelated chrome mutations never reach this subscription.
+
+The decision is grounded in `src/zen/trance/core/TranceTabCache.mjs:7-28`,
+`src/zen/trance/core/TranceTabCache.mjs:34-41`, `src/zen/trance/core/TranceTabCache.mjs:137-155`,
+`src/zen/trance/core/TranceTabCache.mjs:241-267`, `AUDIT.md:184-187`, and
+`AUDIT.md:297`.
+
+---
+
+## ADR-063 — Observer dispatch is indexed, rooted, descendant-aware, and phase-separated
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The replaced mods each installed broad observers over the chrome document. Dispatch then did
+records multiplied by subscribers selector matching, even when a mutation was outside a feature's
+area. Mutation matching also missed descendants of an inserted node, and shared
+`IntersectionObserver` instances were identified without their `root`. The advertised read/write
+phases were not phases at all when callbacks ran sequentially.
+
+**Decision:**
+
+`TranceObserverHub` owns the observer set for a window. Mutation subscriptions are indexed by
+their narrow root and selector/attribute interest, so a record is offered only to candidates in
+that root. Matching checks both the target and the relevant descendants of inserted or removed
+subtrees. Intersection observers are shared only when their complete option identity, including
+`root`, matches. The hub batches records to a frame and executes all subscriber reads before any
+subscriber write; a hidden-root disconnect is reported as one invalidation on resume.
+
+The rejected alternative was one document-wide observer with a nested loop over every subscriber,
+because it keeps the hot-path cost proportional to unrelated subscribers. Treating
+`IntersectionObserver` roots as interchangeable was rejected because the same element has
+different visibility in different roots. Calling a single callback that mixes reads and writes was
+rejected because a later subscriber could force layout for every earlier subscriber.
+
+**Consequences:**
+
+- Features must choose a narrow root and express their read/write work through the hub. A broad
+  subscription is still possible, but its cost is then an explicit owner choice.
+- Descendant insertion is now observable, while hidden-window changes are intentionally collapsed
+  into an invalidation rather than replayed individually.
+- One hub reduces observer and style-flush overhead, but it becomes a shared lifecycle service:
+  failure handling, option identity and teardown must remain correct for every subscriber.
+
+The decision is grounded in `src/zen/trance/core/TranceObserverHub.mjs:5-16`,
+`AUDIT.md:184-187`, `TRANCE.md:168-179`, and `TRANCE.md:302-307`.
+
+---
+
+## ADR-064 — Boosts rejects unboosted documents after one cached branch
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+`nsZenBoostsBackend::ResolveStyleColor` runs for every style colour in every document. On an
+unboosted page it used to walk from Document through BrowsingContext and `Top()`, then inspect
+native-anonymous ancestors, only to establish that there was no Boosts override. Boosts and
+Glance actors were also created for every frame before rejecting irrelevant contexts.
+
+**Decision:**
+
+Cache Boosts activity on `nsPresContext` as a tri-state: `Unresolved`, `Inactive` or `Active`.
+The unresolved state asks the top BrowsingContext once; override and `DidSet` paths update the
+cache. The fast path rejects an inactive document after one branch, while an active document
+continues to the existing colour resolution and the tri-state avoids confusing an unresolved
+context with a known inactive one. Both Boosts and Glance actors are restricted to top-level
+documents by dropping `allFrames`.
+
+The rejected alternative was a boolean defaulting to inactive, because cross-process navigation
+can construct a PresContext before the BrowsingContext's value is re-applied and would then
+misclassify an active page. Leaving actors frame-wide was rejected because Boosts had already
+rejected non-top-level contexts and Glance paid the actor cost without a useful result.
+
+**Consequences:**
+
+- Unboosted style-colour resolution becomes a cheap cached branch, with the accent transformation
+  cache remaining upstream's concern.
+- Boosts has no user-visible change because its child already rejected non-top-level contexts.
+  Glance does change behaviour: a link click inside an iframe no longer opens Glance. This is an
+  intentional behaviour change as well as an actor-allocation optimisation.
+- The tri-state and propagation logic add an upstream Gecko touchpoint in
+  `nsPresContext-h.patch`; the actors must continue to make their own top-level checks.
+
+The decision is grounded in `src/layout/base/nsPresContext-h.patch:9-53`,
+`AUDIT.md:313-319`, `AUDIT.md:344`, and `TRANCE.md:162-166`.
+
+---
+
+## ADR-065 — The opaque-backdrop fallback is fork-only, alpha-gated, and mask-safe
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The fork carries a WebRender fallback for backdrop filtering that clears an opaque black target.
+Running that fallback for an opaque default would add work where no transparent backdrop needs
+repair. The fallback also temporarily disables colour writes to preserve the alpha channel. Its
+old restoration assumed every colour channel had been enabled before the clear.
+
+**Decision:**
+
+Keep the fallback as a fork-only option, but enable it only when the renderer's clear-colour
+alpha says an opaque backdrop is actually required. The renderer records the colour mask it
+replaces, writes the alpha-only clear, and restores the previous mask rather than unconditionally
+restoring `(true, true, true, true)`.
+
+The rejected alternative was to run the fallback unconditionally, because the opaque performance
+configuration would pay for a path it does not need. Assuming the previous mask was fully enabled
+was rejected because a caller can arrive with a different mask and the fallback would silently
+change subsequent rendering.
+
+**Consequences:**
+
+- The opaque default pays no fallback work; translucent rendering retains the compatibility path
+  only when its clear colour requires it.
+- Colour-write state is now preserved across the fallback, including callers that entered with
+  channels disabled. This is a correctness fix in a Gecko/WebRender touchpoint, not just a speed
+  tweak.
+- The fallback remains fork-only and must be A/B tested against the matched PGO build. No
+  performance number is claimed here; an unrun measurement is reported as skipped rather than
+  treated as zero.
+
+The decision is grounded in `src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch:12-18`,
+`src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch:52-58`,
+`src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch:138-146`,
+and `AUDIT.md:331-336`.
+
+---
+
+## ADR-066 — Session and window-sync state is written in versioned batches
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+Session and window synchronisation can observe several related changes in one turn. Writing each
+mutation separately multiplies serialisation and disk work, and a failure part-way through a
+change can leave the persisted state between versions. Without an explicit version, an older
+write can also arrive after a newer one and look current.
+
+**Decision:**
+
+Collect related changes into one transaction per batch, write once per batch, retain one rollback
+copy per write, and include a monotonically increasing `stateVersion` in the state. The version
+travels with the batch so readers and recovery can distinguish an older state from the latest
+committed one.
+
+The rejected alternative was one write per mutation with ad-hoc rollback, because it pays the
+serialisation cost repeatedly and cannot identify a stale completion reliably. Keeping no
+rollback copy was rejected because a failed write would have no bounded previous state to restore.
+
+**Consequences:**
+
+- Bursty session/window changes produce fewer writes and one coherent persisted state, but each
+  batch retains a rollback copy and therefore has a temporary memory cost.
+- `stateVersion` becomes part of the persisted state contract and must remain monotonic across
+  restore and sync. Consumers that compare raw object shape must tolerate the field.
+- This is a behaviour correction for failure and ordering, not a promise that writes are
+  synchronous. The transaction boundary is one batch, so intermediate mutations are not
+  individually visible on disk.
+
+The decision is grounded in `AUDIT.md:323-328` and `AUDIT.md:346-350`.
+
+---
+
+## ADR-067 — Pooled-surface release is deferred until Phase 6 measurement
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+Core Animation's surface pool may retain memory while a window is occluded. Releasing or shrinking
+pooled surfaces after prolonged occlusion could reduce that retention, but the safe threshold and
+the interaction with re-exposure had not been measured. The proposed release path would add four
+new upstream touchpoints.
+
+**Decision:**
+
+Instrument the pool first and run the pool-limit matrix (4, 8, 16 and 25). Defer the actual
+prolonged-occlusion release or shrink policy to Phase 6, with the measurement hook in place.
+
+The rejected alternative was to land a release heuristic immediately, because it would widen the
+upstream diff before proving that retention is the relevant cost and before knowing whether
+re-exposure causes churn or visual regressions. Doing nothing at all was also rejected: the pool
+markers and `--surface-pool-limit` knob preserve a reversible experiment.
+
+**Consequences:**
+
+- The current implementation does not reclaim pooled surfaces after occlusion. Memory savings
+  from release are therefore deferred, not measured or claimed.
+- The instrumentation and four candidate limits make the cost visible, but the eventual release
+  path still carries four upstream touchpoints and must be justified by a measurement.
+- A pool-limit experiment can change retention without changing release policy, so its result
+  must not be reported as proof that automatic occlusion release is safe.
+
+The decision is grounded in `AUDIT.md:329-332`, `AUDIT.md:346-350`, and
+`docs/trance/UPSTREAM-TOUCHPOINTS.md:10`.
+
+---
+
+## ADR-068 — Fullscreen-video power eligibility comes from Gecko's verdict
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+macOS can use a low-power presentation path for fullscreen video. Translucency and WebRender
+material made it plausible that Trance might disqualify that path, but the eligibility decision
+depends on Gecko's platform and compositor knowledge rather than on a CSS guess in Trance.
+
+**Decision:**
+
+For the fullscreen-video experiment, read Gecko's own `gfx.macos_video_low_power` verdict while
+loading the supplied video through `--video-url`. Do not infer eligibility from whether Trance
+requested transparency, whether a CSS filter is present, or whether the window is currently
+focused.
+
+The rejected alternative was a Trance-side boolean derived from its material intent, because it
+would duplicate Gecko's presentation decision and could disagree with the actual compositor
+path. A missing verdict is not success: the run reports `skipped` with a reason.
+
+**Consequences:**
+
+- The result measures the platform path Gecko actually selected, so it can be compared with
+  material variants without adding a second owner of the verdict.
+- The experiment depends on Gecko exposing the pref and on a real local video workload. It does
+  not claim that translucency is harmless when the verdict has not been observed.
+- No number is recorded here; the A/B result belongs in `docs/trance/perf-baseline.json` after a
+  matched PGO gate run.
+
+The decision is grounded in `AUDIT.md:337-350`.
+
+---
+
+## ADR-069 — Completed onboarding is not parsed, and completed panels are skipped
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The first-run flow is a one-time takeover, while its persistent choices must remain available in
+Settings. Parsing the onboarding implementation and installing its UI handlers after completion
+made every normal startup pay for a flow that had no work to do. It also allowed already
+completed panels to reopen during a later partial run.
+
+**Decision:**
+
+Keep persistent choice handlers in `TranceOnboardingSettings`, separate from the first-run UI.
+`TranceFeatureRegistry` checks the completion preference before loading a feature, and checks each
+panel's completion state before constructing that panel. Clearing completion explicitly requests
+the flow again; a popup entry point may load the implementation when the user actually opens it.
+
+The rejected alternative was to import and parse the whole onboarding flow on every startup and
+let the UI decide whether to hide itself, because hidden UI still pays parsing, observers and
+listeners. Treating completion as a one-way startup flag was rejected because Settings must be
+able to reopen the flow.
+
+**Consequences:**
+
+- A completed user no longer parses or constructs onboarding on startup, and completed first-run
+  panels are skipped. Clearing completion is a deliberate behaviour change that loads and reopens
+  the flow.
+- The persistent settings service and the UI now have separate lifecycles and must agree on the
+  completion preference. That is more bookkeeping than one eager module, but it removes the
+  normal-startup cost.
+- The popup path remains lazy: opening the relevant control pays the import and stylesheet cost
+  at that point rather than at browser startup.
+
+The decision is grounded in `src/zen/trance/core/TranceFeatureRegistry.mjs:31-76`,
+`src/zen/trance/core/TranceFeatureRegistry.mjs:125-153`, `src/zen/trance/features/onboarding/TranceOnboardingSettings.mjs:20-31`,
+`src/zen/trance/jar.inc.mn:74-80`, and `AUDIT.md:352-360`.
+
+---
+
+## ADR-070 — Feature setup is a transaction with automatic rollback
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+`TranceFeature` formerly marked a feature enabled before `onEnable()` had completed. A stylesheet,
+token, observer or listener acquired before a later failure could remain active, and a reentrant
+disable or destroy could leave a half-enabled feature that could not retry cleanly. Constructors
+also performed work even though the registry might only be inspecting a gate.
+
+**Decision:**
+
+Constructors have no side effects. Setup tracks every stylesheet, token, observer, scheduler,
+navigation subscription, listener, disposer and global claim as it is acquired. Enabled state is
+committed only after all setup and `onEnable()` work succeeds. Any failure, reentrant disable or
+destroy unwinds the partial setup; cleanup continues after an individual disposer fails, and the
+feature can be attempted again.
+
+The rejected alternative was to set `enabled` before `onEnable()` and rely on each feature's
+`onDisable()` to clean up, because it cannot know which earlier allocation succeeded and it makes
+partial failure a per-feature convention. Allowing constructors to register observers was
+rejected because construction then has side effects before the transaction exists.
+
+**Consequences:**
+
+- A failed feature is disabled and leaves no tracked resource behind; a later pref change can
+  retry it. Reentrant disable and destroy do not commit a half-enabled feature.
+- Setup and rollback carry bookkeeping for every allocation, and cleanup is intentionally
+  defensive rather than free. A feature that fails after external side effects still needs its
+  disposer to reverse them.
+- Disabled means zero for resources owned by the base class: no stylesheet, observer, listener,
+  scheduler subscription or DOM node remains solely because setup once began.
+
+The decision is grounded in `src/zen/trance/core/TranceFeature.mjs:7-20`,
+`src/zen/trance/core/TranceFeature.mjs:81-104`, `src/zen/trance/core/TranceFeature.mjs:306-366`,
+`AUDIT.md:180-181`, and `AUDIT.md:352-365`.
+
+---
+
+## ADR-071 — The build matrix is dry by default and receipts are immutable
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+Phase 5 needs matched PGO/LTO builds, a Trance-specific training workload and comparisons across
+ThinLTO/Full LTO, Rust optimisation levels and Apple Silicon CPU strategies. Running a build,
+training profile or benchmark as a side effect of planning would consume substantial disk and
+could silently inherit the checkout's ambient PGO, target or optimisation settings. A mutable
+receipt would then be unable to prove which source, toolchain or profile produced it.
+
+**Decision:**
+
+`trance-build-matrix.py plan` performs no filesystem-changing or heavy action by default. It
+renders each configuration into a new external object directory; `run` only describes its stage
+unless `--execute-heavy` is supplied. Heavy stages use isolated `MOZCONFIG`/`MOZ_OBJDIR` paths,
+explicit configure/build/package steps, frozen source/API evidence and immutable, content-bound
+receipts. The comparison command consumes caller-supplied matched samples, requires paired
+context and reports `promoted: false`; it never changes a default automatically.
+
+The rejected alternative was to reuse the repository object directory, invoke surfer's dynamic
+build path or enable Gecko's automatic PGO training, because those paths can clobber state and
+hide the exact flags and workload. Making a plan execute, or allowing an edited receipt, was
+rejected because an unreviewed heavy action and an unbound result are not measurement evidence.
+
+**Consequences:**
+
+- Planning is safe to inspect and produces no build or PGO artefacts. Heavy execution is slower
+  and more manual, requires separate disk for object directories, and refuses to resume or clean
+  interrupted work implicitly.
+- The runner has zero upstream build-tooling touchpoints: it renders external configurations
+  rather than editing mozconfig files. The price is that future API or toolchain changes
+  invalidate a plan and require regeneration after review.
+- No release default is promoted by the tooling. Release builds, PGO training and compiler
+  decisions remain unmeasured until the explicitly authorised matrix is run.
+
+The decision is grounded in `scripts/trance-build-matrix.py:5-10`,
+`scripts/trance-build-matrix.py:212-230`, `scripts/trance-build-matrix.py:247-261`,
+`docs/trance/phase5-builds.md:1-22`, `docs/trance/phase5-builds.md:50-83`,
+`docs/trance/phase5-builds.md:85-125`, and `AUDIT.md:366-382`.
+
+---
+
+## ADR-072 — Architecture onboarding restores distinct blur choices
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The onboarding architecture page offers different surface tuning for Apple Silicon and Intel.
+A performance pass had flattened both columns to the same filter-free baseline, leaving the page
+offering a choice between "full frost" and "a 10px blur" while writing the same four values.
+The question then communicated a distinction the browser did not implement.
+
+**Decision:**
+
+Restore architecture-specific values in `TranceOnboardingSettings`. The arm64 column writes a
+24px surface radius, enables internal-page and URL-bar focus blur, and keeps suspension when
+unfocused. The x86_64 column writes a 10px radius, disables internal-page and URL-bar focus blur,
+and keeps the same suspension rule. Both columns write their complete values so switching back
+does not accidentally preserve an old user override.
+
+The rejected alternative was one universal filter-free baseline, because it made the architecture
+question a no-op. Clearing the user branch to return to a default was rejected for this control:
+someone who has deliberately tuned the radius and reruns onboarding asked for the selected
+architecture's tuning, not for an old value to survive invisibly.
+
+**Consequences:**
+
+- The architecture choice now changes behaviour: Intel loses the two expensive blur paths and
+  uses the smaller radius, while arm64 retains the richer defaults. This is a shipped tuning
+  choice, not a measurement claim.
+- The blur settings are inert on platforms where the operating system owns the frost, so writing
+  them still costs preference updates without necessarily painting a blur.
+- The values are duplicated between the onboarding service and preference defaults because Python
+  and browser code share only the profile artefact. They must be kept in sync, and the controls
+  remain a later startup cost only when onboarding is opened.
+
+The decision is grounded in `src/zen/trance/features/onboarding/TranceOnboardingSettings.mjs:159-200`,
+`src/zen/trance/features/onboarding/TranceOnboardingSettings.mjs:292-317`, and
+`AUDIT.md:352-360`.
+
+---
+
+## ADR-073 — Runtime provisioning downloads one pinned archive and owns only profile payloads
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The build provisioner can use a token and many GitHub Contents API requests, but a browser cannot
+reliably walk a theme-store repository that way: it would spend roughly sixty unauthenticated
+requests against the hourly limit. Runtime provisioning also cannot safely rewrite the app's
+bootloader while that bootloader is running. The build's decision about what it ships and the
+profile's decision about what it reinstalls must agree.
+
+**Decision:**
+
+`TranceProvision` downloads the theme store once as a zip from the requested ref, including a
+commit SHA when the build pins one. It writes only `{profile}/chrome/JS` and
+`{profile}/chrome/sine-mods`, stages engine replacement beside the live directory and moves it
+into place after validation. It mirrors the build provisioner's pinned ref and fork-id patch,
+but never edits `{app}/config.js`, `{app}/trance-cosine/` or `{profile}/chrome/utils/`.
+
+The rejected alternative was one Contents API request per folder and file, because it exhausts
+the unauthenticated budget and makes pinning a special case. Rewriting the bootloader or
+installing directly into the live engine directory was rejected because a killed browser could
+brick its own profile or leave a half-installed engine.
+
+**Consequences:**
+
+- Runtime reinstall has one larger network transfer and remains dependent on the network. A
+  pinned commit can legitimately lack a mod; the result reports it as missing rather than
+  silently substituting another version.
+- The build script and browser module duplicate the pin and preinstalled-mod list because they
+  share only the profile artefact. A change to one must be made in both places.
+- Engine installation is atomic at the directory boundary, but it still replaces a running
+  profile's engine for the next update/startup path. The bootloader remains packaging's owner.
+
+The decision is grounded in `src/zen/trance/features/onboarding/TranceProvision.mjs:7-47`,
+`src/zen/trance/features/onboarding/TranceProvision.mjs:64-112`,
+`src/zen/trance/features/onboarding/TranceProvision.mjs:209-247`, and
+`src/zen/trance/features/onboarding/TranceProvision.mjs:249-307`.
+
+---
+
+## ADR-074 — Process preallocation and reuse are measured through narrow, named knobs
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+The baseline showed preallocated content processes doing work while idle, but changing the number
+of content processes globally would confound a process-policy experiment with the browser's
+isolation and Fission model. Phase 4 therefore needs to test startup and reuse cost without
+silently changing how many processes the browser is allowed to run.
+
+**Decision:**
+
+The experiment varies only adaptive preallocation counts 0, 1 and 3 through `--prealloc`, and
+content-process reuse grace through `--reuse-grace-ms`. Those knobs write only
+`dom.ipc.processPrelaunch.*` and `dom.ipc.processReuse.unusedGraceMs`. They are benchmark
+parameters, not new production defaults, and results are recorded as matched gate samples.
+
+The rejected alternative was a global process-count change or a blanket disablement of content
+isolation, because it could lower the GPU or parent-process number by changing the product's
+correctness and responsiveness envelope. A hidden environment override was rejected because the
+receipt would not say which policy had been tested.
+
+**Consequences:**
+
+- The matrix can compare prelaunch and reuse behaviour without claiming to change the number of
+  content processes the browser may create.
+- Each run must record the two knobs and use matched workload/build context; otherwise a process
+  result is not attributable to this decision.
+- No value is promoted here. The experiment is measurement-gated, and a missing run remains
+  skipped rather than becoming a zero.
+
+The decision is grounded in `AUDIT.md:339-350`, `AUDIT.md:344`, and
+`docs/trance/phase5-builds.md:198-229`.
+
+---
+
+## ADR-075 — PGO training uses a disposable, pinned workload rather than a personal profile
+
+**Date:** 2026-09-02
+**Status:** Accepted
+
+**Context:**
+
+PGO must represent Trance's real startup, restore, tab, space, media and extension paths. A
+personal profile would contain uncontrolled history, extensions and locks; a generic benchmark
+would omit Trance's workspace and restore work. Training is also not performance measurement, so
+it must not be mixed with the profiler-off production gate.
+
+**Decision:**
+
+`trance-pgo-train.py` requires a closed disposable seed profile with exact versions of the seven
+policy extensions, a local MP4 or WebM clip, and a seed manifest. It hashes the seed and media,
+copies rather than edits the seed, runs two fresh browser processes, and exercises startup,
+twelve local article tabs, scrolling and interaction, two spaces with eight switches, five
+seconds of video, explicit session save, clean shutdown, restart and restore. It rejects locks,
+symlinks, extension drift, extra active extensions, crash dumps, empty profiles and merge
+warnings.
+
+The rejected alternative was to train against a personal profile, because it would make profile
+state and extension versions an unrepeatable hidden input. A generic web corpus or remote video
+was rejected because it would not exercise the Trance paths being optimised and would add
+network-dependent variance. Treating rejected promises or missing workload steps as skips was
+rejected because it would turn an incomplete profile into apparently valid training.
+
+**Consequences:**
+
+- Training is reproducible and profile-safe, but it requires a disposable seed, seven installed
+  extensions, local media and substantial setup. It does not cover first-run installation,
+  YouTube-specific paths, Speedometer/JetStream or a hermetic network.
+- All matrix groups share the same seed and media hashes, so changing either invalidates the
+  comparison. The training profile is separate from performance samples and cannot promote a
+  compiler or LTO default by itself.
+- The workload performs real browser launches and can consume time and disk. Heavy execution
+  remains behind the explicit build-runner consent, and no training result is claimed until it is
+  actually run.
+
+The decision is grounded in `scripts/trance-pgo-train.py:5-8`,
+`scripts/trance-pgo-train.py:46-60`, `scripts/trance-pgo-train.py:211-229`,
+`scripts/trance-pgo-train.py:255-266`, `scripts/trance-pgo-train.py:268-352`, and
+`docs/trance/phase5-builds.md:127-174`.
+
+---
 
 ## ADR-076 — The drag-and-drop teardown is restored, and the patch gets smaller for it
 

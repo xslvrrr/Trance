@@ -58,7 +58,21 @@
 
 import { TranceFeature } from "chrome://browser/content/trance-components/TranceFeature.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
+import { TranceProvision } from "chrome://browser/content/trance-components/TranceProvision.mjs";
 import { TranceZenImport } from "chrome://browser/content/trance-components/TranceZenImport.mjs";
+
+// Deliberately not a static import. This module is loaded with
+// `{ global: "current" }`, so a static import would resolve the settings
+// service in *this window's* global and give the flow a second copy of the
+// module's state: its own `writingChoices` suppression set and its own
+// `modWrites` queue, neither of which the process-wide observer set can see.
+// Two windows would then serialise their `engine.json` writes against two
+// different queues and a later choice could lose to an earlier one still in
+// flight. Resolved in the shared system global instead, which is what
+// TranceOnboardingSettings.mjs's own header requires of every consumer.
+const { TranceOnboardingSettingsService } = ChromeUtils.importESModule(
+  "chrome://browser/content/trance-components/TranceOnboardingSettings.mjs"
+);
 
 const NS = "Onboarding";
 
@@ -91,83 +105,6 @@ const ZEN_FTL = Object.freeze([
   "browser/zen-general.ftl",
 ]);
 
-/**
- * The `zen.*` prefs upstream gates on the build-time `@IS_TWILIGHT@` constant,
- * and the value each takes on the twilight side of it.
- *
- * Read out of `prefs/zen/{view,theme,sync}.yaml` rather than guessed. The
- * stable side is not listed because it is "whatever the pref file already set",
- * which is what a Trance build boots with — so choosing "stable" clears the
- * user branch instead of writing the same value back, and a later upstream
- * change to a default is inherited rather than frozen.
- *
- * `zen.theme.styled-status-panel` is deliberately absent. Its yaml has a second
- * entry, `value: true` under `defined(XP_MACOSX)`, so on macOS it is already
- * true on both channels and writing it here would be a no-op that looks like a
- * decision. On other platforms it follows the constant, which is what
- * `TWILIGHT_ONLY_PREFS` below covers.
- */
-const TWILIGHT_PREFS = Object.freeze([
-  { name: "zen.view.context-menu.refresh", twilight: true },
-  { name: "zen.theme.acrylic-elements", twilight: true },
-  // `prefs/zen/sync.yaml` writes this one twice: `true` on the twilight side,
-  // and `false` *locked* on the other. A locked pref cannot be set from the
-  // user branch at all — `setBoolPref` throws — so this is the one entry where
-  // "write the twilight value" means unlock first, and where going back to
-  // stable means clearing *and* putting the lock back. Without the flag the
-  // page would silently fail on a third of what its copy promises.
-  { name: "services.sync.engine.spaces", twilight: true, locked: true },
-]);
-
-/** Same list, minus the ones another yaml entry already decides on this OS. */
-const TWILIGHT_ONLY_PREFS = Object.freeze([
-  { name: "zen.theme.styled-status-panel", twilight: true },
-]);
-
-/**
- * The surface prefs an Intel GPU wants different values for, and those values.
- *
- * Blur, and only blur. `backdrop-filter` over a full window is the effect that
- * separates the two classes of machine (TRANCE.md §3.3); everything else Trance
- * draws is a colour, a radius or a transform, and those cost the same
- * everywhere. A tuning pass that touched motion or transparency as well would
- * be making the Intel browser *worse looking* for no measured reason.
- *
- * The arm64 column is the shipped default from `prefs/trance/`, restated so
- * that switching back is a write rather than a clear — a user who edited the
- * radius by hand and then re-ran the flow should get the tuning they picked,
- * not their own old value silently kept.
- */
-const ARCH_TUNING = Object.freeze({
-  arm64: Object.freeze([
-    { name: "trance.surface.blur.radius", type: "int", value: 24 },
-    { name: "trance.surface.internal.blur", type: "bool", value: true },
-    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: true },
-    {
-      name: "trance.surface.suspend-when-unfocused",
-      type: "bool",
-      value: true,
-    },
-  ]),
-  x86_64: Object.freeze([
-    // 24 → 10. Not off: the frost is what the surface layer *is* (ADR-025), and
-    // a browser with no blur at all is a different browser rather than a
-    // cheaper one. Ten pixels is the radius at which the sample count stops
-    // being the dominant cost on integrated graphics and the surface still
-    // reads as frosted.
-    { name: "trance.surface.blur.radius", type: "int", value: 10 },
-    // The `about:` pages' own blur is a second full-viewport pass over content
-    // that is already opaque behind it. It is the cheapest thing to give up.
-    { name: "trance.surface.internal.blur", type: "bool", value: false },
-    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: false },
-    {
-      name: "trance.surface.suspend-when-unfocused",
-      type: "bool",
-      value: true,
-    },
-  ]),
-});
-
 const ARCH_LABEL = Object.freeze({
   arm64: { mac: "Apple Silicon", generic: "ARM64" },
   x86_64: { mac: "Intel", generic: "x86-64" },
@@ -195,6 +132,7 @@ const FAVICON_ROOT = "chrome://browser/content/zen-images/favicons/";
 export class TranceOnboarding extends TranceFeature {
   static prefName = "trance.onboarding.enabled";
   static featureName = "Onboarding";
+  static completedPref = "trance.onboarding.completed";
   static styles = [
     "chrome://browser/content/trance-styles/trance-onboarding.css",
   ];
@@ -243,20 +181,6 @@ export class TranceOnboarding extends TranceFeature {
   #zenProfiles = null;
 
   onEnable() {
-    // Three of the flow's five answers are prefs that nothing else applies:
-    // the settings page can write `trance.onboarding.channel` but it cannot
-    // reach into a browser window to act on it, and duplicating the list of
-    // twilight-gated prefs into `trance-settings.js` would be two owners for
-    // one decision — the exact failure this project exists to remove
-    // (TRANCE.md §3.1).
-    //
-    // So this feature owns them for the whole session, not only during the
-    // flow. The cost when the flow is over is three pref observers, which is
-    // the same order as `TranceFirstRun`'s two, and nothing else at all.
-    this.#watchPref(PREF_CHANNEL, value => this.#applyChannel(value));
-    this.#watchPref(PREF_ARCH, value => this.#applyArch(value));
-    this.#watchPref(PREF_MODS_CHANNEL, value => this.#applyModChannel(value));
-
     if (Services.prefs.getBoolPref(PREF_COMPLETED, false)) {
       return;
     }
@@ -278,30 +202,6 @@ export class TranceOnboarding extends TranceFeature {
 
   onDisable() {
     this.#dismantle();
-  }
-
-  /**
-   * Watches a string pref and hands the observer its new value.
-   *
-   * Registered through `addDisposer` rather than kept in a field, so the base
-   * class returns it on disable along with everything else — the whole point of
-   * `TranceFeature` is that a subclass does not have to remember (§6.5).
-   *
-   * @param {string} pref
-   * @param {(value: string) => void} apply
-   */
-  #watchPref(pref, apply) {
-    const observer = {
-      observe: () => {
-        try {
-          apply(Services.prefs.getStringPref(pref, ""));
-        } catch (error) {
-          TranceLog.error(NS, `could not apply ${pref}`, error);
-        }
-      },
-    };
-    Services.prefs.addObserver(pref, observer);
-    this.addDisposer(() => Services.prefs.removeObserver(pref, observer));
   }
 
   // --- Entry -----------------------------------------------------------------
@@ -1037,51 +937,15 @@ export class TranceOnboarding extends TranceFeature {
           }
         );
       },
-      commit: () => this.#applyChannel(this.#answers.channel),
+      commit: () =>
+        TranceOnboardingSettingsService.applyChannel(this.#answers.channel),
     };
   }
 
   /**
-   * Writes the twilight-gated prefs, or clears them.
-   *
-   * Clearing rather than writing the stable value is deliberate: the stable
-   * value *is* the default the pref file set, so clearing the user branch means
-   * a later change to that default is inherited. Writing it would freeze
-   * today's answer into the profile forever.
-   *
-   * @param {string} channel
+   * The channel page delegates its persistent side effects to the settings
+   * service.
    */
-  #applyChannel(channel) {
-    const twilight = channel === "twilight";
-    Services.prefs.setStringPref(PREF_CHANNEL, channel);
-
-    const entries = [
-      ...TWILIGHT_PREFS,
-      ...(AppConstants.platform === "macosx" ? [] : TWILIGHT_ONLY_PREFS),
-    ];
-    for (const entry of entries) {
-      try {
-        if (Services.prefs.prefIsLocked(entry.name)) {
-          Services.prefs.unlockPref(entry.name);
-        }
-        if (twilight) {
-          Services.prefs.setBoolPref(entry.name, entry.twilight);
-        } else {
-          Services.prefs.clearUserPref(entry.name);
-          if (entry.locked) {
-            // Put upstream's lock back rather than leaving a pref that Zen
-            // means to be immovable on this channel merely *set* to the right
-            // value. The difference shows up in about:config and in anything
-            // that asks whether the user may change it.
-            Services.prefs.lockPref(entry.name);
-          }
-        }
-      } catch (error) {
-        TranceLog.error(NS, `could not set ${entry.name}`, error);
-      }
-    }
-    TranceLog.log(NS, "channel", channel);
-  }
 
   // 2 ── Mod manager ----------------------------------------------------------
 
@@ -1102,7 +966,13 @@ export class TranceOnboarding extends TranceFeature {
             "Stable Sine moves more slowly.",
         },
       ],
-      buttons: [{ label: { l10n: "zen-generic-next" } }],
+      buttons: [
+        { label: { l10n: "zen-generic-next" } },
+        {
+          label: { text: "Install or refresh Sine" },
+          onClick: () => this.#provisionMods(),
+        },
+      ],
       render: async container => {
         this.#choiceGroup(
           container,
@@ -1127,81 +997,63 @@ export class TranceOnboarding extends TranceFeature {
             this.#answers.modsChannel = value;
           }
         );
-        const version = await this.#modEngineVersion();
+        const [version, bootloader] = await Promise.all([
+          this.#modEngineVersion(),
+          TranceProvision.hasBootloader(),
+        ]);
         if (version) {
           this.#status(container, `Engine ${version} is installed.`, "ok");
         } else {
           this.#status(
             container,
-            "No mod manager found in this profile. Nothing to switch — the " +
-              "choice is recorded for the next time one is provisioned.",
+            bootloader
+              ? "No mod manager found in this profile. Install Sine here, or " +
+                  "continue and record the choice for a later provision."
+              : "The Sine bootloader is not installed in this profile. " +
+                  "Continue to record the choice for a later provision.",
             "warn"
           );
         }
       },
-      commit: () => this.#applyModChannel(this.#answers.modsChannel),
+      commit: () =>
+        TranceOnboardingSettingsService.applyModChannel(
+          this.#answers.modsChannel
+        ),
     };
   }
 
-  /** `{profile}/chrome/JS/engine.json`, which Sine writes and owns. */
-  get #engineFile() {
-    return PathUtils.join(
-      Services.dirsvc.get("ProfD", Ci.nsIFile).path,
-      "chrome",
-      "JS",
-      "engine.json"
-    );
-  }
-
+  /** The installed engine's version, or null when this profile has none. */
   async #modEngineVersion() {
-    try {
-      const engine = await IOUtils.readJSON(this.#engineFile);
-      return engine?.version ?? null;
-    } catch (error) {
-      return null;
-    }
+    return TranceProvision.engineVersion();
   }
 
   /**
-   * Switches the installed engine's channel by rewriting its own version.
+   * Installs the selected Sine channel and refreshes the shipped Zen-store
+   * mods. This is an explicit page action: a first-run flow must not start a
+   * network transfer merely because its page was rendered.
    *
-   * This is Sine's mechanism, not a workaround for it: the engine compares the
-   * version in `engine.json` against its releases to decide what to update to,
-   * and a Cosine release is one whose tag ends in `c`. Adding or removing that
-   * suffix is therefore the supported way to move an installed engine between
-   * channels, and it is exactly what `scripts/trance-cosine.py` relies on when
-   * it says a Cosine engine keeps updating along Cosine.
-   *
-   * Nothing here installs, downloads or restarts. The engine picks the change
-   * up on its next update check.
-   *
-   * @param {string} channel
+   * @returns {Promise<boolean>} false to keep the user on this page
    */
-  async #applyModChannel(channel) {
-    Services.prefs.setStringPref(PREF_MODS_CHANNEL, channel);
-
-    let engine;
+  async #provisionMods() {
     try {
-      engine = await IOUtils.readJSON(this.#engineFile);
+      if (!(await TranceProvision.hasBootloader())) {
+        this.#status(
+          this.#element("trance-onboarding-content"),
+          "The Sine bootloader is not installed in this profile.",
+          "warn"
+        );
+        return false;
+      }
+      const release = await TranceProvision.resolveSineRelease({
+        channel: this.#answers.modsChannel,
+      });
+      await TranceProvision.installSineEngine(release);
+      await TranceProvision.installZenStoreMods();
+      TranceLog.log(NS, `installed Sine ${release.tag}`);
     } catch (error) {
-      // No engine in this profile. The pref is the whole answer.
-      return;
+      TranceLog.error(NS, "could not provision Sine", error);
     }
-    const current = String(engine?.version ?? "");
-    if (!current) {
-      return;
-    }
-    const base = current.replace(/c$/, "");
-    const wanted = channel === "cosine" ? `${base}c` : base;
-    if (wanted === current) {
-      return;
-    }
-    try {
-      await IOUtils.writeJSON(this.#engineFile, { ...engine, version: wanted });
-      TranceLog.log(NS, `mod engine ${current} → ${wanted}`);
-    } catch (error) {
-      TranceLog.error(NS, "could not rewrite the mod engine version", error);
-    }
+    return false;
   }
 
   // 3 ── Architecture ---------------------------------------------------------
@@ -1303,7 +1155,8 @@ export class TranceOnboarding extends TranceFeature {
           );
         }
       },
-      commit: () => this.#applyArch(this.#answers.arch),
+      commit: () =>
+        TranceOnboardingSettingsService.applyArch(this.#answers.arch),
     };
   }
 
@@ -1311,28 +1164,13 @@ export class TranceOnboarding extends TranceFeature {
    * Writes the arch-tuned blur prefs.
    *
    * Both columns are written, always. Clearing the user branch would be the
-   * `#applyChannel` treatment, and it is wrong here: a user who moved the blur
+   * The channel page's stable-side clearing is deliberately different here:
    * radius by hand and then answered this question has asked for the tuning,
    * and inheriting their own old value instead would look like the question did
    * nothing.
    *
    * @param {string} arch
    */
-  #applyArch(arch) {
-    Services.prefs.setStringPref(PREF_ARCH, arch);
-    for (const entry of ARCH_TUNING[arch] ?? []) {
-      try {
-        if (entry.type === "int") {
-          Services.prefs.setIntPref(entry.name, entry.value);
-        } else {
-          Services.prefs.setBoolPref(entry.name, entry.value);
-        }
-      } catch (error) {
-        TranceLog.error(NS, `could not set ${entry.name}`, error);
-      }
-    }
-    TranceLog.log(NS, "arch", arch);
-  }
 
   // 4 ── Edgeless -------------------------------------------------------------
 

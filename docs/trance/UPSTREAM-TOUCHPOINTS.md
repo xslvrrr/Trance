@@ -7,7 +7,30 @@ when `git rebase upstream/dev` conflicts, it will be in one of these files.
 **Keep this list under ~15 entries.** If a change can be made in a Trance-owned file instead,
 make it there. Adding an entry requires a matching ADR in `DECISIONS.md`.
 
-It stands at **26**, eleven over budget, and the retirement pass §11.3 wants is still outstanding.
+It stands at **36**, twenty-one over budget.
+
+It stood at 26 before Phase 6.9, and 26 was wrong. Four were retired (see "The pref touchpoints,
+retired" below) and **ten** were added, every one of which was a file already modified in the tree
+and missing from this list: `package-lock.json`, `.gitignore`, the Firefox-155 re-base of an
+external patch, the drag-and-drop teardown restore, the three session-store patches, the
+`nsPresContext` boosts fast path, the Cocoa window material work, and the macOS entitlement. Most
+of them were written before Phase 6 and never recorded; some were written, lost when a working tree
+was rebuilt on another machine, and recovered from `engine/` by re-export. A list that is accurate
+and far over budget is worth more than a short one that is wrong, and the number only means
+anything once it counts everything.
+
+Of the 32: ten are registration points the build system requires to live in a file upstream owns
+(a `DIRS` entry, a jar `#include`, a script list, two `moz.configure` files, two preferences-pane
+hooks, a stylelint config, a test manifest) plus `surfer.json`, which is what makes the build
+Trance at all. Four are brand identity (`configs/common/mozconfig`, `README.md`, `package.json`,
+`package-lock.json`) and one is repository hygiene (`.gitignore`). The rest are behavioural or
+performance edits inside a Zen patch, each bounded and each with an ADR.
+
+The budget of 15 was set before the fork carried a distribution policy, an onboarding flow, a mod
+provisioner, or a performance pass that reaches into layout and the Cocoa widget. It is not
+reachable without giving one of those up, and that trade has not been worth making. It remains the
+standing goal, not a closed question — and the honest statement of where the fork is, is that it is
+twice the size it meant to be.
 
 Phase 9 added three, each one line of consequence: #15 is a `DIRS` entry, #16 is a *deletion* (which
 can only conflict if upstream edits a file that is no longer there), and #17 is one pref inside a
@@ -22,16 +45,27 @@ other way: the plan expected it to cost two files, and it cost one, because the 
 otherwise have rewritten is still doing a job — it is what the layers fall back to once the
 animation ends.
 
-The settings pass added three, #20 to #22, and all three are *one pref value each* inside a file
-Zen or Firefox already owns. They are not there by preference. ffprefs sorts every YAML entry by
-pref name and emits duplicates adjacently, so a second definition of a name that is already declared
-resolves in `fs::read_dir` order — a different browser on a different machine. A default Trance
-disagrees with therefore has to be changed where it is declared. Defaults that nobody declares live
-in `prefs/trance/browser-defaults.yaml`, which costs no touchpoint at all, and that is where the
-history-mode prefs went for exactly this reason. The three here had no such option.
+### The pref touchpoints, retired
 
-They are also the cheapest kind of conflict to resolve: a rebase conflict on a one-line pref value is
-a value to re-apply, not a behaviour to re-derive.
+The settings pass added three touchpoints, and Phase 1 had added a fourth, and all four were *pref
+values* inside a file Zen or Firefox already owns: `prefs/zen/mods.yaml`, `prefs/zen/view.yaml`,
+`prefs/zen/zen-urlbar.yaml`, `prefs/firefox/urlbar.yaml`.
+
+They were not there by preference. ffprefs sorted every YAML entry by pref name and emitted
+duplicates adjacently, so a second definition of a name that was already declared resolved in
+`fs::read_dir` order — a different browser on a different machine. A default Trance disagreed with
+therefore had to be changed where it was declared.
+
+Phase 6.9 removed the cause rather than the symptom. ffprefs now sorts any file under a `trance/`
+directory last and keeps the last declaration of each `(name, condition, type)` — so a re-declaration
+in `prefs/trance/` wins deterministically, and the type and condition of the original are preserved
+rather than collapsed (ADR-077). All four values moved to `prefs/trance/overrides.yaml`, with the
+reasoning that used to sit beside them in four files somebody else owns, and all four upstream files
+are byte-identical to `upstream/dev` again.
+
+The rule the new file lives by: **values only**. A pref Trance introduces belongs in the feature's
+own `prefs/trance/<feature>.yaml`; `overrides.yaml` may only re-declare a pref an upstream file
+already declares.
 
 Phase 13 added one, #23, and it is the cheapest shape a behavioural touchpoint comes in: a guard
 around a call that is otherwise untouched. Trance's onboarding replaces Zen's welcome rather than
@@ -74,29 +108,47 @@ Mark every change in-place:
 | 1 | `surfer.json` | `name`, `vendor`, `appId`, `binaryName`, single `brands.trance`, `updateHostname` | 1 | ADR-006, ADR-009 |
 | 2 | `configs/common/mozconfig` | `--with-app-basename`, `MOZ_APP_BASENAME`, `--with-distribution-id`, `MOZ_SOURCE_REPO` | 1 | ADR-007 |
 | 3 | `configs/branding/release/**` → `configs/branding/trance/**` | Renamed; `configs/branding/twilight/**` deleted | 1 | ADR-006, ADR-008 |
-| 4 | `prefs/zen/mods.yaml` | Drop the `zen-browser.app` injection grant | 1 | ADR-006 |
-| 5 | `package.json` | `name`, repo/bugs/homepage URLs, `ci` script brand; `locales` script chained onto `import` | 1, 4 | ADR-006, ADR-017 |
-| 6 | `README.md` | Rewritten for Trance | 1 | — |
-| 7 | `src/browser/base/content/zen-assets.jar.inc.mn` | One `#include` of `src/zen/trance/jar.inc.mn` | 2 | — |
-| 8 | `src/zen/common/ZenPreloadedScripts.js` | One import of `TranceCore.mjs`, last in the list | 2 | — |
-| 9 | `src/-stylelintrc-js.patch` (`.stylelintrc.js`) | Register the Trance stylelint plugin; enable its 8 rules for `zen/trance/**` | 2 | — |
-| 10 | `src/browser/components/preferences/preferences-xhtml.patch` | `about:preferences#trance` nav button + `#include` of `tranceSettings.inc.xhtml` | 2 | ADR-013 |
-| 11 | `src/browser/components/preferences/preferences-js.patch` | `register_module("paneTrance", …)` and allow the pane past the SRD section gate | 2 | ADR-013 |
-| 12 | `src/zen/tests/moz.build` | One entry: `"trance/browser.toml"` | 2 | — |
-| 13 | `src/toolkit/moz-configure.patch` (`toolkit/moz.configure`) | `MOZ_APP_PROFILE`, `MOZ_APP_VENDOR` default, distribution-id default, Linux user appdir | 1 | ADR-014 |
-| 14 | `src/browser/moz-configure.patch` (`browser/moz.configure`) | `imply_option("MOZ_APP_VENDOR", "Trance")` | 1 | ADR-014 |
-| 15 | `src/zen/moz.build` | One `DIRS` entry: `"trance"`, so the build installs `distribution/policies.json` | 9 | ADR-032 |
-| 16 | `build/AppDir/distribution/policies.json` | **Deleted.** Its contents moved into `src/zen/trance/distribution/policies.json`, which every platform now gets. Leaving it would also have broken the AppImage step, which does `mv zen/* $APPDIR/` — `mv` refuses a directory onto a non-empty one of the same name | 9 | ADR-032 |
-| 17 | `src/testing/profiles/mochitest/user-js.patch` (`testing/profiles/mochitest/user.js`) | One pref: `toolkit.policies.perUserDir=true`, so the shipped extension policy does not make every mochitest in the tree dial addons.mozilla.org. Zen already patches this file | 9 | ADR-032 |
-| 18 | `src/zen/media/ZenMediaController.mjs` | Park the 1 Hz position ticker while the window is minimised or fully occluded, and re-derive the position from elapsed wall time on resume. One field, one method, one guard, one teardown | 11 | ADR-035 |
-| 19 | `src/zen/spaces/ZenSpaceManager.mjs` | The workspace cross-fade animates `opacity` on the two background pseudo-elements via `motion.animateMini`, instead of animating the `--zen-background-opacity` custom property. One local array, one replaced `motion.animate` call, one cancel-and-hand-back at the end of the switch | 11 | ADR-038 |
-| 20 | `prefs/zen/view.yaml` | Two pref values: `zen.view.use-single-toolbar` → `false`, so Trance ships the sidebar-and-toolbar layout, and `zen.view.show-newtab-button-top` → `false`, so the new-tab button stays at the foot of the tab list where the preinstalled mod styles it | — | ADR-044 |
-| 21 | `prefs/zen/zen-urlbar.yaml` | One pref value: `zen.urlbar.behavior` → `float`, so the address bar is always the floating panel Trance paints | — | ADR-044 |
-| 22 | `prefs/firefox/urlbar.yaml` | One pref value: `browser.search.suggest.enabled` → `true`. The private-window switch is left off | — | ADR-044 |
-| 23 | `src/zen/common/modules/ZenStartup.mjs` | One `if` around the existing `loadSubScript` of `ZenWelcome.mjs`, so Zen's welcome flow does not start when Trance's onboarding is enabled. Two full-window takeovers cannot share a window. Nothing is added, moved or reordered — with `trance.onboarding.enabled` false the call runs exactly as it did | 13 | ADR-051 |
-| 24 | `src/browser/installer/package-manifest-in.patch` (`browser/installer/package-manifest.in`) | Two changes, both about files that were built and then not packaged. Deletes the `#if defined(BUILT_BY_MOZILLA)` around `@RESPATH@/distribution/*` — the flag is set by `--built-by-mozilla` and by nothing else, so no fork's package has ever contained a `distribution/` directory, which is why 0.1.0 shipped with no extension policy at all. Adds `config.js`, `defaults/pref/config-prefs.js` and `trance-cosine/*`, which is the Sine mod manager: it was provisioned into `dist/Trance.app` and the packager reads `dist/bin`, so it was in every development build and no release. Zen already patches this file | 12 | ADR-052, ADR-055 |
-| 25 | `src/zen/sessionstore/ZenSessionManager.sys.mjs` | One `if` in `readFile`, after the session file has been read and before anything looks at it, adopting a Zen import staged by onboarding and deleting it. The sidebar object is built before any window exists and its setter is private, so an import has nowhere else to land. With `trance.import.staged` false — which is its default and its state on every startup but the one after an import — the method runs exactly as it did | 13 | ADR-053 |
-| 26 | `tools/ffprefs/src/main.rs` | `is_twilight_build` asks whether the brand *is* twilight rather than whether it is anything other than release. Zen ships two brands so the two questions are the same there; Trance ships one, named neither, and fell on the twilight side — so every Trance build ever made shipped the twilight defaults ADR-006 says it does not have. Two lines, plus the unreadable-file fallback flipping with them | 12 | ADR-054 |
+| 4 | `package.json` | `name`, repo/bugs/homepage URLs, `ci` script brand; `locales` script chained onto `import` | 1, 4 | ADR-006, ADR-017 |
+| 5 | `README.md` | Rewritten for Trance | 1 | — |
+| 6 | `src/browser/base/content/zen-assets.jar.inc.mn` | One `#include` of `src/zen/trance/jar.inc.mn` | 2 | — |
+| 7 | `src/zen/common/ZenPreloadedScripts.js` | One import of `TranceCore.mjs`, last in the list | 2 | — |
+| 8 | `src/-stylelintrc-js.patch` (`.stylelintrc.js`) | Register the Trance stylelint plugin; enable its 8 rules for `zen/trance/**` | 2 | — |
+| 9 | `src/browser/components/preferences/preferences-xhtml.patch` | `about:preferences#trance` nav button + `#include` of `tranceSettings.inc.xhtml` | 2 | ADR-013 |
+| 10 | `src/browser/components/preferences/preferences-js.patch` | `register_module("paneTrance", …)` and allow the pane past the SRD section gate | 2 | ADR-013 |
+| 11 | `src/zen/tests/moz.build` | One entry: `"trance/browser.toml"` | 2 | — |
+| 12 | `src/toolkit/moz-configure.patch` (`toolkit/moz.configure`) | `MOZ_APP_PROFILE`, `MOZ_APP_VENDOR` default, distribution-id default, Linux user appdir | 1 | ADR-014 |
+| 13 | `src/browser/moz-configure.patch` (`browser/moz.configure`) | `imply_option("MOZ_APP_VENDOR", "Trance")` | 1 | ADR-014 |
+| 14 | `src/zen/moz.build` | One `DIRS` entry: `"trance"`, so the build installs `distribution/policies.json` | 9 | ADR-032 |
+| 15 | `build/AppDir/distribution/policies.json` | **Deleted.** Its contents moved into `src/zen/trance/distribution/policies.json`, which every platform now gets. Leaving it would also have broken the AppImage step, which does `mv zen/* $APPDIR/` — `mv` refuses a directory onto a non-empty one of the same name | 9 | ADR-032 |
+| 16 | `src/testing/profiles/mochitest/user-js.patch` (`testing/profiles/mochitest/user.js`) | One pref: `toolkit.policies.perUserDir=true`, so the shipped extension policy does not make every mochitest in the tree dial addons.mozilla.org. Zen already patches this file | 9 | ADR-032 |
+| 17 | `src/zen/media/ZenMediaController.mjs` | Replaces per-card 1 Hz position intervals and direct window visibility listeners with one activity-aware window ticker; only visible cards update DOM and hidden cards catch up from monotonic elapsed time | 0–6 | ADR-035 |
+| 18 | `src/zen/spaces/ZenSpaceManager.mjs` | The workspace cross-fade animates `opacity` on the two background pseudo-elements via `motion.animateMini`, instead of animating the `--zen-background-opacity` custom property. One local array, one replaced `motion.animate` call, one cancel-and-hand-back at the end of the switch | 11 | ADR-038 |
+| 19 | `src/zen/common/modules/ZenStartup.mjs` | One `if` around the existing `loadSubScript` of `ZenWelcome.mjs`, so Zen's welcome flow does not start when Trance's onboarding is enabled. Two full-window takeovers cannot share a window. Nothing is added, moved or reordered — with `trance.onboarding.enabled` false the call runs exactly as it did | 13 | ADR-051 |
+| 20 | `src/browser/installer/package-manifest-in.patch` (`browser/installer/package-manifest.in`) | Two changes, both about files that were built and then not packaged. Deletes the `#if defined(BUILT_BY_MOZILLA)` around `@RESPATH@/distribution/*` — the flag is set by `--built-by-mozilla` and by nothing else, so no fork's package has ever contained a `distribution/` directory, which is why 0.1.0 shipped with no extension policy at all. Adds `config.js`, `defaults/pref/config-prefs.js` and `trance-cosine/*`, which is the Sine mod manager: it was provisioned into `dist/Trance.app` and the packager reads `dist/bin`, so it was in every development build and no release. Zen already patches this file | 12 | ADR-052, ADR-055 |
+| 21 | `src/zen/sessionstore/ZenSessionManager.sys.mjs` | One `if` in `readFile`, after the session file has been read and before anything looks at it, adopting a Zen import staged by onboarding and deleting it. The sidebar object is built before any window exists and its setter is private, so an import has nowhere else to land. With `trance.import.staged` false — which is its default and its state on every startup but the one after an import — the method runs exactly as it did | 13 | ADR-053 |
+| 22 | `tools/ffprefs/src/main.rs` | `is_twilight_build` asks whether the brand *is* twilight rather than whether it is anything other than release. Zen ships two brands so the two questions are the same there; Trance ships one, named neither, and fell on the twilight side — so every Trance build ever made shipped the twilight defaults ADR-006 says it does not have. Two lines, plus the unreadable-file fallback flipping with them | 12 | ADR-054 |
+| 23 | `src/browser/components/tabbrowser/content/drag-and-drop-js.patch` | Restores the three teardown blocks Zen's patch removed with the dead `_updateTabStylesOnDrag` body: the per-tab `pointerEvents`/`dragtarget`/`small-stack` reset, the drag-label style reset, and the move-together transform reset. The patch is 28 lines *smaller* for it — this touchpoint reduces divergence from Firefox rather than adding to it | 6 | ADR-076 |
+| 24 | `src/external-patches/firefox/issue_14710.patch` | Re-based onto the Firefox 155 tree: one context line dropped and two hunk headers corrected, so the third-party PiP fix still applies. No behaviour of the patch changes; `src/external-patches/manifest.json` still names its origin and the manifest pins its bytes | 6 | — |
+| 25 | `package-lock.json` | Records the `engines.node` pin `package.json` declares. Written by npm, not by hand | — | — |
+| 26 | `src/browser/components/sessionstore/SessionSaver-sys-mjs.patch` | Drops the hunk that replaced upstream's `permanentPrivateBrowsing` guard with `if (false)`. A profile configured never to persist anything is no longer written to disk, and the patch is one hunk smaller | 6 | ADR-079 |
+| 27 | `src/browser/components/sessionstore/SessionStartup-sys-mjs.patch` | The same guard on init, and `isAutomaticRestoreEnabled()` returning `!permanentPrivateBrowsing` rather than the constant `true`. Zen's always-restore intent, minus the override of a user's explicit setting | 6 | ADR-079 |
+| 28 | `src/browser/components/sessionstore/SessionStore-sys-mjs.patch` | Re-exported against Firefox 155: hunk offsets and blob hashes only, no behaviour change. Its three `&& false` conditions are deliberately left in place and recorded in the manifest | 6 | ADR-079 |
+| 29 | `src/layout/base/nsPresContext-h.patch` | A tri-state `ZenBoostsActivity` cached on the PresContext, so `nsZenBoostsBackend::ResolveStyleColor` stops walking Document -> BrowsingContext -> Top() plus the native-anonymous ancestry for every style colour in every document. Tri-state rather than a bool because a PresContext can be built for a BrowsingContext that already carries a boost | 11 | ADR-063 |
+| 30 | `src/widget/cocoa/nsCocoaWindow-mm.patch` | `ZenWindowMaterialView`'s occlusion states and the power-mode monitor, inside Zen's existing Cocoa window patch. Order-sensitive with the tiled-attribute external patch, which is declared in `ORDER_RULES` | 11 | ADR-061, ADR-078 |
+| 31 | `src/security/mac/hardenedruntime/production/firefox-browser-xml.patch` | `com.apple.application-identifier` carries `@TRANCE_APPLE_TEAM_ID@.app.trance-browser.trance` instead of Zen's team and bundle. `scripts/trance-entitlements.py` resolves the placeholder immediately before signing; an unresolved one cannot be mistaken for a working value, which is how the inherited entitlement stayed inert and silent | 12 | — |
+| 32 | `.gitignore` | Ignores `WARP.md`, an agent-tool scratch file that lands in the repository root and is not project state | — | — |
+| 33 | `src/zen/compact-mode/ZenCompactMode.mjs` | Compact-mode hover timers, animation frames and mutation observers now follow `gZenWindowActivity`; hidden windows clear hover state and reconnect on resume | 0–6 | — |
+| 34 | `src/zen/split-view/ZenViewSplitter.mjs` | Split-pane docshell activation follows `gZenWindowActivity`, suspending linked browsers while the chrome window is hidden and restoring them on resume | 0–6 | — |
+| 35 | `src/zen/glance/ZenGlanceManager.mjs` | Glance browser/docshell activity follows `gZenWindowActivity`; cached element previews remain available without re-rendering on resume | 0–6 | — |
+| 36 | `src/zen/live-folders/ZenLiveFolder.sys.mjs` | Deferred live-folder network refreshes are gated by `gZenWindowActivity`, so hidden or occluded windows do not fetch | 0–6 | — |
+
+### Phase 0–6 activity migration
+
+- `src/zen/media/ZenMediaController.mjs`: removed each card's `sizemodechange`/`occlusionstatechange` listeners and per-card 1 Hz interval; one activity-aware window ticker updates visible cards, while hidden cards derive elapsed position from monotonic time when shown.
+- `src/zen/compact-mode/ZenCompactMode.mjs`: removed direct `sizemodechange`/`deactivate` hover listeners and routed hover timers, animation frames and mutation observers through `gZenWindowActivity`; hidden windows clear stale hover state and resume with one compact-state refresh.
+- `src/zen/split-view/ZenViewSplitter.mjs`: replaced direct split-pane docshell activation during activity changes with one activity subscription; panes still render normally when visible and suspend/restores their docshell state with the window.
+- `src/zen/glance/ZenGlanceManager.mjs`: replaced direct Glance docshell toggles used for window activity with one subscription; hidden previews suspend and resume from the cached element preview instead of capturing a new one.
+- `src/zen/live-folders/ZenLiveFolder.sys.mjs`: gated `DeferredTask` fetch execution with one activity subscription; scheduled refresh cadence and manual refresh semantics remain unchanged when the window is visible.
 
 ## Planned touchpoints
 
@@ -134,8 +186,8 @@ every `surfer download` / `surfer reset` — and one missing linked `.ftl` makes
 bundles for the whole document, which blanks every label and every Fluent-provided `<key>` in the
 window. See ADR-017.
 
-### `prefs/zen/mods.yaml`
-The `zen.injections.match-urls` entry could not simply be deleted:
+### `zen.injections.match-urls` (now in `prefs/trance/overrides.yaml`)
+The entry could not simply be deleted:
 `src/zen/common/sys/ZenActorsManager.sys.mjs:34` reads it with `getStringPref()` and no fallback,
 and splices the result straight into a JSWindowActor `matches` array, so the value must also parse
 as a match pattern. Official builds therefore get `https://trance.invalid/*` — syntactically valid,

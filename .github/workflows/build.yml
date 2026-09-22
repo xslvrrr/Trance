@@ -1,4 +1,4 @@
-name: Zen Release builds
+name: Trance Release builds
 
 on:
   workflow_dispatch:
@@ -13,14 +13,6 @@ on:
         required: false
         default: false
         type: "boolean"
-      update_branch:
-        description: "Update branch with new version"
-        required: true
-        default: "release"
-        type: "choice"
-        options:
-          - "release"
-          - "twilight"
       use-sccache:
         description: "Use sccache"
         required: true
@@ -38,11 +30,6 @@ on:
         required: false
         default: false
         type: "boolean"
-      update_branch:
-        description: "Update branch with new version"
-        required: true
-        default: "release"
-        type: "string"
       use-sccache:
         description: "Use sccache"
         required: true
@@ -73,43 +60,23 @@ jobs:
           echo "create_release: ${{ inputs.create_release }}"
           echo "update_version: ${{ inputs.update_version }}"
           echo "use sccache: ${{ inputs.use-sccache }}"
-          echo "update_branch: ${{ inputs.update_branch }}"
           echo "GITHUB_REPOSITORY: ${{ github.repository }}"
           echo "GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}"
           echo "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Check if correct branch
-        if: ${{ inputs.create_release }}
-        run: |
-          echo "Checking if we are on the correct branch"
-          git branch
-          git status
-          git branch --show-current
-          branch="${{ inputs.update_branch }}"
-          if [[ $branch == "twilight" ]]; then
-            branch="dev"
-          elif [[ $branch == "release" ]]; then
-            branch="stable"
-          fi
-          if [[ $(git branch --show-current) != $branch ]]; then
-            echo ">>> Branch mismatch"
-          # exit 1
-          else
-            echo ">>> Branch matches"
-          fi
 
   start-self-host:
     runs-on: ubuntu-latest
     steps:
       - name: Download aws-cli
-        if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: ${{ inputs.create_release }}
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip awscliv2.zip
           sudo ./aws/install --update
 
       - name: Start self-hosted runner
-        if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: ${{ inputs.create_release }}
         run: |
           echo "Starting self-hosted runner"
           echo "${{ secrets.SELF_HOSTED_RUNNER_START_SCRIPT }}" | base64 -d > start.sh
@@ -117,7 +84,7 @@ jobs:
           bash ./start.sh
 
       - name: Remove self-hosted runner script
-        if: always() && ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: always() && ${{ inputs.create_release }}
         run: |
           echo "Removing self-hosted runner script"
           rm start.sh || true
@@ -153,14 +120,14 @@ jobs:
           npm i -g @zen-browser/surfer
 
       - name: Bump version
-        if: ${{ inputs.update_version && inputs.update_branch == 'release' }}
+        if: ${{ inputs.update_version }}
         run: |
-          npm run surfer -- ci --brand ${{ inputs.update_branch }} --bump prerelease
+          npm run surfer -- ci --brand trance --bump prerelease
 
       - name: Bump version without new version
-        if: ${{ !inputs.update_version || inputs.update_branch == 'twilight' }}
+        if: ${{ !inputs.update_version }}
         run: |
-          npm run surfer -- ci --brand ${{ inputs.update_branch }}
+          npm run surfer -- ci --brand trance
 
       - name: Debug
         run: |
@@ -181,8 +148,8 @@ jobs:
         if: ${{ inputs.update_version }}
         with:
           commit_message: 🔖 Update version to ${{ steps.data.outputs.version }}
-          commit_user_name: Zen Browser Robot
-          commit_user_email: zen-browser-auto@users.noreply.github.com
+          commit_user_name: Trance CI
+          commit_user_email: trance-ci@users.noreply.github.com
 
   check-release:
     runs-on: ubuntu-latest
@@ -209,7 +176,7 @@ jobs:
 
       - name: Activate Surfer CLI
         run: |
-          npm run surfer -- ci --brand ${{ inputs.update_branch }} --display-version ${{ needs.build-data.outputs.version }}
+          npm run surfer -- ci --brand trance --display-version ${{ needs.build-data.outputs.version }}
 
       - name: Check version
         run: |
@@ -251,7 +218,7 @@ jobs:
           npm ci
 
       - name: Load Surfer CI setup
-        run: npm run surfer -- ci --brand ${{ inputs.update_branch }} --display-version ${{ needs.build-data.outputs.version }}
+        run: npm run surfer -- ci --brand trance --display-version ${{ needs.build-data.outputs.version }}
 
       - name: Download Firefox source and dependencies
         run: npm run download --verbose
@@ -267,15 +234,15 @@ jobs:
           tar \
             --exclude='./.git' \
             --use-compress-program=zstd \
-            -hcf zen.source.tar.zst \
+            -hcf trance.source.tar.zst \
             -C engine .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           retention-days: 5
-          name: zen.source.tar.zst
-          path: ./zen.source.tar.zst
+          name: trance.source.tar.zst
+          path: ./trance.source.tar.zst
 
   windows-step-1:
     name: Windows build step 1 (PGO build)
@@ -288,8 +255,7 @@ jobs:
       use-sccache: ${{ inputs.use-sccache }}
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: true
-      profile-data-path-archive: zen-windows-profile-data-and-jarlog.zip
-      release-branch: ${{ inputs.update_branch }}
+      profile-data-path-archive: trance-windows-profile-data-and-jarlog.zip
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
 
   windows-step-2:
@@ -301,8 +267,7 @@ jobs:
     needs: [windows-step-1, build-data]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
-      profile-data-path-archive: zen.win64-pgo-stage-1.zip
-      release-branch: ${{ inputs.update_branch }}
+      profile-data-path-archive: trance.win64-pgo-stage-1.zip
 
   windows-step-3:
     name: Windows build step 3 (build with profile data)
@@ -314,7 +279,6 @@ jobs:
     with:
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: false
-      release-branch: ${{ inputs.update_branch }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
 
@@ -327,7 +291,6 @@ jobs:
     needs: [build-data, start-self-host, buildid]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
-      release-branch: ${{ inputs.update_branch }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
 
@@ -342,7 +305,6 @@ jobs:
       use-sccache: ${{ inputs.use-sccache }}
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: true
-      release-branch: ${{ inputs.update_branch }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
 
   mac-step-2:
@@ -354,7 +316,6 @@ jobs:
     needs: [mac-step-1, build-data]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
-      release-branch: ${{ inputs.update_branch }}
 
   mac-step-3:
     name: macOS build step 3 (build with profile data)
@@ -366,7 +327,6 @@ jobs:
     with:
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: false
-      release-branch: ${{ inputs.update_branch }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
 
@@ -379,7 +339,6 @@ jobs:
     needs: [build-data, mac-step-3]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
-      release-branch: ${{ inputs.update_branch }}
 
   appimage:
     name: AppImage build - Linux ${{ matrix.arch }}
@@ -411,27 +370,22 @@ jobs:
       - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
-          name: zen.linux-${{ matrix.arch }}.tar.xz
+          name: trance.linux-${{ matrix.arch }}.tar.xz
 
       - name: Execute AppImage build
         run: |
           set -eux
           export ARCH=${{ matrix.arch }}
-          UPINFO="gh-releases-zsync|$GITHUB_REPOSITORY_OWNER|desktop|latest|zen-$ARCH.AppImage.zsync"
+          UPINFO="gh-releases-zsync|$GITHUB_REPOSITORY_OWNER|Trance|latest|trance-$ARCH.AppImage.zsync"
           rm build/AppDir/.DirIcon || true
-          cp configs/branding/${{ inputs.update_branch }}/logo128.png build/AppDir/usr/share/icons/hicolor/128x128/apps/zen.png
-          cp configs/branding/${{ inputs.update_branch }}/logo128.png build/AppDir/zen.png && ln -s zen.png build/AppDir/.DirIcon
+          cp configs/branding/trance/logo128.png build/AppDir/usr/share/icons/hicolor/128x128/apps/trance.png
+          cp configs/branding/trance/logo128.png build/AppDir/trance.png && ln -s trance.png build/AppDir/.DirIcon
 
-          if [ "${{ inputs.update_branch }}" = "twilight" ]; then
-            sed -i -e 's/Name=Zen Browser/Name=Zen Twilight/g' build/AppDir/zen.desktop
-            sed -i -e 's/StartupWMClass=zen/StartupWMClass=zen-twilight/g' build/AppDir/zen.desktop
-          fi
-
-          sed -i -e 's/\$VERSION/${{ needs.build-data.outputs.version }}/g' build/AppDir/zen.desktop
+          sed -i -e 's/\$VERSION/${{ needs.build-data.outputs.version }}/g' build/AppDir/trance.desktop
 
           APPDIR=build/AppDir
           tar -xvf *.tar.* && rm -rf *.tar.*
-          mv zen/* $APPDIR/
+          mv trance/* $APPDIR/
           wget "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
           wget "https://github.com/VHSgunzo/uruntime/releases/latest/download/uruntime-appimage-squashfs-lite-$ARCH"
           chmod +x *.AppImage
@@ -445,24 +399,24 @@ jobs:
           ls -al
           find .
           ls -al "$APPDIR"
-          ./appimagetool-x86_64.AppImage -u "$UPINFO" "$APPDIR" zen-"$ARCH".AppImage --runtime-file ./uruntime-appimage-squashfs-lite-"$ARCH"
+          ./appimagetool-x86_64.AppImage -u "$UPINFO" "$APPDIR" trance-"$ARCH".AppImage --runtime-file ./uruntime-appimage-squashfs-lite-"$ARCH"
           mkdir dist
-          mv zen*AppImage* dist/.
+          mv trance*AppImage* dist/.
           unset ARCH
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           retention-days: 5
-          name: zen-${{ matrix.arch }}.AppImage
-          path: ./dist/zen-${{ matrix.arch }}.AppImage
-
+          name: trance-${{ matrix.arch }}.AppImage
+          path: ./dist/trance-${{ matrix.arch }}.AppImage
+ 
       - name: Upload artifact (ZSync)
         uses: actions/upload-artifact@v4
         with:
           retention-days: 5
-          name: zen-${{ matrix.arch }}.AppImage.zsync
-          path: ./dist/zen-${{ matrix.arch }}.AppImage.zsync
+          name: trance-${{ matrix.arch }}.AppImage.zsync
+          path: ./dist/trance-${{ matrix.arch }}.AppImage.zsync
 
   stop-self-hosted:
     runs-on: ubuntu-latest
@@ -470,14 +424,14 @@ jobs:
     if: always()
     steps:
       - name: Download aws-cli
-        if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: ${{ inputs.create_release }}
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip awscliv2.zip
           sudo ./aws/install --update
 
       - name: Stop self-hosted runner
-        if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: ${{ inputs.create_release }}
         run: |
           echo "Stopping self-hosted runner"
           echo "${{ secrets.SELF_HOSTED_RUNNER_STOP_SCRIPT }}" | base64 -d > stop.sh
@@ -485,15 +439,15 @@ jobs:
           bash ./stop.sh > /dev/null
 
       - name: Remove self-hosted runner script
-        if: always() && ${{ inputs.create_release && inputs.update_branch == 'release' }}
+        if: always() && ${{ inputs.create_release }}
         run: |
           echo "Removing self-hosted runner script"
           rm stop.sh || true
 
   release:
-    if: ${{ inputs.create_release || inputs.update_branch == 'twilight' }}
+    if: ${{ inputs.create_release }}
     permissions: write-all
-    name: Release
+    name: Release Trance ${{ needs.build-data.outputs.version }}
     needs:
       [
         build-data,
@@ -506,8 +460,6 @@ jobs:
         stop-self-hosted,
       ]
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    environment:
-      name: ${{ inputs.update_branch == 'release' && 'Deploy-Release' || 'Deploy-Twilight' }}
 
     steps:
       - name: Checkout repository
@@ -527,7 +479,6 @@ jobs:
           token: ${{ secrets.DEPLOY_KEY }}
 
       - name: Download signed windows objects
-        if: ${{ inputs.update_branch == 'release' }}
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_KEY }}
         run: |
@@ -551,124 +502,75 @@ jobs:
           ZEN_MAR_SIGNING_PASSWORD: ${{ secrets.ZEN_MAR_SIGNING_PASSWORD }}
           ZEN_SIGNING_CERT_PEM_BASE64: ${{ secrets.ZEN_SIGNING_CERT_PEM_BASE64 }}
           ZEN_SIGNING_PRIVATE_KEY_PEM_BASE64: ${{ secrets.ZEN_SIGNING_PRIVATE_KEY_PEM_BASE64 }}
-        run: |
-          bash scripts/mar_sign.sh -s
+        run: bash scripts/mar_sign.sh -s
 
       - name: Verify MARs and update manifests
         env:
           SIGNMAR: ${{ github.workspace }}/linux-bin-x86_64/signmar
-          RELEASE_BRANCH: ${{ inputs.update_branch }}
-        run: |
-          bash scripts/mar_verify.sh
+          RELEASE_BRANCH: trance
+        run: bash scripts/mar_verify.sh
 
       - name: Copy update manifests
-        env:
-          RELEASE_BRANCH: ${{ inputs.update_branch }}
         run: |
           # IMPORTANT: If changing any of these names,
           # make sure to also update the paths in the mar_sign.sh script
-
           cd updates-server
           mkdir -p updates
-          cp -a ../linux_update_manifest_x86_64/.  updates/
-          cp -a ../linux_update_manifest_aarch64/.  updates/
-
-          if [[ $RELEASE_BRANCH == 'release' ]]; then
-            cp -a ../.github/workflows/object/windows-x64-signed-x86_64/update_manifest/.  updates/
-            cp -a ../.github/workflows/object/windows-x64-signed-arm64/update_manifest/.  updates/
-          else
-            cp -a ../windows_update_manifest_x86_64/.  updates/
-            cp -a ../windows_update_manifest_arm64/.  updates/
-          fi
-
-          cp -a ../macos_update_manifest/.  updates/
+          cp -a ../linux_update_manifest_x86_64/. updates/
+          cp -a ../linux_update_manifest_aarch64/. updates/
+          cp -a ../.github/workflows/object/windows-x64-signed-x86_64/update_manifest/. updates/
+          cp -a ../.github/workflows/object/windows-x64-signed-arm64/update_manifest/. updates/
+          cp -a ../macos_update_manifest/. updates/
 
       - name: Commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 🚀 Update update manifests
-          commit_user_name: Zen Browser Robot
-          commit_user_email: zen-browser-auto@users.noreply.github.com
+          commit_message: "Update Trance update manifests"
+          commit_user_name: Trance CI
+          commit_user_email: trance-ci@users.noreply.github.com
           repository: ./updates-server
 
       - name: Generate Release Notes
-        env:
-          RELEASE_BRANCH: ${{ inputs.update_branch }}
         run: bash .github/workflows/src/generate_release_notes.sh
-
-        # If we are on Twilight, we want to just update the Twilight tag's release
-      - name: Update Twilight tag
-        if: ${{ inputs.update_branch == 'twilight' }}
-        uses: softprops/action-gh-release@v2.2.2
-        with:
-          body_path: release_notes.md
-          files: |
-            ./zen.source.tar.zst/*
-            ./zen.linux-x86_64.tar.xz/*
-            ./zen.linux-aarch64.tar.xz/*
-            ./zen-x86_64.AppImage/*
-            ./zen-x86_64.AppImage.zsync/*
-            ./zen-aarch64.AppImage/*
-            ./zen-aarch64.AppImage.zsync/*
-            ./linux.mar/*
-            ./linux-aarch64.mar/*
-            ./windows.mar/*
-            ./windows-arm64.mar/*
-            ./macos.mar/*
-            ./zen.installer.exe/*
-            ./zen.installer-arm64.exe/*
-            ./zen.macos-universal.dmg/*
-          tag_name: "twilight-1"
-          name: "Twilight build - ${{ needs.build-data.outputs.version }} (${{ needs.build-data.outputs.build_date }} at ${{ needs.build-data.outputs.build_time }})"
-          draft: false
-          generate_release_notes: false
-          prerelease: true
-          token: ${{ secrets.DEPLOY_KEY }}
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Release
         uses: softprops/action-gh-release@v2.2.2
-        if: ${{ inputs.update_branch == 'release' }}
         with:
           token: ${{ secrets.DEPLOY_KEY }}
           tag_name: ${{ needs.build-data.outputs.version }}
           prerelease: false
           fail_on_unmatched_files: false
           generate_release_notes: false
-          name: "Release build - ${{ needs.build-data.outputs.version }} (${{ needs.build-data.outputs.build_date }})"
+          name: "Trance ${{ needs.build-data.outputs.version }} (${{ needs.build-data.outputs.build_date }})"
           body_path: release_notes.md
           files: |
-            ./zen.source.tar.zst/*
-            ./zen.linux-x86_64.tar.xz/*
-            ./zen.linux-aarch64.tar.xz/*
-            ./zen-x86_64.AppImage/*
-            ./zen-x86_64.AppImage.zsync/*
-            ./zen-aarch64.AppImage/*
-            ./zen-aarch64.AppImage.zsync/*
+            ./trance.source.tar.zst/*
+            ./trance.linux-x86_64.tar.xz/*
+            ./trance.linux-aarch64.tar.xz/*
+            ./trance-x86_64.AppImage/*
+            ./trance-x86_64.AppImage.zsync/*
+            ./trance-aarch64.AppImage/*
+            ./trance-aarch64.AppImage.zsync/*
             ./linux.mar/*
             ./linux-aarch64.mar/*
             ./.github/workflows/object/windows-x64-signed-x86_64/windows.mar
             ./.github/workflows/object/windows-x64-signed-arm64/windows-arm64.mar
             ./macos.mar/*
-            ./.github/workflows/object/windows-x64-signed-x86_64/zen.installer.exe
-            ./.github/workflows/object/windows-x64-signed-arm64/zen.installer-arm64.exe
-            ./zen.macos-universal.dmg/*
+            ./.github/workflows/object/windows-x64-signed-x86_64/trance.installer.exe
+            ./.github/workflows/object/windows-x64-signed-arm64/trance.installer-arm64.exe
+            ./trance.macos-universal.dmg/*
 
       - name: Clean up signed windows staging release
-        if: ${{ inputs.update_branch == 'release' }}
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_KEY }}
         run: |
-          # The per-run staging prerelease on windows-binaries has served its purpose
-          # now that the signed bundles are published in the real release. Never fail
-          # the release over this cleanup.
+          # The per-run staging release has served its purpose. Never fail
+          # the Trance release over this cleanup.
           gh release delete "windows-signed-${{ github.run_id }}" \
             --repo zen-browser/windows-binaries --cleanup-tag --yes || true
 
   prepare-flatpak:
-    if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+    if: ${{ inputs.create_release }}
     permissions: write-all
     name: Prepare Flatpak
     needs: [release, linux, build-data]
@@ -696,8 +598,8 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 🚀 Update releases for Flatpak
-          commit_user_name: Zen Browser Robot
-          commit_user_email: zen-browser-auto@users.noreply.github.com
+          commit_user_name: Trance CI
+          commit_user_email: trance-ci@users.noreply.github.com
 
       - name: Checkout Flatpak repository
         uses: actions/checkout@v4
@@ -719,15 +621,15 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "[release]: Update Flatpak manifest"
-          commit_user_name: Zen Browser Robot
-          commit_user_email: zen-browser-auto@users.noreply.github.com
+          commit_user_name: Trance CI
+          commit_user_email: trance-ci@users.noreply.github.com
           repository: ./flatpak
 
       - name: Wait 2 minutes for the Flatpak repo to update
         run: sleep 120
 
   release-flatpak:
-    if: ${{ inputs.create_release && inputs.update_branch == 'release' }}
+    if: ${{ inputs.create_release }}
     permissions: write-all
     name: Release Flatpak
     needs: [prepare-flatpak, build-data]
@@ -743,17 +645,17 @@ jobs:
       - name: Download Linux x86_64 build
         uses: actions/download-artifact@v4
         with:
-          name: zen.linux-x86_64.tar.xz
+          name: trance.linux-x86_64.tar.xz
 
       - name: Download Linux aarch64 build
         uses: actions/download-artifact@v4
         with:
-          name: zen.linux-aarch64.tar.xz
+          name: trance.linux-aarch64.tar.xz
 
       - name: Update repository
         uses: actions/checkout@v4
         with:
-          path: zen-browser
+          path: trance-browser
           token: ${{ secrets.DEPLOY_KEY }}
 
       - name: Download Flatpak archive
@@ -767,32 +669,32 @@ jobs:
 
       - name: Prepare Flatpak manifest
         run: |
-          python3 ./zen-browser/scripts/prepare-flatpak-release.py \
+          python3 ./trance-browser/scripts/prepare-flatpak-release.py \
             --flatpak-archive archive.tar \
             --version ${{ needs.build-data.outputs.version }} \
-            --linux-archive zen.linux-x86_64.tar.xz \
-            --linux-aarch64-archive zen.linux-aarch64.tar.xz \
-            --output app.zen_browser.zen.yml \
-            --template-root ./zen-browser/build/flatpak
+            --linux-archive trance.linux-x86_64.tar.xz \
+            --linux-aarch64-archive trance.linux-aarch64.tar.xz \
+            --output app.trance.yml \
+            --template-root ./trance-browser/build/flatpak
 
       - name: Commit changes
         run: |
-          git add app.zen_browser.zen.yml
+          git add app.trance.yml
           git commit -m "Update to version ${{ needs.build-data.outputs.version }}"
 
       - name: Clean up
         run: |
-          rm -rf zen-browser
+          rm -rf trance-browser
           rm -rf archive.tar
-          rm -rf zen.linux-x86_64.tar.xz
-          rm -rf zen.linux-aarch64.tar.xz
+          rm -rf trance.linux-x86_64.tar.xz
+          rm -rf trance.linux-aarch64.tar.xz
 
       - name: Upload Flatpak manifest
         uses: actions/upload-artifact@v4
         with:
           retention-days: 5
-          name: app.zen_browser.zen.yml
-          path: ./app.zen_browser.zen.yml
+          name: app.trance.yml
+          path: ./app.trance.yml
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
@@ -804,7 +706,7 @@ jobs:
           commit-message: Update to version `${{ needs.build-data.outputs.version }}`
           title: Update to version `${{ needs.build-data.outputs.version }}`
           body: |
-            This PR updates the Zen Browser Flatpak package to version ${{ needs.build-data.outputs.version }}.
+            This PR updates the Trance Flatpak package to version ${{ needs.build-data.outputs.version }}.
 
             @${{ github.actor }} please review and merge this PR.
           branch: update-to-${{ needs.build-data.outputs.version }}

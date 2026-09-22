@@ -179,8 +179,20 @@ export class TranceTabStrip extends TranceFeature {
   #colorMenu = null;
   /** The folder the context menu was last opened on. */
   #contextFolder = null;
+  /** Current tab-cache subscription, or zero when folder colours are off. */
+  #folderCacheHandle = 0;
+  /** Folder context-menu listener state, while folder colours are enabled. */
+  #folderPopup = null;
+  #folderPopupListener = null;
+  /** Load listener used when the tab strip is not built at enable time. */
+  #folderReadyListener = null;
   /** Whether the two tab-selection listeners the glow needs are attached. */
   #glowListening = false;
+  #glowContainer = null;
+  #glowSelectListener = null;
+  #glowAttributeListener = null;
+  /** Load listener used when icon glow starts before gBrowser is built. */
+  #glowReadyListener = null;
   /** The tab currently carrying an inline glow colour, so it can be cleared. */
   #glowTab = null;
   /**
@@ -193,9 +205,9 @@ export class TranceTabStrip extends TranceFeature {
    * The favicon a sample is in flight for.
    *
    * Reading an image is asynchronous, and a person switching tabs quickly can
-   * start three samples before the first finishes. Without this, the *last* one
-   * to decode wins rather than the last one asked for, and the glow settles on
-   * whichever site happened to be slowest.
+   * start three samples before the first finishes. Without this, the *last*
+   * one to decode wins rather than the last one asked for, and the glow settles
+   * on whichever site happened to be slowest.
    */
   #glowPending = null;
 
@@ -210,12 +222,9 @@ export class TranceTabStrip extends TranceFeature {
     // Attributes first, so the stylesheet is right immediately; then again once
     // `gBrowser` exists, because the glow's `icon` mode needs a selected tab to
     // read a favicon from and TranceCore enters at `MozBeforeInitialXULLayout`,
-    // before there is one.
+    // before there is one. The load listener is installed only for icon mode,
+    // so a switched-off glow holds no listener.
     this.#applyGlow();
-    const win = this.context.window;
-    if (!win.gBrowser?.tabContainer) {
-      this.addListener(win, "load", () => this.#applyGlow(), { once: true });
-    }
   }
 
   onDisable() {
@@ -225,6 +234,8 @@ export class TranceTabStrip extends TranceFeature {
     for (const { attribute } of FLAGS) {
       root.removeAttribute(attribute);
     }
+    this.#stopGlowObservation();
+    this.#removeGlowReadyListener();
     this.#clearGlowColor();
     this.#glowColors.clear();
     this.#tearDownFolderColors();
@@ -375,31 +386,60 @@ export class TranceTabStrip extends TranceFeature {
 
     if (mode === "none") {
       root.removeAttribute(ATTR_GLOW);
+      this.#stopGlowObservation();
+      this.#removeGlowReadyListener();
       this.#clearGlowColor();
       return;
     }
     root.setAttribute(ATTR_GLOW, mode);
 
     if (mode === GLOW_ICON) {
+      this.#ensureGlowReadyListener();
       this.#observeGlow();
       this.#syncGlowColor();
     } else {
-      // The listeners stay: see `#observeGlow`. Only the inline property goes,
-      // so that `theme` mode resolves the token — the space accent — rather
-      // than whatever site the last `icon` session left on the tab.
+      this.#stopGlowObservation();
+      this.#removeGlowReadyListener();
+      // `theme` mode resolves the token — the space accent — rather than
+      // whatever site the last `icon` session left on the tab.
       this.#clearGlowColor();
     }
   }
 
+  #ensureGlowReadyListener() {
+    if (this.#glowReadyListener || this.context.window.gBrowser?.tabContainer) {
+      return;
+    }
+    const win = this.context.window;
+    const listener = () => {
+      if (this.#glowReadyListener === listener) {
+        this.#glowReadyListener = null;
+      }
+      this.#applyGlow();
+    };
+    this.#glowReadyListener = listener;
+    win.addEventListener("load", listener, { once: true });
+    this.addDisposer(() => {
+      win.removeEventListener("load", listener);
+      if (this.#glowReadyListener === listener) {
+        this.#glowReadyListener = null;
+      }
+    });
+  }
+
+  #removeGlowReadyListener() {
+    const listener = this.#glowReadyListener;
+    if (!listener) {
+      return;
+    }
+    this.context.window.removeEventListener("load", listener);
+    this.#glowReadyListener = null;
+  }
+
   /**
    * The two events that change which favicon the glow should be showing.
-   *
-   * Attached once, for the life of the feature, and never removed on a mere
-   * mode change — they belong to `addListener`, whose disposers only run on a
-   * full teardown, so re-attaching on every flip would stack a second pair per
-   * flip. Both handlers read the mode and return immediately when it is not
-   * `icon`, which is the same shape `TranceFeedback` uses for its `TabClose`
-   * listener and for the same reason.
+   * They exist only while `icon` mode is selected: a switched-off sub-feature
+   * must not retain listeners merely because the master feature is enabled.
    */
   #observeGlow() {
     if (this.#glowListening) {
@@ -407,23 +447,55 @@ export class TranceTabStrip extends TranceFeature {
     }
     const container = this.context.window.gBrowser?.tabContainer;
     if (!container) {
-      // Expected once, at startup: TranceCore runs before gBrowser is built,
-      // and `onEnable` comes back through the window's `load`.
       return;
     }
-    this.#glowListening = true;
 
-    this.addListener(container, "TabSelect", () => this.#syncGlowColor());
+    const onSelect = () => this.#syncGlowColor();
     // A favicon arrives after the tab does — a fresh tab has none until the
     // page has been fetched — so the glow would otherwise be empty for exactly
     // the load everyone is looking at. `TabAttrModified` is the event Firefox
     // already fires for it; a MutationObserver here would be inferring what
     // this states (TRANCE.md §3.2).
-    this.addListener(container, "TabAttrModified", event => {
+    const onAttribute = event => {
       if (event.detail?.changed?.includes("image")) {
         this.#syncGlowColor();
       }
+    };
+    this.addListener(container, "TabSelect", onSelect);
+    this.addListener(container, "TabAttrModified", onAttribute);
+    this.#glowListening = true;
+    this.#glowContainer = container;
+    this.#glowSelectListener = onSelect;
+    this.#glowAttributeListener = onAttribute;
+    this.addDisposer(() => {
+      container.removeEventListener("TabSelect", onSelect);
+      container.removeEventListener("TabAttrModified", onAttribute);
+      if (this.#glowSelectListener === onSelect) {
+        this.#glowListening = false;
+        this.#glowContainer = null;
+        this.#glowSelectListener = null;
+        this.#glowAttributeListener = null;
+      }
     });
+  }
+
+  #stopGlowObservation() {
+    if (!this.#glowContainer) {
+      this.#glowListening = false;
+      return;
+    }
+    this.#glowContainer.removeEventListener(
+      "TabSelect",
+      this.#glowSelectListener
+    );
+    this.#glowContainer.removeEventListener(
+      "TabAttrModified",
+      this.#glowAttributeListener
+    );
+    this.#glowListening = false;
+    this.#glowContainer = null;
+    this.#glowSelectListener = null;
+    this.#glowAttributeListener = null;
   }
 
   /**
@@ -698,30 +770,13 @@ export class TranceTabStrip extends TranceFeature {
   // --- Folder colour ---------------------------------------------------------
 
   #setUpFolderColors() {
-    // One subscription, for the whole tab strip. `zen-workspace` rather than
-    // `zen-folder` because a folder added at the top level of a space has no
-    // `zen-folder` ancestor for the hub to match on.
-    this.observeMutations(
-      "zen-workspace",
-      records => this.#onStripMutated(records),
-      { childList: true, subtree: true }
-    );
-
-    const popup = this.context.document.getElementById(FOLDER_ACTIONS_ID);
-    if (popup) {
-      const onPopupShowing = event => this.#onFolderMenuShowing(event);
-      this.addListener(popup, "popupshowing", onPopupShowing);
-    }
-
     this.#syncFolderColorFeature();
   }
 
   #tearDownFolderColors() {
+    this.#disableFolderColorResources();
     this.#removeColorMenu();
     this.#contextFolder = null;
-    for (const folder of this.#folders()) {
-      folder.removeAttribute(ATTR_FOLDER_COLOR);
-    }
   }
 
   /**
@@ -731,41 +786,100 @@ export class TranceTabStrip extends TranceFeature {
    * the user's choices on a pref flip would be the opposite of reversible.
    */
   #syncFolderColorFeature() {
-    if (Services.prefs.getBoolPref(PREF_FOLDER_COLORS, true)) {
-      this.#ensureColorMenu();
-      this.#stampFolders();
+    if (!Services.prefs.getBoolPref(PREF_FOLDER_COLORS, true)) {
+      this.#disableFolderColorResources();
+      this.#removeColorMenu();
       return;
     }
-    this.#removeColorMenu();
-    for (const folder of this.#folders()) {
-      folder.removeAttribute(ATTR_FOLDER_COLOR);
-    }
-  }
 
-  #folders() {
-    return this.context.document.querySelectorAll("zen-folder");
-  }
-
-  /**
-   * Rescans only when the mutation actually involved a folder. A tab opening
-   * mutates this subtree too, and rescanning the folder tree for every tab is
-   * the kind of work the mods this replaces did unconditionally.
-   *
-   * @param {MutationRecord[]} records - The batch the hub flushed.
-   */
-  #onStripMutated(records) {
-    const touchedAFolder = records.some(record =>
-      [...record.addedNodes, ...record.removedNodes].some(
-        node =>
-          node.nodeType === node.ELEMENT_NODE &&
-          (node.localName === "zen-folder" ||
-            node.querySelector?.("zen-folder"))
-      )
-    );
-    if (!touchedAFolder) {
-      return;
-    }
+    this.#ensureFolderCacheSubscription();
+    this.#ensureFolderPopupListener();
+    this.#ensureFolderReadyListener();
+    this.#ensureColorMenu();
     this.#stampFolders();
+  }
+
+  #ensureFolderCacheSubscription() {
+    if (this.#folderCacheHandle) {
+      return;
+    }
+    const cache = this.context.tabCache;
+    const handle = cache.subscribe(() => this.#stampFolders(cache.folders));
+    this.#folderCacheHandle = handle;
+    this.addDisposer(() => {
+      if (this.#folderCacheHandle === handle) {
+        cache.unsubscribe(handle);
+        this.#folderCacheHandle = 0;
+      }
+    });
+  }
+
+  #ensureFolderPopupListener() {
+    if (this.#folderPopupListener) {
+      return;
+    }
+    const popup = this.context.document.getElementById(FOLDER_ACTIONS_ID);
+    if (!popup) {
+      return;
+    }
+    const listener = event => this.#onFolderMenuShowing(event);
+    this.addListener(popup, "popupshowing", listener);
+    this.#folderPopup = popup;
+    this.#folderPopupListener = listener;
+    this.addDisposer(() => {
+      popup.removeEventListener("popupshowing", listener);
+      if (this.#folderPopupListener === listener) {
+        this.#folderPopup = null;
+        this.#folderPopupListener = null;
+      }
+    });
+  }
+
+  #ensureFolderReadyListener() {
+    if (this.context.tabCache.root || this.#folderReadyListener) {
+      return;
+    }
+    const win = this.context.window;
+    const listener = () => {
+      if (this.#folderReadyListener === listener) {
+        this.#folderReadyListener = null;
+      }
+      this.#stampFolders();
+    };
+    this.#folderReadyListener = listener;
+    win.addEventListener("load", listener, { once: true });
+    this.addDisposer(() => {
+      win.removeEventListener("load", listener);
+      if (this.#folderReadyListener === listener) {
+        this.#folderReadyListener = null;
+      }
+    });
+  }
+
+  #disableFolderColorResources() {
+    if (this.#folderCacheHandle) {
+      for (const folder of this.context.tabCache.folders) {
+        folder.removeAttribute(ATTR_FOLDER_COLOR);
+      }
+      this.context.tabCache.unsubscribe(this.#folderCacheHandle);
+      this.#folderCacheHandle = 0;
+    }
+
+    if (this.#folderPopup && this.#folderPopupListener) {
+      this.#folderPopup.removeEventListener(
+        "popupshowing",
+        this.#folderPopupListener
+      );
+    }
+    this.#folderPopup = null;
+    this.#folderPopupListener = null;
+    if (this.#folderReadyListener) {
+      this.context.window.removeEventListener(
+        "load",
+        this.#folderReadyListener
+      );
+      this.#folderReadyListener = null;
+    }
   }
 
   /**
@@ -773,12 +887,14 @@ export class TranceTabStrip extends TranceFeature {
    * stylesheet cannot tell one from a folder still holding Zen's
    * `zen-workspace-color` sentinel, whose token does not exist — tinting those
    * would resolve every folder variable to nothing.
+   *
+   * @param {Element[]} folders - The tab cache's current live-folder snapshot.
    */
-  #stampFolders() {
+  #stampFolders(folders = this.context.tabCache.folders) {
     if (!Services.prefs.getBoolPref(PREF_FOLDER_COLORS, true)) {
       return;
     }
-    for (const folder of this.#folders()) {
+    for (const folder of folders) {
       const code = folder.color;
       if (FOLDER_COLORS.some(color => color.code === code)) {
         folder.setAttribute(ATTR_FOLDER_COLOR, code);

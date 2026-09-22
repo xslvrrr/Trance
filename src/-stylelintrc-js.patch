@@ -31,7 +31,7 @@ index b5f8245fa04ffb8fc82240261d63f893f4629f19..1b6ead24adbe69fcb5aeb95cfd3e7fa9
    },
  
    overrides: [
-@@ -477,6 +481,25 @@ module.exports = {
+@@ -477,6 +481,26 @@ module.exports = {
          "csstools/use-logical": null,
        },
      },
@@ -49,6 +49,7 @@ index b5f8245fa04ffb8fc82240261d63f893f4629f19..1b6ead24adbe69fcb5aeb95cfd3e7fa9
 +        "trance/no-infinite-animation": true,
 +        "trance/no-backdrop-filter": true,
 +        "trance/no-will-change": true,
++        "trance/no-layout-transition": true,
 +        "trance/max-specificity": true,
 +        "trance/root-tokens-only-in-tokens-file": true,
 +      },

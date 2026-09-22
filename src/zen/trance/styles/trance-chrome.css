@@ -258,6 +258,11 @@
 
     & #zen-sidebar-top-buttons {
       margin-block-end: calc(-1 * var(--trance-topbuttons-shift));
+      /* The strip gives its height back to the tab list below it while it is
+       * hidden, and that is the whole point of hiding it — a transform would
+       * move the strip and leave the gap it used to fill. Layout is the effect
+       * here, not an accident of how it was written. */
+      /* stylelint-disable-next-line trance/no-layout-transition -- layout is the gesture */
       transition: margin-block-end var(--trance-dur-base)
         var(--trance-ease-emphasis);
     }
@@ -475,6 +480,16 @@
         transform var(--trance-dur-base) var(--trance-ease-standard);
     }
 
+    /* stylelint-disable stylelint-plugin-mozilla/no-has-selector --
+     * The subtree each `:has()` searches is one element: `#urlbar`, matched by
+     * id, with an attribute and a focus state the browser already invalidates
+     * on. There is no JS signal to substitute, because the relationship between
+     * two siblings is what the rule is about. TRANCE.md §13 Phase 11 measured
+     * `:has()` in this tree and found nothing to win by removing scoped uses.
+     *
+     * trance-specificity: two IDs each, because the address bar and the content
+     * wrapper are siblings — the relationship between them is the rule. Both
+     * ids are Firefox's or Zen's, not Trance's. */
     /* trance-specificity: two IDs each, because the address bar and the content
      * wrapper are siblings — the relationship between them is the rule. Both
      * ids are Firefox's or Zen's, not Trance's. */
@@ -482,6 +497,7 @@
     & #zen-appcontent-wrapper:has(#urlbar[breakout-extend]:focus-within) #zen-tabbox-wrapper {
       filter: var(--trance-urlbar-blur-fn) var(--trance-urlbar-dim-fn);
     }
+    /* stylelint-enable stylelint-plugin-mozilla/no-has-selector */
   }
 
   &[trance-chrome-urlbar-dim="true"] #zen-tabbox-wrapper {

@@ -24,14 +24,11 @@ const MAX_PEEK_LEVELS = 2;
  * null.
  */
 class ZenMediaCard {
-  #updateInterval = null;
   #tabTimeout = null;
   #controllerListeners = null;
   // >>> TRANCE
-  /** Wall-clock ms at which the position ticker was parked, or null. */
+  /** Monotonic ms at which this card's position was parked, or null. */
   #tickerStoppedAt = null;
-  /** The bound `sizemodechange`/`occlusionstatechange` handler, or null. */
-  #visibilityListener = null;
   // <<< TRANCE
 
   static supportedKeys = ["playpause", "previoustrack", "nexttrack"];
@@ -50,13 +47,6 @@ class ZenMediaCard {
     this.focusButton = element.querySelector(".zen-media-focus-button");
 
     this.#initListeners();
-
-    // >>> TRANCE
-    this.#visibilityListener = () => this.#syncTickerToVisibility();
-    const win = element.ownerGlobal;
-    win.addEventListener("sizemodechange", this.#visibilityListener);
-    win.addEventListener("occlusionstatechange", this.#visibilityListener);
-    // <<< TRANCE
 
     if (controller) {
       // Queried before anything is wired up: it throws if the controller
@@ -186,7 +176,10 @@ class ZenMediaCard {
       this.element.removeAttribute("zen-hiding");
       if (this.element.hidden) {
         this.element.hidden = false;
+        this.#resumePosition();
         this.manager.onCardVisibilityChanged();
+      } else {
+        this.#resumePosition();
       }
       return;
     }
@@ -194,6 +187,7 @@ class ZenMediaCard {
     if (this.element.hidden || this.element.hasAttribute("zen-hiding")) {
       return;
     }
+    this.#parkPosition();
     this.element.setAttribute("zen-hiding", "true");
     Promise.allSettled(
       this.element.getAnimations().map(animation => animation.finished)
@@ -262,61 +256,62 @@ class ZenMediaCard {
     this.position = positionState.position;
     this.duration = positionState.duration;
     this.playbackRate = positionState.playbackRate;
+    // >>> TRANCE
+    this.#tickerStoppedAt = this.element.ownerGlobal.performance.now();
+    // <<< TRANCE
     this.updatePosition();
   }
 
   // >>> TRANCE
   /**
-   * Starts and stops the position ticker with the window's visibility.
-   *
-   * The ticker below is a 1 Hz `setInterval` that runs for the whole duration
-   * of every media session, whether or not anyone can see the number it is
-   * writing. Timer wakeups are what keep an Apple Silicon CPU out of its deep
-   * idle states, so a minimised or fully occluded window paying for one every
-   * second is the exact cost TRANCE.md §3.6 is about — and it is paid by the
-   * most ordinary thing a browser does, which is play music in the background.
-   *
-   * Nothing is lost by stopping: `position` is re-derived from elapsed wall
-   * time on resume, so the readout is correct the moment it is visible again
-   * rather than merely continuous while it is not. `updatePositionState` also
-   * keeps arriving from the media session itself and supersedes both.
-   *
-   * Refs: TRANCE.md §3.6, §12.1, §13 Phase 11
+   * Position is advanced by the controller's single window ticker. A card
+   * records monotonic time while hidden, then catches up before its first
+   * repaint after becoming visible.
    */
-  #syncTickerToVisibility() {
-    const win = this.element.ownerGlobal;
-    const hidden =
-      win.isFullyOccluded || win.windowState === win.STATE_MINIMIZED;
+  #parkPosition() {
+    this.#tickerStoppedAt ??= this.element.ownerGlobal.performance.now();
+  }
 
-    if (hidden) {
-      if (this.#updateInterval) {
-        win.clearInterval(this.#updateInterval);
-        this.#updateInterval = null;
-        this.#tickerStoppedAt = Date.now();
-      }
+  #resumePosition() {
+    const now = this.element.ownerGlobal.performance.now();
+    if (this.#tickerStoppedAt !== null && this.controller?.isPlaying) {
+      const elapsed = (now - this.#tickerStoppedAt) / 1000;
+      this.position = Math.min(
+        this.duration,
+        this.position + elapsed * this.playbackRate
+      );
+    }
+    this.#tickerStoppedAt = now;
+    this.updatePosition();
+  }
+
+  updatePositionForTicker() {
+    if (this.element.hidden || !this.controller?.isPlaying) {
       return;
     }
+    const now = this.element.ownerGlobal.performance.now();
+    this.#tickerStoppedAt ??= now;
+    const elapsed = (now - this.#tickerStoppedAt) / 1000;
+    this.#tickerStoppedAt = now;
+    this.position = Math.min(
+      this.duration,
+      this.position + elapsed * this.playbackRate
+    );
+    this.updatePosition();
+  }
 
-    if (this.#tickerStoppedAt !== null) {
-      const elapsed = (Date.now() - this.#tickerStoppedAt) / 1000;
-      this.#tickerStoppedAt = null;
-      if (this.controller?.isPlaying) {
-        this.position = Math.min(
-          this.duration,
-          this.position + elapsed * this.playbackRate
-        );
-      }
-      // Re-arms the interval and repaints the readout in one step.
-      this.updatePosition();
+  parkForWindowActivity() {
+    this.#parkPosition();
+  }
+
+  resumeForWindowActivity() {
+    if (!this.element.hidden) {
+      this.#resumePosition();
     }
   }
   // <<< TRANCE
 
   updatePosition() {
-    if (this.#updateInterval) {
-      clearInterval(this.#updateInterval);
-      this.#updateInterval = null;
-    }
     if (this.duration >= 900_000) {
       this.element.setAttribute("media-position-hidden", "true");
       return;
@@ -330,34 +325,6 @@ class ZenMediaCard {
     this.currentTimeEl.textContent = this.formatSecondsToTime(this.position);
     this.durationEl.textContent = this.formatSecondsToTime(this.duration);
     this.progressBar.value = (this.position / this.duration) * 100;
-
-    // >>> TRANCE
-    // The readout above is now correct; the ticker below only keeps it that
-    // way, and there is no "that way" to keep while nobody can see it. See
-    // `#syncTickerToVisibility`.
-    this.#tickerStoppedAt = null;
-    const win = this.element.ownerGlobal;
-    if (win.isFullyOccluded || win.windowState === win.STATE_MINIMIZED) {
-      this.#tickerStoppedAt = Date.now();
-      return;
-    }
-    // <<< TRANCE
-
-    this.#updateInterval = setInterval(() => {
-      if (this.controller?.isPlaying) {
-        this.position += 1 * this.playbackRate;
-        if (this.position > this.duration) {
-          this.position = this.duration;
-        }
-        this.currentTimeEl.textContent = this.formatSecondsToTime(
-          this.position
-        );
-        this.progressBar.value = (this.position / this.duration) * 100;
-      } else {
-        clearInterval(this.#updateInterval);
-        this.#updateInterval = null;
-      }
-    }, 1000);
   }
 
   formatSecondsToTime(seconds) {
@@ -500,21 +467,11 @@ class ZenMediaCard {
       this.#controllerListeners = null;
     }
 
-    if (this.#updateInterval) {
-      clearInterval(this.#updateInterval);
-      this.#updateInterval = null;
-    }
     if (this.#tabTimeout) {
       clearTimeout(this.#tabTimeout);
       this.#tabTimeout = null;
     }
     // >>> TRANCE
-    if (this.#visibilityListener) {
-      const win = this.element.ownerGlobal;
-      win.removeEventListener("sizemodechange", this.#visibilityListener);
-      win.removeEventListener("occlusionstatechange", this.#visibilityListener);
-      this.#visibilityListener = null;
-    }
     this.#tickerStoppedAt = null;
     // <<< TRANCE
 
@@ -550,6 +507,11 @@ class ZenMediaCard {
 class nsZenMediaController {
   #cards = new Map();
   #cardTemplate = null;
+  // >>> TRANCE
+  #positionTicker = null;
+  #activityUnsubscribe = null;
+  #windowActivitySuspended = false;
+  // <<< TRANCE
 
   mediaControlBar = null;
 
@@ -562,6 +524,27 @@ class nsZenMediaController {
       "#zen-media-controls-toolbar"
     );
     this.#cardTemplate = document.querySelector("#zen-media-card-template");
+    // >>> TRANCE
+    this.#activityUnsubscribe = window.gZenWindowActivity?.subscribe(
+      state => this.#onWindowActivityChanged(state),
+      { immediate: true }
+    );
+    // The window owns this subscription for as long as it exists. Released on
+    // unload rather than never, so a closed window does not leave a callback
+    // holding this manager alive inside the controller's subscriber set.
+    window.addEventListener(
+      "unload",
+      () => {
+        if (this.#positionTicker) {
+          window.clearInterval(this.#positionTicker);
+          this.#positionTicker = null;
+        }
+        this.#activityUnsubscribe?.();
+        this.#activityUnsubscribe = null;
+      },
+      { once: true }
+    );
+    // <<< TRANCE
 
     window.addEventListener("TabSelect", () => {
       for (const card of this.#cards.values()) {
@@ -572,6 +555,7 @@ class nsZenMediaController {
     const onTabDiscardedOrClosed = this.onTabDiscardedOrClosed.bind(this);
 
     window.addEventListener("TabClose", onTabDiscardedOrClosed);
+
     window.addEventListener("TabBrowserDiscarded", onTabDiscardedOrClosed);
 
     window.addEventListener("TabAttrModified", event => {
@@ -586,6 +570,42 @@ class nsZenMediaController {
       this.onAudioPlaybackStarted(tab.linkedBrowser);
     });
   }
+  // >>> TRANCE
+  get positionTickerCount() {
+    return this.#positionTicker ? 1 : 0;
+  }
+
+  #onWindowActivityChanged(state) {
+    this.#windowActivitySuspended = Boolean(state?.suspended);
+    if (this.#windowActivitySuspended) {
+      for (const card of this.#cards.values()) {
+        card.parkForWindowActivity();
+      }
+    }
+    this.#syncPositionTicker();
+  }
+
+  #syncPositionTicker() {
+    if (this.#windowActivitySuspended || !this.#hasVisibleCards) {
+      if (this.#positionTicker) {
+        window.clearInterval(this.#positionTicker);
+        this.#positionTicker = null;
+      }
+      return;
+    }
+
+    for (const card of this.#cards.values()) {
+      card.resumeForWindowActivity();
+    }
+    if (!this.#positionTicker) {
+      this.#positionTicker = window.setInterval(() => {
+        for (const card of this.#cards.values()) {
+          card.updatePositionForTicker();
+        }
+      }, 1000);
+    }
+  }
+  // <<< TRANCE
 
   onAudioPlaybackStarted(browser) {
     // The card is created right away (while the controller is fresh) but
@@ -724,6 +744,9 @@ class nsZenMediaController {
   onCardVisibilityChanged() {
     this.#updateStack();
     this.#refreshToolbarVisibility();
+    // >>> TRANCE
+    this.#syncPositionTicker();
+    // <<< TRANCE
   }
 
   onCardDestroyed(card) {

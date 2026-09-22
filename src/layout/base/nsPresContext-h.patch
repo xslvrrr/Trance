@@ -1,8 +1,8 @@
 diff --git a/layout/base/nsPresContext.h b/layout/base/nsPresContext.h
-index 5f27c288fd027cf245421e7f049103a7e19da18a..fcd65b74c5881a75d9cb6847379e32d0a0652e67 100644
+index 5f27c288fd027cf245421e7f049103a7e19da18a..48d3dd437725d85c0968d409618afa84b34a7530 100644
 --- a/layout/base/nsPresContext.h
 +++ b/layout/base/nsPresContext.h
-@@ -594,6 +594,22 @@ class nsPresContext : public nsISupports,
+@@ -594,6 +594,52 @@ class nsPresContext : public nsISupports,
     */
    void SetColorSchemeOverride(mozilla::dom::PrefersColorSchemeOverride);
  
@@ -14,6 +14,12 @@ index 5f27c288fd027cf245421e7f049103a7e19da18a..fcd65b74c5881a75d9cb6847379e32d0
 +    mZenBoostsOverrideComplementaryRotation = aComplementaryRotation;
 +    mZenBoostsOverrideInverted = aInverted;
 +    mHasZenBoostsOverride = true;
++    // >>> TRANCE
++    // An override is the whole answer for this document, so it also settles
++    // the fast path below: there is no BrowsingContext here to ask instead.
++    mZenBoostsActivity = (aAccent || aInverted) ? ZenBoostsActivity::Active
++                                                : ZenBoostsActivity::Inactive;
++    // <<< TRANCE
 +  }
 +  bool HasZenBoostsOverride() const { return mHasZenBoostsOverride; }
 +  nscolor ZenBoostsOverrideAccent() const { return mZenBoostsOverrideAccent; }
@@ -22,10 +28,34 @@ index 5f27c288fd027cf245421e7f049103a7e19da18a..fcd65b74c5881a75d9cb6847379e32d0
 +  }
 +  bool ZenBoostsOverrideInverted() const { return mZenBoostsOverrideInverted; }
 +
++  // >>> TRANCE
++  // The fast path for nsZenBoostsBackend::ResolveStyleColor, which runs for
++  // every style colour in every document and, on an unboosted page, did all of
++  // its work only to conclude that there was no boost: Document ->
++  // BrowsingContext -> Top(), plus a walk of the frame's native-anonymous
++  // ancestry, per colour.
++  //
++  // Tri-state rather than a bool, because a PresContext can be built for a
++  // BrowsingContext that already carries a boost. A cross-process navigation
++  // replicates the BrowsingContext's fields into the new content process
++  // without firing DidSet, and ZenBoostsChild then re-applies the same value,
++  // which is not a change either — so a bool defaulting to false would read
++  // "no boosts" in exactly the case where there are some. `Unresolved` means
++  // "ask the top BrowsingContext once, then cache the answer"; the DidSet
++  // handlers in nsZenBCOverrides.cpp overwrite the cache on every change.
++  //
++  // AUDIT.md Phase 4.
++  enum class ZenBoostsActivity : uint8_t { Unresolved = 0, Inactive, Active };
++  ZenBoostsActivity GetZenBoostsActivity() const { return mZenBoostsActivity; }
++  void SetZenBoostsActivity(ZenBoostsActivity aActivity) {
++    mZenBoostsActivity = aActivity;
++  }
++  // <<< TRANCE
++
    /**
     * Sets the effective link parameters overrides, and invalidate stuff as
     * needed.
-@@ -1434,6 +1450,11 @@ class nsPresContext : public nsISupports,
+@@ -1434,6 +1480,14 @@ class nsPresContext : public nsISupports,
    mozilla::StyleForcedColors mForcedColors;
    mozilla::StyleLinkParameters mLinkParameters;
  
@@ -33,6 +63,9 @@ index 5f27c288fd027cf245421e7f049103a7e19da18a..fcd65b74c5881a75d9cb6847379e32d0
 +  float mZenBoostsOverrideComplementaryRotation = 0.0f;
 +  bool mZenBoostsOverrideInverted = false;
 +  bool mHasZenBoostsOverride = false;
++  // >>> TRANCE
++  ZenBoostsActivity mZenBoostsActivity = ZenBoostsActivity::Unresolved;
++  // <<< TRANCE
 +
   protected:
    virtual ~nsPresContext();

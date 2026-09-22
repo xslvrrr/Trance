@@ -34,8 +34,8 @@
 // has no way to ask how far a page has loaded.
 //
 // None of that is careless. It is what "CSS-only" costs from outside the
-// browser. Trance is inside it, so it asks: `nsIWebProgressListener` reports
-// real progress, the bar's *scale* is that progress, and a token-timed
+// browser. Trance is inside it, so the shared navigation router reports real
+// progress, the bar's *scale* is that progress, and a token-timed
 // `transition` interpolates between events. No loop, no reflow, and nothing
 // running while nothing is loading. The bar's length is a static share of the
 // edge it runs along — one declaration, changed when a slider moves and at no
@@ -86,20 +86,12 @@ const PREF_ANIM_SEARCH = "trance.feedback.animations.search";
  * `prefs/zen/view.yaml`: that is a permanent upstream touchpoint for a value
  * that is only correct while Trance's own bar is switched on.
  *
- * So it is a default-branch write, held for as long as this feature owns the
- * bar and released the moment it does not. Writing the *default* branch means
- * nothing lands in prefs.js: a user who has deliberately set the pref still
- * wins, and a profile that later runs stock Zen is untouched.
+ * So the global-pref owner claims the default branch for as long as this
+ * feature owns the bar and releases it the moment it does not. Nothing lands
+ * in prefs.js: a user who has deliberately set the pref still wins, and a
+ * profile that later runs stock Zen is untouched.
  */
 const PREF_ZEN_INDICATOR = "zen.view.enable-loading-indicator";
-
-/**
- * Prefs are global; this feature is per-window. Without a count, the second
- * window to close would hand Zen's bar back while the first still owns it.
- */
-let zenIndicatorSuppressors = 0;
-/** What the default branch said before Trance touched it. */
-let zenIndicatorWasEnabled = null;
 
 const BAR_ID = "trance-loading-bar";
 /** The part of the bar that moves. See the track/fill note in the stylesheet. */
@@ -198,8 +190,8 @@ export class TranceFeedback extends TranceFeature {
   /** @type {Element | null} */
   #burstLayer = null;
 
-  /** The tabbrowser progress listener, while the loading bar is on. */
-  #progressListener = null;
+  /** The navigation-router subscription, while the loading bar is on. */
+  #navigationHandle = null;
   /** The `TranceScheduler` handle for the indeterminate creep, or 0. */
   #creepHandle = 0;
   /** Last value written to the bar, 0..1. */
@@ -208,12 +200,12 @@ export class TranceFeedback extends TranceFeature {
   #loading = false;
   /** Whether the `TabClose` listener is attached. */
   #burstListening = false;
-  /** Whether the `TabSelect` listener is attached. */
-  #tabSelectListening = false;
   /** Whether the animation pack's subscriptions are attached. */
   #packListening = false;
-  /** Whether this window currently holds Zen's loading indicator suppressed. */
-  #ownsIndicator = false;
+  /** Whether the capture listener owns Zen's search-mode event. */
+  #searchModeListening = false;
+  /** Owner for the loading-indicator claim, while the loading bar is on. */
+  #indicatorOwner = null;
 
   onEnable() {
     this.context.document.documentElement.setAttribute(ATTR_ROOT, "true");
@@ -226,16 +218,11 @@ export class TranceFeedback extends TranceFeature {
     this.#applyBubbles();
 
     // Then again once the browser exists. TranceCore enters through
-    // `nsZenPreloadedFeature`, which fires at `MozBeforeInitialXULLayout` —
-    // deliberately, so that Trance is never in a load-order race with Zen
-    // (TRANCE.md §3.7). The cost is that `gBrowser` and its tab container are
-    // not built yet, and this is the first Trance feature that needs them:
-    // Phases 3 to 5 style elements the markup already contains, and this one
-    // attaches to a progress listener and a tab-close event.
-    //
-    // Without this both halves of the feature silently did nothing — the run
-    // log said "gBrowser is not ready; no loading bar" and never retried.
+    // `nsZenPreloadedFeature`, before gBrowser and Zen's tab container are
+    // built. The capture-phase search-mode claim and the feature listeners
+    // therefore attach from the same readiness callback.
     this.#whenBrowserReady(() => {
+      this.#claimSearchModeEvents();
       this.#applyLoading();
       this.#applyBubbles();
       this.#applyAnimations();
@@ -251,8 +238,13 @@ export class TranceFeedback extends TranceFeature {
     this.#teardownLoading();
     this.#teardownBubbles();
     this.#ownLoadingIndicator(false);
-  }
 
+    // `addListener` disposers remove the pack and capture listeners below.
+    // Their latches must be reset too: a later enable has to attach fresh
+    // listeners rather than believing the disposed ones are still live.
+    this.#packListening = false;
+    this.#searchModeListening = false;
+  }
   /**
    * Runs `callback` once `gBrowser` and its tab container exist.
    *
@@ -368,31 +360,29 @@ export class TranceFeedback extends TranceFeature {
   // --- Loading bar -----------------------------------------------------------
 
   /**
-   * Takes or releases ownership of the loading indicator, refcounted across
-   * windows. See `PREF_ZEN_INDICATOR`.
+   * Takes or releases ownership of the loading indicator through the
+   * process-wide refcounted owner. See `PREF_ZEN_INDICATOR`.
    *
    * @param {boolean} owned - Whether this window's Trance bar is on.
    */
   #ownLoadingIndicator(owned) {
-    if (owned === this.#ownsIndicator) {
-      return;
-    }
-    this.#ownsIndicator = owned;
-
-    const defaults = Services.prefs.getDefaultBranch("");
     if (owned) {
-      if (zenIndicatorSuppressors++ === 0) {
-        zenIndicatorWasEnabled = defaults.getBoolPref(PREF_ZEN_INDICATOR, true);
-        defaults.setBoolPref(PREF_ZEN_INDICATOR, false);
-        TranceLog.log(NS, "took the loading indicator from Zen");
+      if (this.#indicatorOwner) {
+        return;
       }
+      this.#indicatorOwner = this.claimGlobalPref(PREF_ZEN_INDICATOR, false, {
+        branch: "default",
+      });
+      TranceLog.log(NS, "took the loading indicator from Zen");
       return;
     }
-    if (--zenIndicatorSuppressors === 0 && zenIndicatorWasEnabled !== null) {
-      defaults.setBoolPref(PREF_ZEN_INDICATOR, zenIndicatorWasEnabled);
-      zenIndicatorWasEnabled = null;
-      TranceLog.log(NS, "gave the loading indicator back to Zen");
+
+    if (!this.#indicatorOwner) {
+      return;
     }
+    this.#indicatorOwner.release(PREF_ZEN_INDICATOR);
+    this.#indicatorOwner = null;
+    TranceLog.log(NS, "gave the loading indicator back to Zen");
   }
 
   #applyLoading() {
@@ -415,9 +405,47 @@ export class TranceFeedback extends TranceFeature {
       position = DEFAULT_POSITION;
     }
     root.setAttribute(ATTR_LOADING, position);
-
     this.#ensureBar();
-    this.#ensureProgressListener();
+    this.#ensureNavigation();
+  }
+
+  /**
+   * Takes the URL-bar search-mode event before Zen's bubble listener. Zen
+   * registers a bound handler during startup, so replacing the method on
+   * `gZenUIManager` later would not replace that captured function. A
+   * capture-phase listener is the reversible ownership seam instead:
+   * `addListener` removes it on disable and the event goes back to Zen.
+   */
+  #claimSearchModeEvents() {
+    if (this.#searchModeListening) {
+      return;
+    }
+    this.#searchModeListening = true;
+    this.addListener(
+      this.context.window,
+      "Zen:UrlbarSearchModeChanged",
+      event => this.#handleSearchModeChanged(event),
+      true
+    );
+  }
+
+  /**
+   * Runs Trance's search-mode gesture and prevents Zen's competing gesture.
+   * The actual animation is the same Trance-owned `#animateSearch` path used
+   * for breakout entry, so motion level 0 returns without creating anything.
+   *
+   * @param {CustomEvent} event - Zen's `Zen:UrlbarSearchModeChanged`.
+   */
+  #handleSearchModeChanged(event) {
+    event.stopImmediatePropagation();
+    if (
+      !Services.prefs.getBoolPref(PREF_ANIM_SEARCH, true) ||
+      this.context.window.gReduceMotion ||
+      !this.context.motion.isEnabled
+    ) {
+      return;
+    }
+    this.#animateSearch();
   }
 
   #ensureBar() {
@@ -450,85 +478,40 @@ export class TranceFeedback extends TranceFeature {
   }
 
   /**
-   * One listener on the tabbrowser, which already filters to the selected tab.
-   * A `MutationObserver` watching for `[busy]` — which is how this is done from
-   * outside the browser — would be inferring what this states (TRANCE.md §3.2).
+   * Subscribes to the shared navigation router for the selected browser only.
+   * The router filters to top-level progress and coalesces network events to
+   * one callback per frame, so this feature never infers tab identity from a
+   * browser-level progress listener or writes style at network rate.
    */
-  #ensureProgressListener() {
-    if (this.#progressListener) {
-      return;
-    }
-    const win = this.context.window;
-    const browser = win.gBrowser;
-    if (!browser?.addProgressListener) {
-      // Expected once, at startup: TranceCore runs before gBrowser is built.
-      // `#whenBrowserReady` calls back and this runs again.
+  #ensureNavigation() {
+    if (this.#navigationHandle) {
       return;
     }
 
-    const WPL = Ci.nsIWebProgressListener;
-    const feature = this;
-
-    this.#progressListener = {
-      QueryInterface: ChromeUtils.generateQI([
-        "nsIWebProgressListener",
-        "nsISupportsWeakReference",
-      ]),
-
-      onStateChange(webProgress, request, stateFlags) {
-        if (!webProgress.isTopLevel) {
-          return;
-        }
-        if (stateFlags & WPL.STATE_START && stateFlags & WPL.STATE_IS_NETWORK) {
-          feature.#startLoading();
-        } else if (
-          stateFlags & WPL.STATE_STOP &&
-          stateFlags & WPL.STATE_IS_NETWORK
-        ) {
-          feature.#finishLoading();
-        }
+    this.#navigationHandle = this.observeNavigation(
+      {
+        onProgress: (_browser, state) => {
+          if (state.loading) {
+            if (!this.#loading) {
+              this.#startLoading();
+            }
+            if (state.progress !== null) {
+              // Real progress supersedes the creep, and cancels it — there is
+              // no reason to hold a frame subscription once the server has
+              // told us how big the thing is.
+              this.#stopCreep();
+              this.#writeProgress(
+                Math.max(this.#progress, Math.min(1, state.progress))
+              );
+            }
+            return;
+          }
+          this.#finishLoading();
+        },
+        onSelect: () => this.#resetForTabSwitch(),
       },
-
-      onProgressChange(
-        webProgress,
-        request,
-        currentSelf,
-        maxSelf,
-        currentTotal,
-        maxTotal
-      ) {
-        if (!feature.#loading || maxTotal <= 0) {
-          return;
-        }
-        // Real progress supersedes the creep, and cancels it — there is no
-        // reason to hold a frame subscription once the server has told us how
-        // big the thing is.
-        feature.#stopCreep();
-        feature.#writeProgress(
-          Math.max(feature.#progress, Math.min(1, currentTotal / maxTotal))
-        );
-      },
-
-      onLocationChange() {},
-      onStatusChange() {},
-      onSecurityChange() {},
-      onContentBlockingEvent() {},
-    };
-
-    browser.addProgressListener(this.#progressListener);
-
-    // Switching tabs mid-load would otherwise leave the previous tab's progress
-    // on screen until the next event.
-    //
-    // Attached once for the life of the feature, not once per enable: the
-    // progress listener is torn down and rebuilt when the loading-bar pref is
-    // flipped, and `addListener`'s disposer only runs on full teardown, so
-    // re-registering here would stack a second listener per flip. The handler
-    // is already a no-op when there is no bar.
-    if (!this.#tabSelectListening) {
-      this.#tabSelectListening = true;
-      this.addListener(win, "TabSelect", () => this.#resetForTabSwitch());
-    }
+      { selectedOnly: true }
+    );
   }
 
   #startLoading() {
@@ -692,11 +675,10 @@ export class TranceFeedback extends TranceFeature {
     this.#stopCreep();
     this.#loading = false;
     this.#setPageEffect(false);
-    const browser = this.context.window.gBrowser;
-    if (this.#progressListener && browser?.removeProgressListener) {
-      browser.removeProgressListener(this.#progressListener);
+    if (this.#navigationHandle) {
+      this.context.navigation.unsubscribe(this.#navigationHandle);
+      this.#navigationHandle = null;
     }
-    this.#progressListener = null;
     // The fill is a child of the bar, so removing the bar removes both.
     this.#bar?.remove();
     this.#bar = null;

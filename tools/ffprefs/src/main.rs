@@ -153,19 +153,87 @@ fn get_prefs_files_recursively(dir: &PathBuf, files: &mut Vec<PathBuf>) {
     }
 }
 
+// >>> TRANCE
+// Which directory gets the last word when two files declare the same pref.
+// Lower sorts first, so a higher number wins.
+//
+// Before this, nothing decided it. `get_prefs_files_recursively` walks with
+// `fs::read_dir`, whose order is the filesystem's, and `ordered_prefs` sorts by
+// name only — a stable sort, so two declarations of one pref stayed in
+// whatever order the directory happened to be read in and were then emitted
+// adjacently, where the *last* line written is the value Firefox ends up with.
+// The value a Trance build shipped for such a pref was therefore a property of
+// the machine that built it.
+//
+// That is also why seven upstream `prefs/**` files were on the touchpoint list:
+// a default Trance disagreed with had to be edited where Zen or Firefox
+// declared it, because a second declaration could not be relied on to win. With
+// `prefs/trance/**` ranked last and duplicates collapsed to one entry, an
+// override belongs in `prefs/trance/overrides.yaml` and the seven go away
+// (AUDIT.md Phase 6, ADR-077).
+fn precedence(path: &std::path::Path) -> u8 {
+    if path.components().any(|c| c.as_os_str() == "trance") {
+        1
+    } else {
+        0
+    }
+}
+// <<< TRANCE
+
 fn load_preferences() -> Vec<Preference> {
     let mut prefs = Vec::new();
     let config_path = get_config_path();
     let mut pref_files = Vec::new();
     get_prefs_files_recursively(&config_path, &mut pref_files);
+    // >>> TRANCE
+    // Deterministic, and Trance last.
+    pref_files.sort_by(|a, b| precedence(a).cmp(&precedence(b)).then_with(|| a.cmp(b)));
+    // <<< TRANCE
     for file_path in pref_files {
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
         let mut parsed_prefs: Vec<Preference> =
             serde_yaml::from_str(&content).expect("Failed to parse YAML");
         prefs.append(&mut parsed_prefs);
     }
-    ordered_prefs(prefs)
+    ordered_prefs(dedupe_equivalent(prefs))
 }
+
+// >>> TRANCE
+/// Collapses equivalent declarations to their last value.
+///
+/// "Equivalent" is narrower than "same name". One pref may legitimately have
+/// complementary conditions (official/dev, macOS/other, Twilight/stable), and
+/// a static declaration may coexist with a dynamic one. Dropping either breaks
+/// builds or removes a C++ `StaticPrefs` getter. The override key therefore
+/// includes the condition and the declaration type; only a Trance declaration
+/// matching all three replaces its upstream counterpart.
+fn dedupe_equivalent(prefs: Vec<Preference>) -> Vec<Preference> {
+    let mut last_index: HashMap<(String, String, String), usize> = HashMap::new();
+    for (index, pref) in prefs.iter().enumerate() {
+        last_index.insert(
+            (
+                pref.name.clone(),
+                get_condition_string(&pref.condition),
+                pref.r#type.clone().unwrap_or_default(),
+            ),
+            index,
+        );
+    }
+    prefs
+        .into_iter()
+        .enumerate()
+        .filter(|(index, pref)| {
+            let key = (
+                pref.name.clone(),
+                get_condition_string(&pref.condition),
+                pref.r#type.clone().unwrap_or_default(),
+            );
+            last_index.get(&key) == Some(index)
+        })
+        .map(|(_, pref)| pref)
+        .collect()
+}
+// <<< TRANCE
 
 fn get_condition_string(condition: &Option<String>) -> String {
     condition

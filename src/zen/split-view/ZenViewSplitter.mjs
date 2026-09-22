@@ -81,6 +81,10 @@ class nsZenViewSplitter extends nsZenDOMOperatedFeature {
   dropZone;
   _edgeHoverSize;
   minResizeWidth;
+  // >>> TRANCE
+  _windowActivitySuspended = false;
+  _activityUnsubscribe = null;
+  // <<< TRANCE
 
   _lastOpenedTab = null;
 
@@ -135,7 +139,29 @@ class nsZenViewSplitter extends nsZenDOMOperatedFeature {
       );
       this.onBrowserDragEndToSplit = this.onBrowserDragEndToSplit.bind(this);
     }
+    // >>> TRANCE
+    this._activityUnsubscribe = window.gZenWindowActivity?.subscribe(
+      state => this._onWindowActivityChanged(state),
+      { immediate: true }
+    );
+    window.addEventListener(
+      "unload",
+      () => {
+        this._activityUnsubscribe?.();
+        this._activityUnsubscribe = null;
+      },
+      { once: true }
+    );
+    // <<< TRANCE
   }
+  // >>> TRANCE
+  _onWindowActivityChanged(state) {
+    this._windowActivitySuspended = Boolean(state?.suspended);
+    if (this.currentView >= 0) {
+      this.setTabsDocShellState(this._data[this.currentView].tabs, true);
+    }
+  }
+  // <<< TRANCE
 
   insertIntoContextMenu() {
     const sibling = document.getElementById("context-sep-open");
@@ -1325,7 +1351,9 @@ class nsZenViewSplitter extends nsZenDOMOperatedFeature {
     }
     if (tab) {
       this.updateSplitView(tab);
-      tab.linkedBrowser.docShellIsActive = true;
+      // >>> TRANCE
+      tab.linkedBrowser.docShellIsActive = !this._windowActivitySuspended;
+      // <<< TRANCE
       if (isGlanceTab) {
         // See issues https://github.com/zen-browser/desktop/issues/11641
         this.removeSplitters();
@@ -1924,14 +1952,25 @@ class nsZenViewSplitter extends nsZenDOMOperatedFeature {
    */
   setTabsDocShellState(tabs, active) {
     for (const tab of tabs) {
-      // zenModeActive allow us to avoid setting docShellisActive to false later on,
-      // see browser-custom-elements.js's patch
-      tab.linkedBrowser.zenModeActive = active;
+      // >>> TRANCE
+      // `renderActive` has to drive `zenModeActive` as well as
+      // `docShellIsActive`. The browser element's setter is patched to assign
+      // `val || this.zenModeActive` to both `isActive` and `renderLayers`
+      // (src/toolkit/content/widgets/browser-custom-element-mjs.patch), so a
+      // `zenModeActive` left true turns the `docShellIsActive = false` below
+      // straight back into true and the split pane keeps rendering while the
+      // window is occluded or minimised — which is the whole cost this gate
+      // exists to remove (AUDIT.md Phase 2).
+      const renderActive = active && !this._windowActivitySuspended;
+      // zenModeActive allows us to avoid setting docShellIsActive to false
+      // later on; see browser-custom-elements.js's patch.
+      tab.linkedBrowser.zenModeActive = renderActive;
+      // <<< TRANCE
       if (!active && tab === gBrowser.selectedTab) {
         continue;
       }
       try {
-        tab.linkedBrowser.docShellIsActive = active;
+        tab.linkedBrowser.docShellIsActive = renderActive;
       } catch (e) {
         console.error(e);
       }

@@ -190,9 +190,10 @@ Preferences.addAll([
   // `completed` is state, surfaced as a button for the same reason
   // `trance.firstrun.completed` is. The other three are ordinary settings that
   // happen to be *asked* during the flow rather than owned by it — which is why
-  // they are here as well as there, and why `TranceOnboarding` keeps a pref
-  // observer on each for the whole session rather than only while it is running
-  // (ADR-051).
+  // they are here as well as there, and why the observer on each belongs to
+  // `TranceOnboardingSettings` rather than to the flow: the flow is parsed once
+  // and then never again after completion, while a channel or architecture
+  // change has to be honoured for the rest of the session (ADR-051, ADR-069).
   { id: "trance.onboarding.enabled", type: "bool", default: true },
   { id: "trance.onboarding.completed", type: "bool", default: false },
   { id: "trance.onboarding.channel", type: "string", default: "stable" },

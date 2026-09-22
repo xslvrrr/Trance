@@ -228,11 +228,18 @@
   background-color: var(--trance-surface-bg);
 }
 
+/* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+ * The subtree is one `<input>` inside its own label. Setting an attribute
+ * from JS instead would mean an onboarding-only change listener on every
+ * radio in the flow, which costs more than the selector does. */
 .trance-onboarding-choice:has(input:checked) {
   border-color: var(--trance-accent-vivid);
   background-color: var(--trance-accent-wash);
 }
 
+/* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+ * Same one-input subtree, and `:focus-visible` has no JS equivalent that
+ * respects the platform's own heuristic for when a focus ring is wanted. */
 .trance-onboarding-choice:has(input:focus-visible) {
   outline: var(--trance-border-width-strong) solid var(--trance-accent-vivid);
   outline-offset: 2px;
@@ -331,6 +338,8 @@
   opacity: 0;
 }
 
+/* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+ * One `<input>` per card, as above. */
 .trance-onboarding-engine:has(input:checked),
 .trance-onboarding-essential:has(input:checked) {
   border-color: var(--trance-accent-vivid);
@@ -407,6 +416,12 @@
   border: var(--trance-border-width) solid var(--trance-surface-border);
   border-radius: var(--trance-radius-lg);
   background-color: var(--trance-surface-tint);
+  /* The gutter closing *is* the thing this diagram shows, so the gap has to be
+   * the animated property: the page grows into the space the gap gave up, and
+   * a transform would slide it over the rail instead. Two flex items on a
+   * settings page, played once — the reflow cost the rule guards against is
+   * bounded here in a way it is not in the browser chrome. */
+  /* stylelint-disable-next-line trance/no-layout-transition -- layout is the gesture */
   transition: gap var(--trance-dur-base) var(--trance-ease-standard);
 }
 
@@ -479,6 +494,11 @@
   border-radius: 50%;
   background-color: currentColor;
   opacity: 0.25;
+  /* The dot becomes a capsule when its step is current, and the row it sits in
+   * has to grow by the difference — a `scale` would stretch the dot without
+   * moving its neighbours apart, which is a different picture. Six dots on a
+   * settings page, once per step. */
+  /* stylelint-disable-next-line trance/no-layout-transition -- layout is the gesture */
   transition:
     opacity var(--trance-dur-fast) var(--trance-ease-standard),
     width var(--trance-dur-fast) var(--trance-ease-standard);

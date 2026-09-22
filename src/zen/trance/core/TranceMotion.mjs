@@ -25,6 +25,81 @@ const NS = "Motion";
 
 const PREF_LEVEL = "trance.motion.level";
 const ATTRIBUTE = "trance-motion";
+/**
+ * Claims are tracked separately from the animation registry because more than
+ * one TranceMotion instance can animate the same element. Keeping the prior
+ * inline value here means Trance can borrow the hint without taking ownership
+ * of a value that belonged to another caller.
+ *
+ * Each value in `hints` is counted as well as the total claims. A later
+ * animation may ask for a different property set, so the element receives
+ * their union for as long as both animations are alive: omitting a property
+ * that is actually animating misses an optimisation, while retaining a
+ * property after its animation ends wastes compositor memory.
+ *
+ * @type {WeakMap<Element, {
+ *   count: number,
+ *   previous: string,
+ *   hints: Map<string, number>,
+ * }>}
+ */
+const WILL_CHANGE_CLAIMS = new WeakMap();
+
+function unionWillChangeHints(hints) {
+  const properties = new Set();
+  for (const [hint] of hints) {
+    for (const property of hint.split(",")) {
+      const trimmed = property.trim();
+      if (trimmed) {
+        properties.add(trimmed);
+      }
+    }
+  }
+  return [...properties].join(", ");
+}
+
+function acquireWillChange(element, willChange) {
+  let claim = WILL_CHANGE_CLAIMS.get(element);
+  if (!claim) {
+    claim = {
+      count: 0,
+      previous: element.style.willChange,
+      hints: new Map(),
+    };
+    WILL_CHANGE_CLAIMS.set(element, claim);
+  }
+
+  claim.count++;
+  claim.hints.set(willChange, (claim.hints.get(willChange) ?? 0) + 1);
+  element.style.willChange = unionWillChangeHints(claim.hints);
+}
+
+function releaseWillChange(element, willChange) {
+  const claim = WILL_CHANGE_CLAIMS.get(element);
+  if (!claim) {
+    return;
+  }
+
+  claim.count--;
+  const hintCount = claim.hints.get(willChange);
+  if (hintCount === 1) {
+    claim.hints.delete(willChange);
+  } else {
+    claim.hints.set(willChange, hintCount - 1);
+  }
+
+  if (claim.count === 0) {
+    WILL_CHANGE_CLAIMS.delete(element);
+    if (claim.previous === "") {
+      element.style.removeProperty("will-change");
+    } else {
+      element.style.willChange = claim.previous;
+    }
+    return;
+  }
+
+  element.style.willChange = unionWillChangeHints(claim.hints);
+}
 
 export const TranceMotionLevel = Object.freeze({
   NONE: 0,
@@ -99,16 +174,21 @@ export class TranceMotion {
     }
     const { willChange, ...animationOptions } = options;
     if (willChange) {
-      element.style.willChange = willChange;
+      acquireWillChange(element, willChange);
     }
 
     const animation = element.animate(keyframes, animationOptions);
     this.#running.add(animation);
+    let cleanedUp = false;
 
     const cleanup = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
       this.#running.delete(animation);
       if (willChange) {
-        element.style.removeProperty("will-change");
+        releaseWillChange(element, willChange);
       }
     };
     animation.finished.then(cleanup, cleanup);

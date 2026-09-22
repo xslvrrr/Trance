@@ -1,0 +1,93 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: passkeys (WebAuthn).
+#
+# Nothing here is a new feature. Every pref below already exists in
+# `modules/libpref/init/StaticPrefList.yaml` and every one of them already
+# defaults to the value written here. The file exists because of what happened
+# to transparency: a performance pass walked the pref tree, found switches whose
+# default was "on", and turned them off — and nothing recorded that a user-facing
+# capability had just been removed, because no Trance file claimed it.
+#
+# A passkey is the one credential a browser holds that the user cannot recover
+# by hand. It is worth one file saying, in one place, that this browser supports
+# them and which switches that statement is made of. Anything that turns one of
+# these off from now on has to edit a file whose name says what it is breaking.
+#
+# ── What is deliberately not here ─────────────────────────────────────────
+#
+# `security.webauth.webauthn_enable_softtoken` — the virtual authenticator, for
+# tests. It is mutually exclusive with the USB token, so shipping it on would
+# disable real security keys.
+#
+# `security.webauthn.always_allow_direct_attestation` — skips the consent prompt
+# for direct attestation, which is the prompt that tells a user a site is asking
+# their authenticator to identify its make and model.
+#
+# `security.webauthn.allow_with_certificate_override` — WebAuthn over a
+# connection the user has clicked through a certificate warning for.
+#
+# ── The macOS half is not a pref ──────────────────────────────────────────
+#
+# `security.webauthn.enable_macos_passkeys` dispatches to `ASAuthorization`,
+# which refuses to serve a process whose code signature does not carry
+# `com.apple.developer.web-browser.public-key-credential` — and that entitlement
+# is only honoured when `com.apple.application-identifier` matches the bundle
+# actually being signed. See
+# `src/security/mac/hardenedruntime/production/firefox-browser-xml.patch`;
+# that file was still naming Zen's bundle, so on a Trance build the entitlement
+# was inert and platform passkeys failed with no error the browser could show.
+#
+# Refs: TRANCE.md §6.5; docs/trance/UPSTREAM-TOUCHPOINTS.md
+
+# === Mark: The API ===
+
+# The WebAuthn API itself. Everything else in this file is a transport or a
+# capability underneath it.
+- name: security.webauth.webauthn
+  value: true
+
+# CTAP2. Passkeys — discoverable credentials, user verification, resident keys —
+# are CTAP2 concepts; CTAP1/U2F has none of them. Off, security keys still work
+# as second factors and passkeys do not exist.
+- name: security.webauthn.ctap2
+  value: true
+
+# `PublicKeyCredential.parseCreationOptionsFromJSON` and friends. Sites that use
+# the JSON forms and do not feature-detect throw without them.
+- name: security.webauthn.enable_json_serialization_methods
+  value: true
+
+# Conditional mediation: `mediation: "conditional"`, which is what puts a
+# passkey in the username field's autofill list instead of behind a button. It
+# is the difference between "sign in with a passkey" being discoverable and
+# being a thing you have to already know about.
+- name: security.webauthn.enable_conditional_mediation
+  value: true
+
+# Related Origin Requests: a credential registered on one origin offered on a
+# related one, when the relying party publishes the relation.
+#
+# 2 — enabled, with a prompt — rather than 1. The relation is asserted by the
+# site, and a browser that follows it silently is a browser that hands a
+# credential to an origin the user never registered it with.
+- name: security.webauthn.related_origin_requests_mode
+  value: 2
+
+# === Mark: Authenticators ===
+
+# Roaming authenticators over USB, through authenticator-rs. This is also the
+# transport hybrid ("phone as a passkey", the QR-code flow) rides on, so it is
+# what makes cross-device passkeys work on a build that has no platform
+# authenticator at all.
+- name: security.webauth.webauthn_enable_usbtoken
+  value: true
+
+# The macOS platform authenticator: passkeys in the system keychain, unlocked
+# with Touch ID. Needs the entitlement described in the header; the pref is the
+# half Trance owns.
+- name: security.webauthn.enable_macos_passkeys
+  value: true
+  condition: "defined(XP_MACOSX)"

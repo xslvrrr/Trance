@@ -13,6 +13,19 @@
   Services.scriptloader.loadSubScript("chrome://browser/content/zen-components/ZenSpaceBookmarksStorage.js", this);
 
   let scripts = [
+    // >>> TRANCE
+    // First, and it matters: every module below this line asks whether the
+    // window is focused, visible, occluded or minimised, and before this
+    // controller existed each of them answered it for itself with its own
+    // listeners and its own timers — with different answers. Importing it
+    // installs `window.gZenWindowActivity`, which media, compact mode, Split
+    // View, Glance, live folders and Trance's material owner all subscribe to.
+    //
+    // It is here rather than inside TranceCore because it must survive
+    // `trance.enabled=false`: the Zen features that depend on it are not
+    // Trance's to switch off. See AUDIT.md Phase 2, TRANCE.md §3.7.
+    "chrome://browser/content/zen-components/ZenWindowActivity.mjs",
+    // <<< TRANCE
     "chrome://browser/content/ZenStartup.mjs",
     "resource:///modules/zen/ZenSpaceManager.mjs",
     "chrome://browser/content/zen-components/ZenCompactMode.mjs",

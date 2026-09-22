@@ -8,7 +8,7 @@
 // behaviour affordable: **disabled means zero**. Not hidden, not `display:none`
 // — no stylesheet in the style set, no observer subscription, no listener, no
 // DOM node, no scheduler subscriber. Everything a feature allocates goes
-// through the context it is handed, and `#teardown()` returns all of it.
+// through the context it is handed, and teardown returns all of it.
 //
 // Features do not extend `nsZenPreloadedFeature` directly. That class binds
 // `init()` to `MozBeforeInitialXULLayout` in its constructor, which is exactly
@@ -17,7 +17,7 @@
 // (so Trance still enters through Zen's own startup lifecycle, TRANCE.md §3.7)
 // and it drives feature construction from there.
 //
-// Refs: TRANCE.md §3.7, §6.5, §14.4
+// Refs: TRANCE.md §3.7, §6.5, §14.4; ADR-070
 
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
 
@@ -35,65 +35,75 @@ import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.
  *   property binding for this window.
  * @property {import("./TranceMotion.mjs").TranceMotion} motion Motion level and
  *   the animation registry for this window.
+ * @property {import("./TranceNavigation.mjs").TranceNavigation} navigation
+ *   Shared navigation and progress state.
+ * @property {import("./TranceTabCache.mjs").TranceTabCache} tabCache Shared
+ *   live-folder cache.
+ * @property {import("./TranceMaterial.mjs").TranceMaterial} material Shared
+ *   window-material decision.
  */
 
 export class TranceFeature {
-  /**
-   * The pref that gates this feature. Required. A feature with no pref cannot
-   * be turned off, and TRANCE.md §6.6 says every `trance.*` pref appears in
-   * `about:preferences#trance`.
-   *
-   * @type {string}
-   */
+  /** @type {string} */
   static prefName = "";
 
-  /**
-   * Chrome stylesheet URLs, loaded on enable and unloaded on disable.
-   *
-   * @type {string[]}
-   */
+  /** @type {string[]} */
   static styles = [];
 
-  /**
-   * Human-readable name for the settings page and logs.
-   *
-   * @type {string}
-   */
+  /** @type {string} */
   static featureName = "";
 
   /** @type {TranceContext} */
   context;
 
   #enabled = false;
-  #prefObserver;
+  #prefObserver = null;
+  #prefObserved = false;
   #destroyed = false;
+  #settingUp = false;
+  #setupAborted = false;
+  #setupEntered = false;
+  #setupRolledBack = false;
+  #tearingDown = false;
 
   /** Handles this feature owns, returned wholesale on disable. */
   #observerHandles = new Set();
   #schedulerHandles = new Set();
   #tokenHandles = new Set();
+  #navigationHandles = new Set();
+  /** @type {string[]} */
+  #styleHandles = [];
   /** @type {Array<() => void>} */
   #disposers = [];
+  #globalPrefOwner = null;
+  #globalSheetOwner = null;
 
-  /**
-   * @param {TranceContext} context
-   */
+  /** @param {TranceContext} context */
   constructor(context) {
+    // Construction deliberately has no side effects. In particular, the
+    // registry may construct a feature while its gate is being inspected, and
+    // a subclass constructor may still throw before init() is called.
     this.context = context;
-    this.#prefObserver = { observe: () => this.#sync() };
-    Services.prefs.addObserver(this.constructor.prefName, this.#prefObserver);
   }
 
   /**
-   * Reads the pref and enables the feature if it is on.
+   * Installs the feature-owned preference observer (when requested) and then
+   * synchronises with the current value. Registry-managed features use
+   * `observePref: false`: the registry owns one ordered observer per gate.
    *
-   * Deliberately not called from the constructor: a subclass's own private
-   * methods are not installed on the instance until `super()` returns, so
-   * calling `onEnable()` from the base constructor throws
-   * "object is not the right class" the moment the subclass uses one. TranceCore
-   * constructs, then calls this.
+   * @param {object} [options]
+   * @param {boolean} [options.observePref] - Install this feature's own
+   *   preference observer. False when a registry owns the gate.
    */
-  init() {
+  init({ observePref = true } = {}) {
+    if (this.#destroyed) {
+      return;
+    }
+    if (observePref && !this.#prefObserved) {
+      this.#prefObserver = { observe: () => this.#sync() };
+      Services.prefs.addObserver(this.constructor.prefName, this.#prefObserver);
+      this.#prefObserved = true;
+    }
     this.#sync();
   }
 
@@ -107,24 +117,20 @@ export class TranceFeature {
 
   // --- Overridden by subclasses ---------------------------------------------
 
-  /** Called when the feature becomes enabled. Allocate here, not in the ctor. */
   onEnable() {}
 
-  /** Called when the feature becomes disabled. Undo anything `onEnable` did. */
   onDisable() {}
 
   // --- Resource helpers ------------------------------------------------------
-  //
-  // Everything a feature allocates should go through one of these, so that
-  // `onDisable` rarely needs to do anything and the zero-cost guarantee does
-  // not depend on the subclass author remembering.
 
-  /**
-   * @param {string} selector
-   * @param {(records: MutationRecord[]) => void} cb
-   * @param {object} [options] - See `TranceObserverHub.observeMutations`.
-   */
+  #canAllocate() {
+    return !this.#destroyed && !this.#tearingDown && !this.#setupAborted;
+  }
+
   observeMutations(selector, cb, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.observers.observeMutations(
       selector,
       cb,
@@ -134,22 +140,19 @@ export class TranceFeature {
     return handle;
   }
 
-  /**
-   * @param {Element} element
-   * @param {(entry: ResizeObserverEntry) => void} cb
-   */
   observeResize(element, cb) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.observers.observeResize(element, cb);
     this.#observerHandles.add(handle);
     return handle;
   }
 
-  /**
-   * @param {Element} element
-   * @param {(entry: IntersectionObserverEntry) => void} cb
-   * @param {object} [options]
-   */
   observeIntersection(element, cb, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.observers.observeIntersection(
       element,
       cb,
@@ -159,92 +162,175 @@ export class TranceFeature {
     return handle;
   }
 
-  /**
-   * @param {(timestamp: number) => void} cb
-   * @param {object} [options] - See `TranceScheduler.onFrame`.
-   */
   onFrame(cb, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.scheduler.onFrame(cb, options);
     this.#schedulerHandles.add(handle);
     return handle;
   }
 
-  /**
-   * @param {(deadline: IdleDeadline) => void} cb
-   * @param {object} [options]
-   */
   onIdle(cb, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.scheduler.onIdle(cb, options);
     this.#schedulerHandles.add(handle);
     return handle;
   }
 
-  /**
-   * @param {() => void} cb
-   * @param {"second"|"minute"|"hour"} unit
-   */
   onWallClock(cb, unit) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     const handle = this.context.scheduler.onWallClock(cb, unit);
     this.#schedulerHandles.add(handle);
     return handle;
   }
 
-  /**
-   * @param {object[]} descriptors - See `TranceTokens.bind`.
-   */
+  /** @param {object[]} descriptors */
   bindTokens(descriptors) {
-    const handles = this.context.tokens.bindAll(descriptors);
-    for (const handle of handles) {
+    if (!this.#canAllocate()) {
+      return [];
+    }
+    const handles = [];
+    for (const descriptor of descriptors) {
+      const handle = this.context.tokens.bind(descriptor);
       this.#tokenHandles.add(handle);
+      handles.push(handle);
     }
     return handles;
   }
 
   /**
-   * Adds an event listener that is removed automatically on disable.
+   * Subscribes to the window's navigation router. See `TranceNavigation`.
    *
-   * @param {EventTarget} target
-   * @param {string} type
-   * @param {EventListener} listener
-   * @param {object|boolean} [options]
+   * @param {object} subscription - `{ onProgress, onNavigate, onSelect }`.
+   * @param {object} [options] - `{ selectedOnly }`.
+   * @returns {number | null} A tracked handle, or null while tearing down.
    */
+  observeNavigation(subscription, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
+    const handle = this.context.navigation.subscribe(subscription, options);
+    this.#navigationHandles.add(handle);
+    return handle;
+  }
+
+  /**
+   * Takes a process-wide preference claim for this feature. The owner is lazy
+   * so an enabled feature that never reaches a material branch pays nothing.
+   *
+   * @param {string} prefName
+   * @param {any} value
+   * @param {object} [options] Owner claim options, such as `{branch: "default"}`.
+   */
+  claimGlobalPref(prefName, value, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
+    if (!this.#globalPrefOwner) {
+      const { TranceGlobalPrefOwner } = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceGlobalPrefs.mjs"
+      );
+      this.#globalPrefOwner = new TranceGlobalPrefOwner(this.name);
+    }
+    this.#globalPrefOwner.claim(prefName, value, options);
+    return this.#globalPrefOwner;
+  }
+
+  get globalSheets() {
+    // Existing ownership is readable during onDisable so subclasses can give
+    // individual sheets back; only creating a new owner is forbidden while
+    // teardown or destruction is in progress.
+    if (this.#destroyed && !this.#tearingDown) {
+      return null;
+    }
+    if (!this.#globalSheetOwner && !this.#canAllocate()) {
+      return null;
+    }
+    if (!this.#globalSheetOwner) {
+      const { TranceGlobalSheetOwner } = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceGlobalSheets.mjs"
+      );
+      this.#globalSheetOwner = new TranceGlobalSheetOwner(this.name);
+    }
+    return this.#globalSheetOwner;
+  }
+
   addListener(target, type, listener, options) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     target.addEventListener(type, listener, options);
     this.#disposers.push(() =>
       target.removeEventListener(type, listener, options)
     );
+    return listener;
   }
 
-  /**
-   * Registers arbitrary cleanup to run on disable.
-   *
-   * @param {() => void} disposer
-   */
   addDisposer(disposer) {
+    if (!this.#canAllocate()) {
+      return null;
+    }
     this.#disposers.push(disposer);
+    return disposer;
   }
 
   // --- Lifecycle -------------------------------------------------------------
 
   destroy() {
+    if (this.#destroyed) {
+      return;
+    }
     this.#destroyed = true;
-    Services.prefs.removeObserver(
-      this.constructor.prefName,
-      this.#prefObserver
-    );
-    if (this.#enabled) {
+    if (this.#prefObserved) {
+      Services.prefs.removeObserver(
+        this.constructor.prefName,
+        this.#prefObserver
+      );
+      this.#prefObserved = false;
+    }
+    if (this.#enabled || this.#settingUp) {
       this.#teardown();
+      return;
+    }
+    // A subclass should not normally allocate while disabled, but cleanup is
+    // still defensive if it did: destruction must never strand a claim or
+    // handle merely because the feature was not in its committed state.
+    if (
+      this.#disposers.length ||
+      this.#observerHandles.size ||
+      this.#schedulerHandles.size ||
+      this.#tokenHandles.size ||
+      this.#navigationHandles.size ||
+      this.#styleHandles.length ||
+      this.#globalPrefOwner ||
+      this.#globalSheetOwner
+    ) {
+      this.#tearingDown = true;
+      this.#releaseResources();
+      this.#tearingDown = false;
     }
   }
 
   #sync() {
-    if (this.#destroyed) {
+    if (this.#destroyed || this.#tearingDown) {
       return;
     }
     const shouldBeEnabled = Services.prefs.getBoolPref(
       this.constructor.prefName,
       false
     );
+    if (this.#settingUp) {
+      if (!shouldBeEnabled) {
+        this.#setupAborted = true;
+        this.#teardown();
+      }
+      return;
+    }
     if (shouldBeEnabled === this.#enabled) {
       return;
     }
@@ -256,25 +342,94 @@ export class TranceFeature {
   }
 
   #setUp() {
-    this.#enabled = true;
-    this.context.styles.loadAll(this.constructor.styles);
-    try {
-      this.onEnable();
-    } catch (error) {
-      TranceLog.error(this.name, "onEnable threw", error);
+    if (this.#destroyed || this.#settingUp || this.#enabled) {
+      return;
     }
-    TranceLog.log(this.name, "enabled");
+    this.#settingUp = true;
+    this.#setupAborted = false;
+    this.#setupEntered = false;
+    this.#setupRolledBack = false;
+    try {
+      // Load and account for each sheet independently. TranceStyles swallows a
+      // Gecko load failure, so the loaded-set check turns that into a failed
+      // transaction without unloading a sheet owned by another feature.
+      for (const url of this.constructor.styles) {
+        if (!this.#canAllocate()) {
+          throw new Error("feature setup was cancelled");
+        }
+        this.context.styles.load(url);
+        const loaded = this.context.styles.loadedSheets;
+        if (Array.isArray(loaded) && !loaded.includes(url)) {
+          throw new Error(`failed to load stylesheet ${url}`);
+        }
+        this.#styleHandles.push(url);
+      }
+      if (!this.#canAllocate()) {
+        throw new Error("feature setup was cancelled");
+      }
+      this.#setupEntered = true;
+      this.onEnable();
+      if (!this.#canAllocate()) {
+        throw new Error("feature setup was cancelled");
+      }
+      // Commit only after every allocation and onEnable() have completed.
+      this.#enabled = true;
+      TranceLog.log(this.name, "enabled");
+    } catch (error) {
+      if (!this.#setupRolledBack) {
+        this.#rollback(this.#setupEntered);
+      }
+      TranceLog.error(this.name, "setup failed", error);
+    } finally {
+      this.#settingUp = false;
+      this.#setupEntered = false;
+      this.#setupAborted = false;
+      this.#setupRolledBack = false;
+    }
+  }
+
+  #rollback(callOnDisable) {
+    this.#tearingDown = true;
+    this.#enabled = false;
+    if (callOnDisable) {
+      try {
+        this.onDisable();
+      } catch (error) {
+        TranceLog.error(this.name, "onDisable threw", error);
+      }
+    }
+    this.#releaseResources();
+    this.#tearingDown = false;
+    this.#setupRolledBack = true;
   }
 
   #teardown() {
-    this.#enabled = false;
-    try {
-      this.onDisable();
-    } catch (error) {
-      TranceLog.error(this.name, "onDisable threw", error);
+    if (this.#tearingDown) {
+      return;
     }
+    const duringSetup = this.#settingUp;
+    if (duringSetup) {
+      this.#setupAborted = true;
+    }
+    this.#tearingDown = true;
+    this.#enabled = false;
+    if (!duringSetup) {
+      try {
+        this.onDisable();
+      } catch (error) {
+        TranceLog.error(this.name, "onDisable threw", error);
+      }
+    }
+    this.#releaseResources();
+    this.#tearingDown = false;
+    if (duringSetup) {
+      this.#setupRolledBack = true;
+    }
+    TranceLog.log(this.name, "disabled");
+  }
 
-    for (const disposer of this.#disposers.splice(0)) {
+  #releaseResources() {
+    for (const disposer of this.#disposers.splice(0).reverse()) {
       try {
         disposer();
       } catch (error) {
@@ -282,17 +437,53 @@ export class TranceFeature {
       }
     }
     for (const handle of this.#observerHandles) {
-      this.context.observers.unobserve(handle);
+      try {
+        this.context.observers.unobserve(handle);
+      } catch (error) {
+        TranceLog.error(this.name, "observer release threw", error);
+      }
     }
     this.#observerHandles.clear();
     for (const handle of this.#schedulerHandles) {
-      this.context.scheduler.cancel(handle);
+      try {
+        this.context.scheduler.cancel(handle);
+      } catch (error) {
+        TranceLog.error(this.name, "scheduler release threw", error);
+      }
     }
     this.#schedulerHandles.clear();
-    this.context.tokens.releaseAll([...this.#tokenHandles]);
+    for (const handle of this.#tokenHandles) {
+      try {
+        this.context.tokens.release(handle);
+      } catch (error) {
+        TranceLog.error(this.name, "token release threw", error);
+      }
+    }
     this.#tokenHandles.clear();
-    this.context.styles.unloadAll(this.constructor.styles);
-
-    TranceLog.log(this.name, "disabled");
+    for (const handle of this.#navigationHandles) {
+      try {
+        this.context.navigation.unsubscribe(handle);
+      } catch (error) {
+        TranceLog.error(this.name, "navigation release threw", error);
+      }
+    }
+    this.#navigationHandles.clear();
+    try {
+      this.#globalPrefOwner?.releaseAll();
+    } catch (error) {
+      TranceLog.error(this.name, "global preference release threw", error);
+    }
+    try {
+      this.#globalSheetOwner?.releaseAll();
+    } catch (error) {
+      TranceLog.error(this.name, "global sheet release threw", error);
+    }
+    for (const url of this.#styleHandles.splice(0).reverse()) {
+      try {
+        this.context.styles.unload(url);
+      } catch (error) {
+        TranceLog.error(this.name, "stylesheet release threw", error);
+      }
+    }
   }
 }

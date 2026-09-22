@@ -56,21 +56,68 @@
 # Refs: TRANCE.md §7, §10, docs/trance/THIRD-PARTY.md
 
 import argparse
+import hashlib
 import io
 import json
 import os
 import platform
 import shutil
+import stat
 import sys
 import tarfile
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 SINE_REPO = "CosmoCreeper/Sine"
-BOOTLOADER_TARBALL = "https://api.github.com/repos/sineorg/bootloader/tarball/main"
-MARKETPLACE = "https://raw.githubusercontent.com/sineorg/store/main/marketplace.json"
 USER_AGENT = "trance-cosine-provisioner"
+
+# Everything below this line is somebody else's code that ends up running with
+# chrome privileges in a Trance build. AUDIT.md Phase 6 asks for external
+# payloads to be pinned to immutable revisions, and each of these three was
+# read from a moving target:
+#
+#   * the bootloader, from `main`
+#   * the Sine store's `marketplace.json`, from `main`
+#   * the Sine release, from "whatever is newest on the channel"
+#
+# so two builds of the same Trance commit could ship different browsers, and a
+# performance regression could never be told apart from an upstream push. The
+# release also carries a recorded `engine.zip` digest, because a tag is only
+# immutable by convention — GitHub lets a release asset be replaced in place.
+#
+# `--unpinned` reads the head of everything instead, for the one question a pin
+# cannot answer: what are the authors shipping today.
+#: Set by `--unpinned`. Global rather than threaded through a dozen call sites,
+#: because it is one switch that means the same thing everywhere: ignore every
+#: recorded revision and digest, and read whatever upstream has right now.
+UNPINNED = False
+
+BOOTLOADER_REPO = "sineorg/bootloader"
+BOOTLOADER_REF = "d3914368981fe71d0829f03dbc7990338d9f5a6d"  # 2026-05-02
+SINE_STORE_REPO = "sineorg/store"
+SINE_STORE_REF = "3f8f51143953f8df10a2bf881255ff540766d63c"  # 2026-09-03
+
+#: The exact Sine release each channel installs, and the SHA-256 of the asset
+#: that release is expected to serve. Refresh both together, never one alone.
+SINE_RELEASES = {
+    "cosine": {
+        "tag": "v2.3.4.1c",  # 2026-08-25
+        "assets": {
+            "engine.zip": (
+                "6ae5a477f07a45fe660ad3aa7e2b3197ddac28a397a0b443a5519b252ef55fd1"
+            ),
+        },
+    },
+    "sine": {
+        "tag": "v2.3.3",  # 2026-05-17
+        "assets": {
+            "engine.zip": (
+                "c98be8e0234e8c4d5b41dc277bd201a365a2dcc418dcba82d4749d27a64a3d65"
+            ),
+        },
+    },
+}
 
 # The *other* store. Sine installs from both: mods published to the Sine store
 # have an entry in `marketplace.json` and live in their author's own repository,
@@ -85,10 +132,28 @@ USER_AGENT = "trance-cosine-provisioner"
 # This provisioner does the same thing by the shortest route that produces the
 # same result on disk: the theme's own folder, file for file, rather than a zip
 # of all seventy-odd themes with everything but one folder thrown away.
-ZEN_STORE_RAW = "https://raw.githubusercontent.com/zen-browser/theme-store/main/themes"
-ZEN_STORE_API = (
-    "https://api.github.com/repos/zen-browser/theme-store/contents/themes"
-)
+#
+# The ref below is the store's own commit, not a branch. AUDIT.md Phase 6 asks
+# for external payloads to be pinned to immutable revisions, and a theme store
+# read at `main` is the opposite of that: the bytes a release ships change when
+# somebody else pushes, which is the one failure a performance regression can
+# never be told apart from. `--unpinned` still reads the head, for the one
+# question a pin cannot answer — what is the author shipping today.
+ZEN_STORE_REPO = "zen-browser/theme-store"
+ZEN_STORE_REF = "7173dba5d060417fd65764b706856ae609496e31"  # 2026-03-11
+
+
+def zen_store_raw(ref: str) -> str:
+    return f"https://raw.githubusercontent.com/{ZEN_STORE_REPO}/{ref}/themes"
+
+
+def zen_store_api(mod_id: str, ref: str) -> str:
+    # The contents API echoes the ref into every `url` and `download_url` it
+    # returns, so asking for it once here pins the whole recursive walk.
+    return (
+        f"https://api.github.com/repos/{ZEN_STORE_REPO}/contents/themes/"
+        f"{mod_id}?ref={ref}"
+    )
 
 # ── Mods Trance preinstalls ────────────────────────────────────────────────
 #
@@ -168,11 +233,20 @@ ZEN_STORE_API = (
 # `id` is the store's own id: a slug on the Sine store, a GUID on the Zen theme
 # store. `store` says which one, and it decides where the files come from — an
 # author's repository for the first, `zen-browser/theme-store` for the second.
-# `pin` is the commit the store named when this was written: the provisioner
-# records it so that a build is reproducible, but installs whatever the store
-# currently lists, so a user gets the version the author is shipping rather than
-# a frozen one. A Zen-store theme has no commit to pin; its `updatedAt` is the
-# only version marker the store offers, and it is recorded in the same spirit.
+# `pin` is the commit each mod is installed from, and it is authoritative.
+#
+# It used to be decorative. The table recorded a commit per mod "so that a build
+# is reproducible" and then `install_mod` passed the literal string `"main"` to
+# `unpack_repo`, so every provisioned profile got whatever the author had pushed
+# that morning and the recorded commit was never read by anything. AUDIT.md
+# Phase 6 asks for external payloads pinned to immutable revisions, and finding
+# 4 says why: a release whose mod payload changes remotely cannot have its
+# performance attributed. `--unpinned` installs each mod's head instead, which
+# is how to find out what the authors are shipping now.
+#
+# A Zen-store theme has no repository of its own, so its pin is a commit of
+# `zen-browser/theme-store` rather than of an author's repo; `updated` keeps the
+# store's own `updatedAt`, which is the only version marker it publishes.
 PREINSTALLED_MODS = (
     {
         "id": "new-icons",
@@ -203,7 +277,8 @@ PREINSTALLED_MODS = (
         "store": "zen",
         "name": "Pimp your PiP",
         "expect_version": "1.0.0",
-        "pin": "2025-05-13",
+        "pin": ZEN_STORE_REF,
+        "updated": "2025-05-13",
     },
     # ── And one from neither store ────────────────────────────────────────
     #
@@ -225,7 +300,9 @@ PREINSTALLED_MODS = (
         # The version the author ships today. 1.0.6 is the version this was
         # investigated against (docs/trance/mods/better-new-tab-button.md).
         "expect_version": "1.0.8",
-        "pin": "main",
+        # The commit shipping 1.0.8, rather than `main`, for the reason in the
+        # header: `main` is not a revision, it is a promise about one.
+        "pin": "f1a23de04c7a63d14647b9626756ad58184bff19",  # 2026-05-08
     },
 )
 
@@ -327,11 +404,141 @@ def fetch(url: str) -> bytes:
         return response.read()
 
 
-def resolve_release(channel: str) -> dict:
-    """Newest release on the requested channel.
+def safe_relative_path(name: str) -> Path:
+    """Validate one untrusted archive/API path and return it as a Path.
 
-    Cosine tags end in `c` and are marked prerelease; stable Sine is neither.
+    Every archive and store response below is fetched from somebody else's
+    repository and then loaded with browser chrome privileges. A `../` member
+    must not be able to turn "install this mod" into "replace config.js".
+    Backslashes are rejected rather than normalised so the same bytes are safe
+    on Windows and POSIX.
     """
+    if not isinstance(name, str) or not name or "\0" in name or "\\" in name:
+        raise ValueError(f"unsafe archive path: {name!r}")
+    raw_parts = name.split("/")
+    if any(part in ("", ".", "..") for part in raw_parts):
+        raise ValueError(f"unsafe archive path: {name!r}")
+    path = PurePosixPath(name)
+    if path.is_absolute() or (path.parts and re_drive(path.parts[0])):
+        raise ValueError(f"unsafe archive path: {name!r}")
+    return Path(*path.parts)
+
+
+def re_drive(first: str) -> bool:
+    """Whether the first component is a Windows drive prefix."""
+    return len(first) >= 2 and first[1] == ":" and first[0].isalpha()
+
+
+def safe_destination(root: Path, relative: Path) -> Path:
+    """Resolve a child and prove it remains below `root`."""
+    resolved_root = root.resolve()
+    target = (root / relative).resolve()
+    if target == resolved_root or resolved_root not in target.parents:
+        raise ValueError(f"path escapes extraction root: {relative}")
+    return target
+
+
+def safe_zip_entry(info: zipfile.ZipInfo) -> None:
+    """Reject non-file ZIP entries that could redirect writes."""
+    mode = info.external_attr >> 16
+    kind = stat.S_IFMT(mode)
+    if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+        raise ValueError(f"unsupported ZIP entry type: {info.filename!r}")
+
+
+def extract_zip_tree(blob: bytes, target: Path, prefix: str | None = None) -> None:
+    """Extract regular files below one archive directory into `target`.
+
+    `prefix` names a known top-level directory such as `JS`. When omitted,
+    GitHub's generated repository root is detected from the first entry and
+    stripped. Every member is validated before the first byte is written.
+    """
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        entries: list[tuple[zipfile.ZipInfo, Path]] = []
+        detected_root: str | None = prefix
+        for info in archive.infolist():
+            safe_zip_entry(info)
+            raw = info.filename.rstrip("/")
+            if not raw:
+                continue
+            path = safe_relative_path(raw)
+            if detected_root is None:
+                detected_root = path.parts[0]
+            if path.parts[0] != detected_root:
+                if prefix is not None:
+                    # engine.zip may carry release metadata beside JS/. It is
+                    # not installed and cannot affect the destination.
+                    continue
+                raise ValueError(
+                    f"ZIP member outside expected root {detected_root!r}: "
+                    f"{info.filename!r}"
+                )
+            relative_parts = path.parts[1:]
+            if not relative_parts or info.is_dir():
+                continue
+            relative = Path(*relative_parts)
+            destination = safe_destination(target, relative)
+            entries.append((info, destination))
+
+        for info, destination in entries:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as handle, open(destination, "wb") as out:
+                shutil.copyfileobj(handle, out)
+
+
+def safe_child_name(name: str) -> str:
+    """Validate one GitHub contents-API `name` field."""
+    path = safe_relative_path(name)
+    if len(path.parts) != 1:
+        raise ValueError(f"store item name is not one component: {name!r}")
+    return path.name
+
+
+def fetch_verified(url: str, expected: str | None) -> bytes:
+    """Fetch one payload and refuse it unless it hashes to `expected`.
+
+    A tag and a release asset are both mutable server-side; the digest is the
+    only part of this that an upstream force-push cannot change underneath a
+    build. `--unpinned` passes `None` and skips the check, which is the whole
+    point of that flag.
+    """
+    blob = fetch(url)
+    if expected is None:
+        return blob
+    digest = hashlib.sha256(blob).hexdigest()
+    if digest != expected:
+        raise SystemExit(
+            f"digest mismatch for {url}\n"
+            f"  expected {expected}\n"
+            f"  got      {digest}\n"
+            "Refresh the recorded digest deliberately, or re-run with "
+            "--unpinned to install today's bytes without recording them."
+        )
+    return blob
+
+
+def bootloader_tarball() -> str:
+    ref = "main" if UNPINNED else BOOTLOADER_REF
+    return f"https://api.github.com/repos/{BOOTLOADER_REPO}/tarball/{ref}"
+
+
+def marketplace_url() -> str:
+    ref = "main" if UNPINNED else SINE_STORE_REF
+    return f"https://raw.githubusercontent.com/{SINE_STORE_REPO}/{ref}/marketplace.json"
+
+
+def resolve_release(channel: str) -> dict:
+    """The Sine release the requested channel installs.
+
+    Pinned, this is one recorded tag. Unpinned, it is the newest release on the
+    channel, which is what the provisioner used to do unconditionally: cosine
+    tags end in `c` and are marked prerelease; stable Sine is neither.
+    """
+    if not UNPINNED:
+        tag = SINE_RELEASES[channel]["tag"]
+        return json.loads(
+            fetch(f"https://api.github.com/repos/{SINE_REPO}/releases/tags/{tag}")
+        )
     releases = json.loads(fetch(f"https://api.github.com/repos/{SINE_REPO}/releases?per_page=30"))
     for release in releases:
         if release.get("draft"):
@@ -342,6 +549,13 @@ def resolve_release(channel: str) -> dict:
         if channel == "sine" and not is_cosine and not release.get("prerelease"):
             return release
     raise SystemExit(f"no release found on channel '{channel}'")
+
+
+def asset_digest(channel: str, name: str) -> str | None:
+    """The recorded SHA-256 for one release asset, or None when unpinned."""
+    if UNPINNED:
+        return None
+    return SINE_RELEASES[channel]["assets"].get(name)
 
 
 def asset_url(release: dict, name: str) -> str:
@@ -400,7 +614,12 @@ def replace_tree(source: Path, destination: Path) -> None:
 
 
 def install_bootloader(app_root: Path, profile: Path) -> None:
-    blob = fetch(BOOTLOADER_TARBALL)
+    # No digest: GitHub's generated tarballs are not byte-stable across
+    # server-side changes to the archiver, so a recorded hash would fail for
+    # reasons that have nothing to do with the code inside. The commit ref is
+    # the pin, and it is immutable in the way that matters — the tree it names
+    # cannot change.
+    blob = fetch(bootloader_tarball())
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as archive:
         # GitHub tarballs nest everything under one generated top-level dir.
         root = archive.getnames()[0].split("/")[0]
@@ -445,21 +664,16 @@ def install_bootloader(app_root: Path, profile: Path) -> None:
     shutil.rmtree(staging)
 
 
-def install_engine(release: dict, profile: Path, app_root: Path) -> str:
-    blob = fetch(asset_url(release, "engine.zip"))
+def install_engine(release: dict, channel: str, profile: Path, app_root: Path) -> str:
+    blob = fetch_verified(
+        asset_url(release, "engine.zip"), asset_digest(channel, "engine.zip")
+    )
     js_dir = profile / "chrome" / "JS"
     if js_dir.exists():
         shutil.rmtree(js_dir)
     js_dir.mkdir(parents=True)
 
-    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-        for entry in archive.namelist():
-            if entry.endswith("/") or not entry.startswith("JS/"):
-                continue
-            target = js_dir / entry[len("JS/") :]
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(entry) as handle, open(target, "wb") as out:
-                shutil.copyfileobj(handle, out)
+    extract_zip_tree(blob, js_dir, prefix="JS")
 
     version = json.loads((js_dir / "engine.json").read_text())["version"]
     print(f"  profile chrome/JS (engine {version})")
@@ -507,7 +721,8 @@ def install_zen_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
     """
     mod_id = entry["id"]
     label = entry.get("name", mod_id)
-    data = json.loads(fetch(f"{ZEN_STORE_RAW}/{mod_id}/theme.json"))
+    ref = mod_ref(entry, ZEN_STORE_REF)
+    data = json.loads(fetch(f"{zen_store_raw(ref)}/{mod_id}/theme.json"))
 
     expected = entry.get("expect_version")
     version = data.get("version", "?")
@@ -518,7 +733,7 @@ def install_zen_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
-    files = download_zen_folder(f"{ZEN_STORE_API}/{mod_id}", target)
+    files = download_zen_folder(zen_store_api(mod_id, ref), target)
 
     # `style` is published as an absolute raw URL. Sine stores the path
     # *relative to the mod folder*, because that is what it later joins onto the
@@ -550,6 +765,17 @@ def install_zen_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
     return version
 
 
+def mod_ref(entry: dict, fallback: str = "main") -> str:
+    """The git ref one mod is installed from.
+
+    `--unpinned` collapses this to the moving branch, which is what the
+    provisioner used to do unconditionally.
+    """
+    if UNPINNED:
+        return "main"
+    return entry.get("pin") or fallback
+
+
 def download_zen_folder(api_url: str, target: Path) -> set[str]:
     """Copies one theme-store folder to `target`, recursing into subfolders.
 
@@ -557,14 +783,17 @@ def download_zen_folder(api_url: str, target: Path) -> set[str]:
     """
     written: set[str] = set()
     for item in json.loads(fetch(api_url)):
+        name = safe_child_name(item["name"])
+        destination = safe_destination(target, Path(name))
         if item["type"] == "dir":
-            child = target / item["name"]
-            child.mkdir(parents=True, exist_ok=True)
-            for nested in download_zen_folder(item["url"], child):
-                written.add(f"{item['name']}/{nested}")
+            destination.mkdir(parents=True, exist_ok=True)
+            for nested in download_zen_folder(item["url"], destination):
+                written.add(f"{name}/{nested}")
         elif item["type"] == "file":
-            (target / item["name"]).write_bytes(fetch(item["download_url"]))
-            written.add(item["name"])
+            destination.write_bytes(fetch(item["download_url"]))
+            written.add(name)
+        else:
+            raise ValueError(f"unsupported store item type: {item['type']!r}")
     return written
 
 
@@ -584,22 +813,18 @@ def zen_relative_path(value, mod_id: str, files: set[str]) -> str:
     return relative if relative in files else ""
 
 
-def unpack_repo(author: str, repo: str, branch: str, target: Path) -> None:
-    """Unpacks a GitHub repository's branch into `target`, replacing it."""
-    blob = fetch(f"https://codeload.github.com/{author}/{repo}/zip/refs/heads/{branch}")
+def unpack_repo(author: str, repo: str, ref: str, target: Path) -> None:
+    """Unpacks a GitHub repository ref into `target`, replacing it.
+
+    `/zip/{ref}` accepts a branch, tag, or commit. The old
+    `/zip/refs/heads/{branch}` form rejects commit SHAs, which made the pins
+    impossible to honour even after the call sites started passing them.
+    """
+    blob = fetch(f"https://codeload.github.com/{author}/{repo}/zip/{ref}")
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
-    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-        # GitHub zips nest everything under one generated top-level directory.
-        root = archive.namelist()[0].split("/")[0] + "/"
-        for name in archive.namelist():
-            if name.endswith("/") or not name.startswith(root):
-                continue
-            destination = target / name[len(root) :]
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(name) as handle, open(destination, "wb") as out:
-                shutil.copyfileobj(handle, out)
+    extract_zip_tree(blob, target)
 
 
 def install_github_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
@@ -617,7 +842,7 @@ def install_github_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
     """
     mod_id = entry["id"]
     author, repo = entry["repo"].split("/", 1)
-    branch = entry.get("pin", "main")
+    branch = mod_ref(entry)
     label = entry.get("name", mod_id)
 
     data = json.loads(
@@ -674,7 +899,7 @@ def install_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
     for every profile except the one it was written against.
     """
     mod_id = entry["id"]
-    marketplace = json.loads(fetch(MARKETPLACE))
+    marketplace = json.loads(fetch(marketplace_url()))
     data = marketplace.get(mod_id)
     if not data:
         raise SystemExit(f"the Sine store has no mod with id '{mod_id}'")
@@ -686,7 +911,7 @@ def install_mod(entry: dict, mods_dir: Path, installed: dict) -> str:
 
     author, repo = parse_github(data["homepage"])
     target = mods_dir / mod_id
-    unpack_repo(author, repo, "main", target)
+    unpack_repo(author, repo, mod_ref(entry), target)
 
     # Sine stores the resolved style paths rather than the store's, because a
     # mod may declare them as URLs. Both of ours are plain filenames, so this
@@ -829,7 +1054,23 @@ def main() -> int:
         help="cosine = Sine's pre-release channel (default); sine = stable.",
     )
     parser.add_argument("--uninstall", action="store_true")
+    parser.add_argument(
+        "--unpinned",
+        action="store_true",
+        help="Read the head of everything — bootloader, Sine store, newest "
+        "release on the channel, each mod's `main` — instead of the recorded "
+        "commits, tag and digests. Use this to find out what the authors are "
+        "shipping today; never for a build whose performance is measured.",
+    )
     args = parser.parse_args()
+
+    global UNPINNED
+    UNPINNED = args.unpinned
+    if UNPINNED:
+        print(
+            "! unpinned: reading upstream heads and skipping digest checks "
+            "— this build is not reproducible"
+        )
 
     app = args.app or (package_app() if args.for_package else default_app())
     app_root = resolve_app_root(app)
@@ -873,7 +1114,7 @@ def main() -> int:
     print(f"  app root  {app_root}")
     print(f"  profile   {profile}")
     install_bootloader(app_root, profile)
-    install_engine(release, profile, app_root)
+    install_engine(release, args.channel, profile, app_root)
     install_mods(profile, app_root)
     print("Done. Sine lives in about:preferences#sineMods.")
     print("New profiles are seeded from the staged copy on first run.")

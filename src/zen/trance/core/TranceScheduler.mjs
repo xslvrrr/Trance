@@ -40,7 +40,7 @@ export class TranceScheduler {
 
   /** @type {Map<number, {cb: Function, priority: number, once: boolean}>} */
   #frameSubs = new Map();
-  /** @type {Map<number, {cb: Function, idleHandle: number}>} */
+  /** @type {Map<number, {cb: Function, idleHandle: number, timeout: number}>} */
   #idleSubs = new Map();
   /** @type {Map<string, {timer: number, subs: Map<number, Function>}>} */
   #wallClocks = new Map();
@@ -99,7 +99,9 @@ export class TranceScheduler {
   }
 
   /**
-   * Runs `cb` when the main thread is next idle.
+   * Runs `cb` when the main thread is next idle, while the window is visible.
+   * A suspended window keeps the subscription but not its idle callback, so it
+   * cannot wake the browser while its chrome is not visible.
    *
    * @param {(deadline: IdleDeadline) => void} cb
    * @param {object} [options]
@@ -108,14 +110,9 @@ export class TranceScheduler {
    */
   onIdle(cb, { timeout = 1000 } = {}) {
     const handle = this.#nextHandle++;
-    const idleHandle = this.#window.requestIdleCallback(
-      deadline => {
-        this.#idleSubs.delete(handle);
-        this.#run(cb, deadline);
-      },
-      { timeout }
-    );
-    this.#idleSubs.set(handle, { cb, idleHandle });
+    const entry = { cb, idleHandle: 0, timeout };
+    this.#idleSubs.set(handle, entry);
+    this.#armIdle(handle);
     return handle;
   }
 
@@ -181,7 +178,11 @@ export class TranceScheduler {
 
   /** Number of armed timers owned by Trance. Must be 0 at idle. */
   get timerCount() {
-    return this.#wallClocks.size;
+    let armedIdle = 0;
+    for (const { idleHandle } of this.#idleSubs.values()) {
+      armedIdle += idleHandle ? 1 : 0;
+    }
+    return this.#wallClocks.size + armedIdle;
   }
 
   destroy() {
@@ -244,6 +245,12 @@ export class TranceScheduler {
     TranceLog.log(NS, suspended ? "suspended" : "resumed");
 
     this.#syncFrameLoop();
+    for (const entry of this.#idleSubs.values()) {
+      if (suspended && entry.idleHandle) {
+        this.#window.cancelIdleCallback(entry.idleHandle);
+        entry.idleHandle = 0;
+      }
+    }
     for (const unit of this.#wallClocks.keys()) {
       if (suspended) {
         this.#window.clearTimeout(this.#wallClocks.get(unit).timer);
@@ -254,6 +261,31 @@ export class TranceScheduler {
         this.#fireWallClock(unit);
       }
     }
+    if (!suspended) {
+      for (const handle of this.#idleSubs.keys()) {
+        this.#armIdle(handle);
+      }
+    }
+  }
+
+  #armIdle(handle) {
+    const entry = this.#idleSubs.get(handle);
+    if (!entry || this.#suspended || this.#destroyed) {
+      return;
+    }
+    const idleHandle = this.#window.requestIdleCallback(
+      deadline => {
+        const current = this.#idleSubs.get(handle);
+        if (!current || current.idleHandle !== idleHandle) {
+          return;
+        }
+        this.#idleSubs.delete(handle);
+        current.idleHandle = 0;
+        this.#run(current.cb, deadline);
+      },
+      { timeout: entry.timeout }
+    );
+    entry.idleHandle = idleHandle;
   }
 
   #syncFrameLoop() {

@@ -11,6 +11,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 export class nsZenLiveFolderProvider {
   #task = null;
+  // >>> TRANCE
+  #activityUnsubscribe = null;
+  #windowActivitySuspended = false;
+  // <<< TRANCE
 
   constructor({ id, manager, state }) {
     this.id = id;
@@ -22,18 +26,40 @@ export class nsZenLiveFolderProvider {
     throw new Error("Unimplemented");
   }
 
+  // >>> TRANCE
+  #ensureActivitySubscription() {
+    if (this.#activityUnsubscribe) {
+      return;
+    }
+    const ownerWindow = this.manager.window;
+    this.#activityUnsubscribe = ownerWindow?.gZenWindowActivity?.subscribe(
+      state => {
+        this.#windowActivitySuspended = Boolean(state?.suspended);
+      },
+      { immediate: true }
+    );
+  }
+  // <<< TRANCE
+
   getMetadata() {
     throw new Error("Unimplemented");
   }
 
   async refresh() {
-    this.#task.disarm();
+    this.#task?.disarm();
+    // >>> TRANCE
+    if (this.#windowActivitySuspended) {
+      this.#task?.arm();
+      return null;
+    }
+    // <<< TRANCE
     const result = await this.#fetchLiveFolder();
-    this.#task.arm();
+    this.#task?.arm();
     return result;
   }
 
   start(checkDelay = true) {
+    this.#ensureActivitySubscription();
     const interval = this.state.interval;
     if (this.#task) {
       this.#task.finalize();
@@ -68,9 +94,18 @@ export class nsZenLiveFolderProvider {
     if (this.#task) {
       this.#task.disarm();
     }
+    // >>> TRANCE
+    this.#activityUnsubscribe?.();
+    this.#activityUnsubscribe = null;
+    // <<< TRANCE
   }
 
   async #fetchLiveFolder() {
+    // >>> TRANCE
+    if (this.#windowActivitySuspended) {
+      return null;
+    }
+    // <<< TRANCE
     try {
       const items = await this.fetchItems();
       this.state.lastFetched = Date.now();

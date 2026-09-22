@@ -10,10 +10,6 @@ on:
         description: "The version to build"
         required: true
         type: string
-      release-branch:
-        description: "The branch to build"
-        required: true
-        type: string
 
 jobs:
   macos-profile-build:
@@ -51,7 +47,7 @@ jobs:
         run: npm ci
 
       - name: Load Surfer CI setup
-        run: npm run surfer -- ci --brand ${{ inputs.release-branch }} --display-version ${{ inputs.build-version }}
+        run: npm run surfer -- ci --brand trance --display-version ${{ inputs.build-version }}
 
       - name: Download instrumented app
         uses: actions/download-artifact@v4
@@ -80,7 +76,7 @@ jobs:
           set -ex
           cd engine
           ./mach python -m mozbuild.action.unpack_dmg \
-            "$HOME/instrumented/zen-macos-pgo-stage1-${{ matrix.arch }}.dmg" \
+            "$HOME/instrumented/trance-macos-pgo-stage1-${{ matrix.arch }}.dmg" \
             "$HOME/instrumented/app"
           APP=$(find "$HOME/instrumented/app" -maxdepth 1 -name "*.app" -type d | head -1)
           codesign --force --deep --sign - "$APP" || true
@@ -90,7 +86,7 @@ jobs:
           set -ex
           export LLVM_PROFDATA="$HOME/.mozbuild/clang/bin/llvm-profdata"
           export JARLOG_FILE=en-US.log
-          BINARY=$(find "$HOME/instrumented" -type f -path "*/Contents/MacOS/zen" | head -1)
+          BINARY=$(find "$HOME/instrumented" -type f -path "*/Contents/MacOS/trance" | head -1)
           test -n "$BINARY"
           cd engine
           ./mach python ../scripts/download_pgo_extended_corpus.py

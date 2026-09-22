@@ -394,6 +394,140 @@ const maxSpecificity = rule(
 );
 
 /**
+ * The properties Gecko cannot hand to the compositor.
+ *
+ * Animating any of these means the whole browser UI is re-laid-out and its
+ * display list rebuilt once per frame, because layout is a property of the
+ * document rather than of the element that moved. `transform`, `translate`,
+ * `rotate`, `scale`, `opacity` and `filter` are the ones that do not: Gecko
+ * runs those on the compositor and the main thread does nothing at all.
+ *
+ * The list is the layout-affecting longhands plus the shorthands that expand
+ * to them, and `all`, which is the way to animate every one of them at once
+ * without naming any.
+ */
+const LAYOUT_PROPERTIES = new Set([
+  "all",
+  "block-size",
+  "border",
+  "border-block-end-width",
+  "border-block-start-width",
+  "border-block-width",
+  "border-bottom-width",
+  "border-inline-end-width",
+  "border-inline-start-width",
+  "border-inline-width",
+  "border-left-width",
+  "border-right-width",
+  "border-top-width",
+  "border-width",
+  "bottom",
+  "column-gap",
+  "flex",
+  "flex-basis",
+  "flex-grow",
+  "flex-shrink",
+  "font-size",
+  "gap",
+  "grid-template-columns",
+  "grid-template-rows",
+  "height",
+  "inline-size",
+  "inset",
+  "inset-block",
+  "inset-block-end",
+  "inset-block-start",
+  "inset-inline",
+  "inset-inline-end",
+  "inset-inline-start",
+  "left",
+  "line-height",
+  "margin",
+  "margin-block",
+  "margin-block-end",
+  "margin-block-start",
+  "margin-bottom",
+  "margin-inline",
+  "margin-inline-end",
+  "margin-inline-start",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "max-block-size",
+  "max-height",
+  "max-inline-size",
+  "max-width",
+  "min-block-size",
+  "min-height",
+  "min-inline-size",
+  "min-width",
+  "padding",
+  "padding-block",
+  "padding-block-end",
+  "padding-block-start",
+  "padding-bottom",
+  "padding-inline",
+  "padding-inline-end",
+  "padding-inline-start",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "right",
+  "row-gap",
+  "top",
+  "width",
+]);
+
+/**
+ * §3.5 — a transition or animation names a compositable property, or says why.
+ *
+ * Measured on the shipped build with `scripts/trance-motion-bench.py`, at
+ * 120 Hz, for a single animated element in the chrome window:
+ *
+ *   transform / opacity   0 style flushes,   0 sync reflows,   0 display lists
+ *   margin-left / height  361 per second,  241 per second,  241 per second
+ *
+ * — three whole-document style flushes and two whole-document reflows and
+ * display-list rebuilds every frame, for one 40x8px box, and the numbers do
+ * not change when twenty of them animate at once because it is the document
+ * being reflowed rather than the element. An M-series laptop absorbs that
+ * without dropping a frame, which is exactly why it survives review: it shows
+ * up as battery and as stutter on slower machines rather than as a bug on the
+ * machine it was written on (TRANCE.md §3.5, §12.1).
+ *
+ * This is a narrower rule than "never animate layout", because some gestures
+ * genuinely are layout: a strip that collapses has to give its space back to
+ * what is below it, and no transform does that. Those carry
+ * `stylelint-disable-next-line trance/no-layout-transition` with the reason,
+ * the same way the `!important` exemptions do — the rule exists so that the
+ * choice is made deliberately and written down, not so that it is impossible.
+ */
+const noLayoutTransition = rule(
+  "no-layout-transition",
+  "transition or animation of a layout property. Gecko cannot composite it, so every frame reflows the whole browser UI (TRANCE.md §3.5). Use transform/opacity, or disable this rule on the line with the reason.",
+  (root, report) => {
+    root.walkDecls(decl => {
+      const prop = decl.prop.toLowerCase();
+      const isShorthand = prop === "transition" || prop === "animation";
+      if (!isShorthand && prop !== "transition-property") {
+        return;
+      }
+      // Strip functions — `cubic-bezier(0.2, 0, 0, 1)` and `steps(4, end)`
+      // contain commas and would otherwise split a value into nonsense — then
+      // read every bare identifier that is left. In both shorthands the
+      // property name is one of those identifiers.
+      const flattened = decl.value.replace(/\w+\([^()]*\)/g, " ");
+      for (const word of flattened.match(/[-a-z]+/gi) ?? []) {
+        if (LAYOUT_PROPERTIES.has(word.toLowerCase())) {
+          report(decl, `("${word}")`);
+          return;
+        }
+      }
+    });
+  }
+);
+
+/**
  * §6.2 — only trance-tokens.css declares custom properties on `:root`.
  *
  * This is the mechanism the whole anti-conflict design rests on: one token
@@ -429,6 +563,7 @@ export default [
   noInfiniteAnimation,
   noBackdropFilter,
   noWillChange,
+  noLayoutTransition,
   maxSpecificity,
   rootTokensOnlyInTokensFile,
 ];

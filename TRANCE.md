@@ -132,15 +132,18 @@ It is deliberately not a "theme pack". It is a browser.
 - Phase 1 is complete, artwork included. The identity landed 2026-08-24 (the profile directory and
   vendor were fixed the same day, after Phase 3 smoke-testing found the build still using Zen's —
   ADR-014); the artwork landed 2026-08-27 (ADR-050), which closed ADR-008's placeholder.
-- No CI (Zen's workflows still reference `--brand release`/`twilight` and will fail — Phase 12),
-  no signing, no update server (updates are off, ADR-009)
-- `npm run lc` fails on **115 upstream** files with no MPL header at the fork point, including
-  `src/zen/tests/mochitests/tooltiptext/xul_tooltiptext.xhtml` and all of `src/zen/@types/`.
-  Pre-existing, not Trance's — every file under `src/zen/trance/` passes, including the 284
-  vendored icons. Fix or exclude the upstream ones before relying on `lc` as a CI gate.
-  Note also that surfer's `# Ignore license in this file` escape hatch is unusable: its regex
-  carries the `g` flag and is reused across files, so it matches on roughly every other one
-  (`docs/trance/THIRD-PARTY.md`).
+- CI now has a Trance-only PR check for changes under `src/zen/trance/**`, running unit,
+  patch and inventory checks (`.github/workflows/trance-checks.yml:3-8, 17-52`). The release
+  workflows are also retargeted to `--brand trance` (for example
+  `.github/workflows/macos-release-build.yml:81-82`); the matrix has not been measured here.
+- No signing certificates or notarisation credentials exist, and no update server is configured
+  (updates are off, ADR-009).
+- `npm run lc` currently fails on **524** paths. Every failure is inherited Zen/Firefox content:
+  copied mochitest suites under `src/zen/tests/mochitests/**`, Gecko declaration stubs under
+  `src/zen/@types/lib.gecko.*.d.ts`, and binary assets including `welcome-background.mp4`.
+  No Trance-owned file fails. The standing signal is a **new failing path under
+  `src/zen/trance/`**, not the inherited total; surfer's ignore regex does not cover every
+  inherited binary suffix.
 
 ---
 
@@ -1631,7 +1634,9 @@ it breaks the player simply looks like Firefox's again.
       plus the occlusion-wiring assertion the harness cannot reach (ADR-034)
 - [x] Tier A: the defects confirmed by reading rather than by measuring (ADR-035)
 - [x] Stored baseline — `docs/trance/perf-baseline.json`
-- [ ] CI job on PRs touching `src/zen/trance/**` (needs Phase 12's matrix)
+- [x] CI job on PRs touching `src/zen/trance/**` — `.github/workflows/trance-checks.yml:3-8`
+      runs `npm run test:unit`, `npm run patches:check` and `npm run inventory:check`
+      (`:45-52`). This is a check job, not evidence that Tier B3–B6 has been measured.
 - [x] Tier B1 — the workspace cross-fade, moved onto the compositor and measured (ADR-038)
 - [x] Tier B2 — occlusion on a translucent macOS window, answered (ADR-037)
 - [ ] Tier B3–B6: the rest of the measurement-gated work, reported before anything lands
@@ -1832,15 +1837,35 @@ tell which of them were decisions and which were defects.
 ### Phase 12 — Release infrastructure *(in progress, 2026-08-28)*
 
 **Deliverables**
-- [ ] CI build matrix (macOS arm64/x64, Linux x64/aarch64, Windows x64/arm64) modelled on
-      `.github/workflows/`. Zen's workflows still reference `--brand release`/`twilight` and fail
-- [ ] Signing (macOS notarisation, Windows Authenticode) — needs certificates; decision required
+- [x] CI build matrix configuration (macOS arm64/x64, Linux x64/aarch64, Windows x64/arm64) —
+      release workflows use `--brand trance` (for example
+      `.github/workflows/macos-release-build.yml:35-38, 81-82` and
+      `.github/workflows/windows-release-build.yml:39-42, 86-87`). The matrix has not been run
+      in this session.
+- [ ] Signing (macOS notarisation, Windows Authenticode) — certificates and notarisation
+      credentials do not exist; the current macOS workflow explicitly ad-hoc signs and creates an
+      unsigned, non-notarised DMG (`.github/workflows/macos-universal-release-build.yml:162-180`).
 - [x] Update server / `updateHostname`, or explicitly disabled auto-update via policy — disabled,
       in `src/zen/trance/distribution/policies.json` (Phase 9)
-- [ ] Release channel decision: single `trance` channel, or `release` + `twilight` equivalents
+- [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
+      sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] A downloadable macOS arm64 build: the `0.1.0` prerelease, built locally rather than in CI,
-      then `0.1.1` and `0.2.0` the same way
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1 and 0.2.0 were built locally rather than in
+      CI; the current 0.2.0 artefact is a development build.
+
+**Release history**
+
+- **0.1.0 (2026-08-28):** local macOS arm64 development build, no PGO/LTO and ad-hoc/linker
+  signed. It exposed the packaging gaps recorded below: the extension policy and Sine manager were
+  absent from the packaged artefact.
+- **0.1.1 (2026-08-28):** local follow-up build in which Sine was present but its
+  `chrome.manifest` was absorbed by the packager; the staged file was changed to
+  `chrome.manifest.in` (ADR-058).
+- **0.2.0 (current):** macOS Apple Silicon development build containing the separated theme
+  controls, performance defaults, window-activity suspension, single-owner navigation/material
+  paths, transactional lazy feature setup and import-integrity checks
+  (`docs/trance/release-0.2.0.md:1-110`; `package.json:2-3`). It has no PGO/LTO and is not signed
+  or notarised (`README.md:20-33`).
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
@@ -1870,16 +1895,16 @@ The standing conclusion for the rest of this phase: **anything Trance claims to 
 asserted against the packaged artefact**, not against the development build — and for anything with
 a runtime effect, asserted by *running* that artefact against a fresh profile rather than by looking
 at the files in it. All three of these were invisible to `npm start`, and the third was invisible to
-a file listing as well. That assertion belongs in the CI matrix above, and until the matrix exists it
-is a manual step on every release.
+a file listing as well. The CI matrix above is configured but has not been run here, so packaged
+artefact assertions remain a manual step on every release.
 
 `npm run package` now runs `npm run provision` first, so packaging needs the network. That is a real
 cost, taken deliberately: Sine is not vendored (§7), and a package that silently lacks half of what
 the browser advertises is worse than one that refuses to build.
 
-**Acceptance:** a downloadable, installable, self-updating (or explicitly non-updating) Trance
-build on at least macOS arm64. *Met for macOS arm64 as of 0.1.0; the CI matrix, signing and the
-channel decision are still open.*
+**Acceptance:** a downloadable, installable, explicitly non-updating Trance build on at least
+macOS arm64. *Met for macOS arm64 as of 0.1.0; the CI matrix configuration and single-channel
+decision are now landed, while signing remains blocked on absent certificates and credentials.*
 
 ---
 
@@ -1942,19 +1967,23 @@ twilight" only for a fork with exactly Zen's two brands. Trance's one brand is n
 on the twilight side, and the channel page had been writing `true` over a default that was already
 `true` since the day it was written. Touchpoint 26.*
 
-*The reason it went unseen: **the suite had never been run whole.** The last time mochitests were
-run, five files existed and all 196 assertions passed. Phases 8 to 13 added six more without
-executing them. Running all eleven on 2026-08-28 gave **766 passed, 23 failed**; with ADR-054 and the
-import-page fixes it is **804 passed, 21 failed**.*
+*The reason it went unseen: **the suite had never been run whole.** The last recorded run had five
+files and all 196 assertions passing. Phases 8 to 13 added six more without executing them. The
+historical run on 2026-08-28 reported **766 passed, 23 failed**, then **804 passed, 21 failed**
+after ADR-054 and the import-page fixes. Those totals predate the latest manifest edits and are not
+a current suite result.*
 
-*The twenty that remain are spread across Phases 3 to 9 and are still unexamined — the first-run
-panel's `popup is null` in three tasks, the app-menu mark's three, the theme translucency slider's
-two, edgeless's two, and one each in surfaces, tabstrip, chrome and settings. A separate run of
-`browser_trance_feedback.js` three times over shows four that fail every time, with the burst's
-bubble-count assertion migrating between two task names run to run — flaky in attribution, not in
-outcome. None is a regression: it is work that was committed without the tests written for it ever
-being executed, which is the same class of mistake as ADR-052's and ADR-055's, all three found the
-same day and for the same reason. **Clearing them is the next piece of work this plan owes.***
+*Three previously unregistered mochitests are now in their browser manifests:
+`browser_trance_ownership.js` (`src/zen/tests/trance/browser.toml:17`),
+`browser_media_position_ticker.js` (`src/zen/tests/media/browser.toml:16`), and
+`browser_compact_mode_activity.js` (`src/zen/tests/compact_mode/browser.toml:7`). The mochitest
+suite has **not** been run after that registration, so the twenty-test triage remains open and no
+new pass/fail total is claimed. The prior triage listed the first-run panel's `popup is null` in
+three tasks, the app-menu mark's three, the theme translucency slider's two, edgeless's two, and
+one each in surfaces, tabstrip, chrome and settings. A separate historical run of
+`browser_trance_feedback.js` three times showed four repeat failures, with the burst's bubble-count
+assertion migrating between task names — flaky in attribution, not in outcome. **Clearing them is
+still work this plan owes.***
 
 ---
 
@@ -2163,8 +2192,14 @@ provisioner learned to install from the Zen theme store to do it.
 
 Outstanding: original icon artwork (ADR-008, deliberately deferred by the user); deleting
 `xslvrrr/trance-browser`, which needs a `delete_repo` OAuth scope the CLI does not have; visual
-sign-off on Phases 3 to 9, which no test can assert; the 115 pre-existing upstream `lc` failures,
-which must be fixed or excluded before `lc` can be a CI gate; and five mochitest assertions that
+sign-off on Phases 3 to 9, which no test can assert; the pre-existing upstream `lc` failures,
+which stand at **524** after the Firefox 155 sync and are every one of them inherited — the
+`src/zen/tests/mochitests/**` suites copied from Firefox, the `src/zen/@types/lib.gecko.*.d.ts`
+stubs, and binary assets such as `src/zen/welcome/welcome-background.mp4`. Surfer's ignore list
+covers `json|patch|md|jpeg|png|gif|tiff|ico|woff2|dep` and not `mp4|webm|ogg|pem|zip`, so this
+cannot be made clean from inside this repository and `lc` cannot be a CI gate as it stands. No
+Trance-owned file is among them, which is the whole usable signal: what to watch for is a *new*
+failing path under `src/zen/trance/`, not the inherited total. And five mochitest assertions that
 fail as of 2026-08-26 and predate Phase 9 — a flaky burst-scatter check in the feedback suite, the
 settings pane's search-strip assertion, the surfaces suite's edgeless gradient comparison, and two
 translucency-range assertions in the theme suite. 612 of 617 pass.

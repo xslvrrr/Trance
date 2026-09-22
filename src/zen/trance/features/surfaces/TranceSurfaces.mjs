@@ -60,54 +60,6 @@ const PREF_INTERNAL = "trance.surface.internal-pages";
 const PREF_INTERNAL_OPACITY = "trance.surface.internal.opacity";
 const PREF_INTERNAL_BLUR = "trance.surface.internal.blur";
 
-/** Zen's own acrylic switch. See ADR-011 for why this module owns it. */
-const PREF_ZEN_ACRYLIC = "zen.theme.acrylic-elements";
-
-/**
- * Zen's "the window material follows the window's active state" switch. With it
- * on — its default — macOS drops the `NSVisualEffectView` to an opaque grey the
- * moment the window loses focus, which is why an unfocused Trance window went
- * black no matter what the Trance prefs said. Claimed, not mirrored (ADR-011).
- */
-const PREF_ZEN_GREY_INACTIVE = "zen.view.grey-out-inactive-windows";
-
-/**
- * Firefox's own switch for building content browsers with a transparent canvas.
- * It is what makes the internal-pages switch a real page-transparency feature
- * rather than a colour behind an opaque canvas. Claimed, not mirrored
- * (ADR-011), and re-stamped onto live browsers when it is claimed again — see
- * `#markTransparentBrowsers`.
- */
-const PREF_ALLOW_TRANSPARENT_BROWSER = "browser.tabs.allow_transparent_browser";
-
-/**
- * The platform's own "make this window translucent" switches, one per platform.
- *
- * These are what the master transparency switch actually turns on. Every one of
- * them is a platform decision Trance has no business reimplementing and no way
- * to reach from CSS, and until now none of them was reachable from the settings
- * page either — "make the browser transparent" meant editing about:config and
- * knowing which of the four lines applied to you.
- *
- * Claimed while the switch is on and given back when it is off, exactly like
- * `zen.theme.acrylic-elements` (ADR-011). `media` is the condition under which
- * the pref means anything at all, so a macOS build does not claim Mica.
- */
-const PLATFORM_TRANSPARENCY = Object.freeze([
-  {
-    pref: "zen.widget.macos.window-vibrancy",
-    media: "(-moz-platform: macos)",
-  },
-  {
-    pref: "widget.windows.mica",
-    media: "(-moz-platform: windows)",
-  },
-  {
-    pref: "zen.widget.linux.transparency",
-    media: "(-moz-platform: linux)",
-  },
-]);
-
 /*
  * There are no regions left.
  *
@@ -125,8 +77,6 @@ const PLATFORM_TRANSPARENCY = Object.freeze([
  * the internal-pages switch below, which is the half that was doing the work.
  */
 
-const ATTR_VISIBLE = "trance-surface-visible";
-const ATTR_TRANSPARENT = "trance-surface-transparent";
 const ATTR_EDGELESS = "trance-surface-edgeless";
 const ATTR_IMAGE = "trance-surface-image";
 const ATTR_INTERNAL = "trance-surface-internal";
@@ -186,37 +136,16 @@ const EMPTY_PAGES = Object.freeze([
 ]);
 
 /**
- * Zen's own attribute for a content browser built with an alpha-composited
- * canvas. Removed from live browsers when the platform switch is given back —
- * see `#releaseTransparentBrowser`.
- */
-const ATTR_ZEN_TRANSPARENT = "transparent";
-
-/**
  * The `about:` sheet, and the generated one-liner that carries the one value it
  * cannot read from the token layer.
  *
- * Both are registered with `nsIStyleSheetService` as USER sheets, which is
- * application-wide rather than per-window — hence the static refcount below. A
- * content document has no chrome stylesheet in scope, so this is the only way
- * to reach `about:preferences` at all; see the header of trance-internal.css.
+ * Both are application-wide USER sheets. `TranceGlobalSheetOwner` keeps the
+ * fixed sheet refcounted across windows and gives the generated value one
+ * coalesced slot, so changing opacity does not invalidate every document once
+ * per window.
  */
 const INTERNAL_SHEET_URL =
   "chrome://browser/content/trance-styles/trance-internal.css";
-
-/**
- * `nsIStyleSheetService`.
- *
- * Not on `Services`: the lazy getters in Services.sys.mjs cover the services
- * chrome code reaches for constantly, and this is not one of them — everything
- * else in the tree that wants it asks for the contract by name (see
- * ExtensionCommon.sys.mjs). Fetched on first use rather than at module scope so
- * that a Trance with the region switched off never instantiates it.
- */
-const styleSheetService = () =>
-  Cc["@mozilla.org/content/style-sheet-service;1"].getService(
-    Ci.nsIStyleSheetService
-  );
 
 /**
  * A user-chosen image URL as a CSS `url()`, or `none`.
@@ -272,36 +201,10 @@ export class TranceSurfaces extends TranceFeature {
     "chrome://browser/content/trance-styles/trance-surfaces.css",
   ];
 
-  /** The user's `zen.theme.acrylic-elements` value, restored on disable. */
-  #previousZenAcrylic = null;
-  /** The user's `zen.view.grey-out-inactive-windows`, restored on disable. */
-  #previousGreyInactive = null;
-  /** The user's `browser.tabs.allow_transparent_browser`, restored on disable. */
-  #previousTransparentBrowser = null;
-
-  /**
-   * The user's value for each platform transparency pref this window claimed.
-   *
-   * @type {Map<string, boolean>}
-   */
-  #previousPlatformTransparency = new Map();
-
-  /**
-   * How many windows currently want the `about:` user sheets.
-   *
-   * `nsIStyleSheetService` is application-wide, so these sheets are registered
-   * once and unregistered when the last window that wanted them goes away —
-   * unlike every other Trance stylesheet, which `TranceStyles` refcounts per
-   * window because `loadSheetUsingURIString` is itself per window.
-   */
-  static #internalSheetUsers = 0;
-  /** The alpha sheet currently registered, so it can be swapped on pref change. */
-  static #internalAlphaURL = null;
-
-  /** Whether this window holds a reference to the sheets above. */
+  /** Whether this window holds the fixed `about:` sheet. */
   #holdsInternalSheets = false;
-  /** The tabs progress listener that marks `about:` browsers, if registered. */
-  #internalPageListener = null;
+  /** Subscription that marks top-level navigations as internal pages. */
+  #internalNavigationHandle = null;
   /** @type {Element | null} The empty-tab mark, while there is one. */
   #newtabLogo = null;
   /** Whether the empty-tab mark's tab listeners are attached. */
@@ -323,12 +226,9 @@ export class TranceSurfaces extends TranceFeature {
   onEnable() {
     this.#bindTokens();
     this.#observePrefs();
-    this.#observeVisibility();
-    this.#claimZenAcrylic();
 
     this.#applyShape();
     this.#applyRegions();
-    this.#applyVisibility();
 
     // And once more when there is a `gBrowser` to ask. TranceCore enters at
     // `MozBeforeInitialXULLayout`, before the tab browser is built, and the
@@ -346,8 +246,6 @@ export class TranceSurfaces extends TranceFeature {
   onDisable() {
     const root = this.context.document.documentElement;
     for (const attribute of [
-      ATTR_VISIBLE,
-      ATTR_TRANSPARENT,
       ATTR_EDGELESS,
       ATTR_IMAGE,
       ATTR_INTERNAL,
@@ -364,10 +262,14 @@ export class TranceSurfaces extends TranceFeature {
     }
     this.#teardownNewtabLogo();
     this.#releaseInternalPages();
-    this.#releaseZenAcrylic();
-    this.#releaseGreyInactive();
-    this.#releaseTransparentBrowser();
-    this.#releasePlatformTransparency();
+    this.context.material.reset();
+    // The latches guard against attaching a second copy while the feature is
+    // enabled and a sub-pref flips. A full teardown is the other case: the base
+    // class has just run every disposer, so the listeners are gone and the
+    // latches have to say so, or re-enabling the feature would leave the empty
+    // tab mark and the pointer parallax permanently dead.
+    this.#newtabListening = false;
+    this.#pointerListening = false;
   }
 
   // --- Tokens ---------------------------------------------------------------
@@ -516,8 +418,12 @@ export class TranceSurfaces extends TranceFeature {
       this.addDisposer(() => Services.prefs.removeObserver(pref, observer));
     }
 
-    for (const pref of [PREF_SUSPEND, PREF_KEEP_UNFOCUSED]) {
-      const observer = { observe: () => this.#applyVisibility() };
+    for (const pref of [
+      PREF_SUSPEND,
+      PREF_KEEP_UNFOCUSED,
+      "trance.surface.blur.radius",
+    ]) {
+      const observer = { observe: () => this.#applyMaterial() };
       Services.prefs.addObserver(pref, observer);
       this.addDisposer(() => Services.prefs.removeObserver(pref, observer));
     }
@@ -535,16 +441,8 @@ export class TranceSurfaces extends TranceFeature {
 
     // The page-opacity slider is deliberately *not* in that list.
     //
-    // It was, and dragging it locked the browser up. `#applyShape` re-reads
-    // five prefs, claims and releases platform state, walks every browser in
-    // the window and — the expensive part — swaps a registered
-    // `nsIStyleSheetService` user sheet, which invalidates the style data of
-    // every document in the application. A `range` input notifies on every
-    // pixel of a drag, so a slow sweep across the slider was a hundred
-    // application-wide invalidations with a full `#applyShape` on top of each.
-    //
-    // Its own observer, doing only the one thing that value changes, and
-    // coalesced (ADR-046).
+    // Its own observer does only the one thing that value changes, and
+    // coalesces a drag into one generated-sheet slot update (ADR-046).
     const alphaObserver = { observe: () => this.#queueInternalAlpha() };
     Services.prefs.addObserver(PREF_INTERNAL_OPACITY, alphaObserver);
     this.addDisposer(() =>
@@ -553,36 +451,39 @@ export class TranceSurfaces extends TranceFeature {
   }
 
   /**
-   * The master transparency switch.
-   *
-   * It is still its own method rather than being folded into `#applyShape`,
-   * because it is the one that claims and releases the *platform's* prefs, and
-   * a claim and a release that can get out of step is worth keeping in one
-   * place with the thing that decides it.
+   * The master transparency switch is one material intent alongside the
+   * unfocused-window policy and content-canvas requirement. The material owner
+   * translates that intent into platform prefs, browser attributes, and the
+   * root attributes consumed by the surface stylesheet.
    */
   #applyRegions() {
-    const root = this.context.document.documentElement;
+    this.#applyMaterial();
+  }
 
-    if (Services.prefs.getBoolPref(PREF_TRANSPARENCY, true)) {
-      root.setAttribute(ATTR_TRANSPARENT, "true");
-      this.#claimPlatformTransparency();
-    } else {
-      root.removeAttribute(ATTR_TRANSPARENT);
-      this.#releasePlatformTransparency();
-    }
-
-    this.#syncTransparentBrowser();
+  #applyMaterial() {
+    this.context.material.apply({
+      transparent: Services.prefs.getBoolPref(PREF_TRANSPARENCY, true),
+      blurRadius: Math.max(
+        0,
+        Services.prefs.getIntPref("trance.surface.blur.radius", 24)
+      ),
+      keepUnfocused: Services.prefs.getBoolPref(PREF_KEEP_UNFOCUSED, false),
+      suspendWhenUnfocused: Services.prefs.getBoolPref(PREF_SUSPEND, true),
+      contentTransparency:
+        Services.prefs.getBoolPref(PREF_INTERNAL, true) ||
+        Services.prefs.getBoolPref(PREF_EDGELESS, true),
+    });
   }
 
   // --- Shape and internal pages ---------------------------------------------
 
   /**
-   * The two switches that change what the browser *is* rather than how strongly
-   * it is tinted: edgeless geometry, and the browser's own pages.
+   * The switches that change surface shape and browser-page treatment:
+   * edgeless geometry, the background image, and internal pages.
    *
-   * They share a method because they share a consequence — both are reasons the
-   * content canvas has to be alpha-composited — and keeping the decision in one
-   * place is what stops the platform pref being claimed twice and released once.
+   * Internal pages and edgeless mode both request content transparency through
+   * the material intent below; keeping that union in one place prevents a
+   * platform claim from being made twice and released once.
    */
   #applyShape() {
     const root = this.context.document.documentElement;
@@ -620,51 +521,44 @@ export class TranceSurfaces extends TranceFeature {
       root.removeAttribute(ATTR_INTERNAL_BLUR);
     }
 
-    this.#syncTransparentBrowser();
+    this.#applyMaterial();
   }
 
   /**
-   * Registers the `about:` user sheets and starts marking the browsers that
-   * hold an `about:` page.
+   * Registers the fixed `about:` USER sheet and the generated alpha slot, then
+   * starts marking the browsers that hold an `about:` page.
    *
-   * The sheets are application-wide, so only the first window to ask actually
-   * registers them; the marker is per window, because the browsers are.
+   * The sheets are application-wide, so the owner and its slot registry carry
+   * the cross-window lifetime; the marker remains per window because browsers
+   * are.
    */
   #claimInternalPages() {
-    this.#syncInternalAlpha();
-
     if (!this.#holdsInternalSheets) {
       this.#holdsInternalSheets = true;
-      if (TranceSurfaces.#internalSheetUsers === 0) {
-        this.#registerSheet(INTERNAL_SHEET_URL);
-      }
-      TranceSurfaces.#internalSheetUsers += 1;
+      this.globalSheets.hold(INTERNAL_SHEET_URL);
     }
+    this.#syncInternalAlpha();
 
-    if (!this.#internalPageListener) {
+    if (this.#internalNavigationHandle === null) {
       this.#observeInternalPages();
     }
     this.#markAllBrowsers();
   }
 
   #releaseInternalPages() {
+    if (this.#alphaHandle) {
+      this.context.scheduler.cancel(this.#alphaHandle);
+      this.#alphaHandle = 0;
+    }
     if (this.#holdsInternalSheets) {
       this.#holdsInternalSheets = false;
-      TranceSurfaces.#internalSheetUsers -= 1;
-      if (TranceSurfaces.#internalSheetUsers === 0) {
-        this.#unregisterSheet(INTERNAL_SHEET_URL);
-        if (TranceSurfaces.#internalAlphaURL) {
-          this.#unregisterSheet(TranceSurfaces.#internalAlphaURL);
-          TranceSurfaces.#internalAlphaURL = null;
-        }
-      }
+      this.globalSheets.release(INTERNAL_SHEET_URL);
+      this.globalSheets.releaseSlot("internal-alpha");
     }
 
-    if (this.#internalPageListener) {
-      this.context.window.gBrowser?.removeTabsProgressListener(
-        this.#internalPageListener
-      );
-      this.#internalPageListener = null;
+    if (this.#internalNavigationHandle !== null) {
+      this.context.navigation.unsubscribe(this.#internalNavigationHandle);
+      this.#internalNavigationHandle = null;
     }
 
     for (const browser of this.#contentBrowsers()) {
@@ -673,17 +567,11 @@ export class TranceSurfaces extends TranceFeature {
   }
 
   /**
-   * Asks for the alpha sheet to be rewritten, at most once per idle period.
+   * Asks for the alpha slot to be updated, at most once per idle period.
    *
-   * This is the whole fix for "dragging the page-opacity slider locks the
-   * browser up". The write itself cannot be made cheap — see
-   * `#syncInternalAlpha` — so it is made *rare*: a drag produces one sheet swap
-   * when the main thread next has a moment, rather than one per pixel. The
-   * timeout is what keeps the slider feeling connected to the page behind it if
-   * the thread never goes idle (ADR-046).
-   *
-   * The pending handle is cancelled rather than allowed to stack, so a
-   * two-second sweep is one swap and not a queue of two hundred.
+   * The generated value cannot be an inline token because `trance-internal.css`
+   * runs in a content document. The global-sheet owner swaps one named slot,
+   * coalescing this window's opacity changes with the process-wide sheet state.
    */
   #queueInternalAlpha() {
     if (!Services.prefs.getBoolPref(PREF_INTERNAL, true)) {
@@ -701,62 +589,12 @@ export class TranceSurfaces extends TranceFeature {
     );
   }
 
-  /**
-   * The alpha, as its own one-line sheet.
-   *
-   * `trance-internal.css` runs in a content document, where none of the token
-   * layer exists, so this one value cannot be an inline custom property the way
-   * every other slider's is. It travels as a generated sheet instead: two
-   * `nsIStyleSheetService` calls, which is not the cheap operation the first
-   * version of this comment implied. Registering a user sheet is a synchronous
-   * parse plus a style-data invalidation of every document in the application —
-   * fine once, ruinous sixty times a second. Callers reach it through
-   * `#queueInternalAlpha`.
-   */
   #syncInternalAlpha() {
     const percent = Math.min(
       100,
       Math.max(0, Services.prefs.getIntPref(PREF_INTERNAL_OPACITY, 55))
     );
-    const url = internalAlphaSheetURL(percent);
-    if (TranceSurfaces.#internalAlphaURL === url) {
-      return;
-    }
-    if (TranceSurfaces.#internalAlphaURL) {
-      this.#unregisterSheet(TranceSurfaces.#internalAlphaURL);
-    }
-    this.#registerSheet(url);
-    TranceSurfaces.#internalAlphaURL = url;
-  }
-
-  /**
-   * @param {string} url
-   */
-  #registerSheet(url) {
-    try {
-      const uri = Services.io.newURI(url);
-      const service = styleSheetService();
-      if (!service.sheetRegistered(uri, service.USER_SHEET)) {
-        service.loadAndRegisterSheet(uri, service.USER_SHEET);
-      }
-    } catch (error) {
-      TranceLog.error(NS, `could not register ${url.slice(0, 64)}`, error);
-    }
-  }
-
-  /**
-   * @param {string} url
-   */
-  #unregisterSheet(url) {
-    try {
-      const uri = Services.io.newURI(url);
-      const service = styleSheetService();
-      if (service.sheetRegistered(uri, service.USER_SHEET)) {
-        service.unregisterSheet(uri, service.USER_SHEET);
-      }
-    } catch (error) {
-      TranceLog.error(NS, `could not unregister ${url.slice(0, 64)}`, error);
-    }
+    this.globalSheets.setSlot("internal-alpha", internalAlphaSheetURL(percent));
   }
 
   /**
@@ -767,27 +605,12 @@ export class TranceSurfaces extends TranceFeature {
    * trance-surfaces.css exists to undo, because it would make arbitrary
    * websites translucent too.
    *
-   * One tabs progress listener covers every tab in the window, present and
-   * future, which is the same subscription `TranceFeedback` already uses for the
-   * loading bar rather than one listener per tab (TRANCE.md §3.2).
+   * The shared navigation router filters to top-level location changes and
+   * coalesces delivery, so this feature only marks the browser it is given.
    */
   #observeInternalPages() {
-    // Named rather than destructured to `gBrowser`: that identifier is already
-    // a global in a browser window, and shadowing it here would make this the
-    // one place in the file where `gBrowser` means something local.
-    const tabbrowser = this.context.window.gBrowser;
-    if (!tabbrowser?.addTabsProgressListener) {
-      return;
-    }
-    this.#internalPageListener = {
-      onLocationChange: browser => this.#markBrowser(browser),
-    };
-    tabbrowser.addTabsProgressListener(this.#internalPageListener);
-    this.addDisposer(() => {
-      if (this.#internalPageListener) {
-        tabbrowser.removeTabsProgressListener(this.#internalPageListener);
-        this.#internalPageListener = null;
-      }
+    this.#internalNavigationHandle = this.observeNavigation({
+      onNavigate: browser => this.#markBrowser(browser),
     });
   }
 
@@ -810,233 +633,6 @@ export class TranceSurfaces extends TranceFeature {
       browser.setAttribute(ATTR_INTERNAL_PAGE, "true");
     } else {
       browser?.removeAttribute(ATTR_INTERNAL_PAGE);
-    }
-  }
-
-  // --- Visibility -----------------------------------------------------------
-
-  /**
-   * Blur is dropped whenever the window cannot actually be seen. This is the
-   * rule the mod stack had no way to express: a stylesheet cannot know the
-   * window is occluded, so its blur passes ran forever.
-   *
-   * `activate`/`deactivate` are here alongside `focus`/`blur` because the two
-   * pairs answer different questions. `focus` is about the focused *element*
-   * and does not fire on a chrome window that is already frontmost when this
-   * runs — which is every startup, since `TranceCore` enters at
-   * `MozBeforeInitialXULLayout`. That is why `trance-surface-visible` was never
-   * set and every blur rule in trance-surfaces.css was dead for the whole
-   * session: nothing ever fired the event that would have set it.
-   */
-  #observeVisibility() {
-    const win = this.context.window;
-    const update = () => this.#applyVisibility();
-    this.addListener(win, "focus", update);
-    this.addListener(win, "blur", update);
-    this.addListener(win, "activate", update);
-    this.addListener(win, "deactivate", update);
-    this.addListener(win, "occlusionstatechange", update);
-    this.addListener(win, "sizemodechange", update);
-
-    // And once more when the window is built, for the startup case above: at
-    // `MozBeforeInitialXULLayout` the document is not focusable yet, so the
-    // first `#applyVisibility` can only answer "not visible" however it asks.
-    if (win.document.readyState !== "complete") {
-      this.addListener(win, "load", update, { once: true });
-    }
-  }
-
-  #applyVisibility() {
-    const win = this.context.window;
-    const root = this.context.document.documentElement;
-
-    // The opt-in overrides the suspend switch rather than sitting beside it:
-    // "keep the window translucent when it is not focused" and "drop blur when
-    // it is not focused" are the same question asked twice, and answering it
-    // differently in two places is how a browser ends up with two owners for
-    // one behaviour (TRANCE.md §6.2).
-    const keepWhenUnfocused = Services.prefs.getBoolPref(
-      PREF_KEEP_UNFOCUSED,
-      false
-    );
-    this.#syncGreyInactive(keepWhenUnfocused);
-
-    const suspendWhenUnfocused =
-      !keepWhenUnfocused && Services.prefs.getBoolPref(PREF_SUSPEND, true);
-    const occluded =
-      win.isFullyOccluded || win.windowState === win.STATE_MINIMIZED;
-    const focused =
-      win.document.hasFocus() || Services.focus.activeWindow === win;
-    const visible = !occluded && (!suspendWhenUnfocused || focused);
-
-    if (visible) {
-      root.setAttribute(ATTR_VISIBLE, "true");
-    } else {
-      root.removeAttribute(ATTR_VISIBLE);
-    }
-    TranceLog.log(NS, "visible", visible);
-  }
-
-  // --- Zen's acrylic switch --------------------------------------------------
-
-  /**
-   * Zen's compact-mode sheet carries
-   * `backdrop-filter: blur(42px) … !important` on `.zen-toolbar-background`,
-   * gated on `zen.theme.acrylic-elements`. An author-level Trance rule cannot
-   * beat `!important`, and adding `!important` to fight it is forbidden
-   * (§6.2 rule 1). Owning the pref is the honest way to keep one owner per
-   * region — and unlike a CSS arms race it is exactly reversible.
-   *
-   * The pref defaults to false in a Trance build (it is `@IS_TWILIGHT@` and
-   * Trance has a single non-twilight brand), so for most users this is a no-op.
-   *
-   * See ADR-011.
-   */
-  #claimZenAcrylic() {
-    if (!Services.prefs.getBoolPref(PREF_ZEN_ACRYLIC, false)) {
-      return;
-    }
-    this.#previousZenAcrylic = true;
-    Services.prefs.setBoolPref(PREF_ZEN_ACRYLIC, false);
-    TranceLog.log(NS, `disabled ${PREF_ZEN_ACRYLIC} to keep the blur budget`);
-  }
-
-  #releaseZenAcrylic() {
-    if (this.#previousZenAcrylic === null) {
-      return;
-    }
-    Services.prefs.setBoolPref(PREF_ZEN_ACRYLIC, this.#previousZenAcrylic);
-    this.#previousZenAcrylic = null;
-  }
-
-  // --- Transparency while unfocused ------------------------------------------
-
-  /**
-   * `zen.view.grey-out-inactive-windows` decides whether the macOS window
-   * material is `NSVisualEffectStateFollowsWindowActiveState` or
-   * `NSVisualEffectStateActive` (see `ZenWindowMaterialView` in
-   * nsCocoaWindow.mm). On its default the whole frost collapses to an opaque
-   * grey the moment the window is not frontmost — which no Trance pref could
-   * undo, because Trance never owned it.
-   *
-   * It is claimed rather than mirrored, and only while the opt-in is on, so a
-   * user who has never touched the Trance switch keeps Zen's behaviour exactly.
-   * The pref is `mirror: always`, and nsCocoaWindow registers its own callback
-   * on it, so this takes effect without a restart.
-   *
-   * @param {boolean} keepWhenUnfocused
-   */
-  #syncGreyInactive(keepWhenUnfocused) {
-    if (!keepWhenUnfocused) {
-      this.#releaseGreyInactive();
-      return;
-    }
-    if (this.#previousGreyInactive !== null) {
-      return;
-    }
-    const current = Services.prefs.getBoolPref(PREF_ZEN_GREY_INACTIVE, true);
-    if (!current) {
-      return;
-    }
-    this.#previousGreyInactive = current;
-    Services.prefs.setBoolPref(PREF_ZEN_GREY_INACTIVE, false);
-    TranceLog.log(NS, `disabled ${PREF_ZEN_GREY_INACTIVE} to keep the frost`);
-  }
-
-  #releaseGreyInactive() {
-    if (this.#previousGreyInactive === null) {
-      return;
-    }
-    Services.prefs.setBoolPref(
-      PREF_ZEN_GREY_INACTIVE,
-      this.#previousGreyInactive
-    );
-    this.#previousGreyInactive = null;
-  }
-
-  // --- Page transparency -----------------------------------------------------
-
-  /**
-   * The `content` region's other half. A CSS background on the `<browser>` sits
-   * *behind* the content process's canvas, and the canvas is opaque, so on its
-   * own the region could only ever tint the rounded corners.
-   *
-   * `browser.tabs.allow_transparent_browser` is Firefox's own switch for
-   * building content browsers with `transparent="true"`, which reaches
-   * `BrowserParent::IsTransparent` and makes the canvas composite with alpha.
-   * `tabbrowser.js` reads it when it *creates* a browser, so this changes tabs
-   * opened from now on rather than the ones already open — the settings page
-   * says so rather than pretending otherwise.
-   *
-   * ── Why edgeless wants it too ─────────────────────────────────────────────
-   *
-   * Edgeless declares `background: transparent` on the content browser, on the
-   * argument that the pane should show the identical stack the chrome around it
-   * shows rather than a near miss. That argument only holds if there is
-   * something to show *through*: with an opaque canvas underneath, "paint
-   * nothing" means the content process's own white or `rgb(32,32,32)` is what
-   * is left, which is a rectangle in a slightly different colour from the rest
-   * of the window — the exact seam edgeless exists to remove, reintroduced
-   * behind the rule that removes it.
-   *
-   * With the internal-pages switch on — the default — the pref was already
-   * being claimed and edgeless was correct by coincidence. Turning that switch
-   * off gave the canvas back and edgeless silently stopped working. So the
-   * claim is now the union of the two switches that need it, which is also the
-   * honest description of what the pref is for.
-   */
-  #syncTransparentBrowser() {
-    const wanted =
-      Services.prefs.getBoolPref(PREF_INTERNAL, true) ||
-      Services.prefs.getBoolPref(PREF_EDGELESS, true);
-    if (!wanted) {
-      this.#releaseTransparentBrowser();
-      return;
-    }
-
-    if (this.#previousTransparentBrowser === null) {
-      const current = Services.prefs.getBoolPref(
-        PREF_ALLOW_TRANSPARENT_BROWSER,
-        false
-      );
-      if (!current) {
-        this.#previousTransparentBrowser = current;
-        Services.prefs.setBoolPref(PREF_ALLOW_TRANSPARENT_BROWSER, true);
-        TranceLog.log(NS, `enabled ${PREF_ALLOW_TRANSPARENT_BROWSER}`);
-      }
-    }
-    this.#markTransparentBrowsers();
-  }
-
-  /**
-   * Puts `transparent="true"` back on the browsers that lost it.
-   *
-   * This is the other half of `#releaseTransparentBrowser`, and without it that
-   * method is a one-way door — which is the whole of "the settings page keeps
-   * the wrong background until a restart when you toggle anything to do with
-   * transparency".
-   *
-   * The sequence is: something turns a transparency switch off, the release
-   * strips the attribute from every live browser (it has to — see that method),
-   * the switch goes back on, and the *pref* is restored but the browsers are
-   * not. `tabbrowser` reads that pref when it **creates** a browser, so nothing
-   * ever puts the attribute back on a tab that already exists, and the rules in
-   * trance-surfaces.css and in Zen's own zen-browser-container.css that key on
-   * it stay unmatched for the rest of that tab's life. Closing and reopening
-   * about:preferences fixed it, which is why it read as "until restart".
-   *
-   * Re-stamping is safe in the direction that matters. The canvas underneath is
-   * decided at construction and cannot be changed either way, so this only
-   * restores what CSS matches: a browser that was built alpha-composited is
-   * correctly transparent again, and one that was not shows the same thing it
-   * showed before the attribute was ever removed.
-   */
-  #markTransparentBrowsers() {
-    if (!Services.prefs.getBoolPref(PREF_ALLOW_TRANSPARENT_BROWSER, false)) {
-      return;
-    }
-    for (const browser of this.#contentBrowsers()) {
-      browser?.setAttribute(ATTR_ZEN_TRANSPARENT, "true");
     }
   }
 
@@ -1142,21 +738,20 @@ export class TranceSurfaces extends TranceFeature {
     // A newly created tab is selected before its browser publishes its final
     // initial URI. Re-check on the next frame so the mark appears with the new
     // tab instead of waiting for a later navigation event.
+    //
+    // Through the feature's own `onFrame`, not the scheduler's: a handle taken
+    // straight from `context.scheduler` is not in this feature's disposer list,
+    // so a tab opened in the same frame as the feature being switched off ran
+    // its callback afterwards, against a feature that had already given its
+    // attributes back (AUDIT.md Phase 3).
     this.addListener(tabbrowser.tabContainer, "TabOpen", () => {
-      this.context.scheduler.onFrame(() => this.#syncNewtab(), {
-        once: true,
-      });
+      this.onFrame(() => this.#syncNewtab(), { once: true });
     });
 
-    const listener = {
-      onLocationChange: browser => {
-        if (browser === win.gBrowser?.selectedBrowser) {
-          this.#syncNewtab();
-        }
-      },
-    };
-    tabbrowser.addTabsProgressListener(listener);
-    this.addDisposer(() => tabbrowser.removeTabsProgressListener(listener));
+    this.observeNavigation(
+      { onNavigate: () => this.#syncNewtab() },
+      { selectedOnly: true }
+    );
   }
 
   #syncNewtab() {
@@ -1360,81 +955,10 @@ export class TranceSurfaces extends TranceFeature {
     }
     this.#newtabLogo?.remove();
     this.#newtabLogo = null;
-    // `#newtabListening` is deliberately not cleared: the listeners belong to
-    // `addListener`/`addDisposer` and only go on a full teardown, so clearing it
-    // on a pref flip would attach a second pair next time the pref came back.
-  }
-
-  /**
-   * Gives the platform switch back — and takes the attribute off the browsers
-   * that were built while it was on.
-   *
-   * That second half is the whole of "turning Trance off leaves the page
-   * permanently tinted". `browser.tabs.allow_transparent_browser` is read when
-   * `tabbrowser` *creates* a browser, so every tab opened while it was on
-   * carries `transparent="true"` for the rest of its life. Zen has its own rule
-   * for that attribute — a flat
-   * `light-dark(rgba(255,255,255,0.6), rgba(255,255,255,0.1))` in
-   * zen-browser-container.css — which Trance's rules were replacing. With
-   * Trance's stylesheets gone and the attribute still there, Zen's rule is what
-   * is left, so the web view keeps a white veil over it until the tab is
-   * closed and reopened.
-   *
-   * Restoring the pref cannot fix that on its own: the pref decides what the
-   * *next* browser is built with. The attribute is what CSS matches, so the
-   * attribute is what has to go. The canvas stays alpha-composited underneath —
-   * it cannot be changed after construction either way — and what shows through
-   * it is the window, which is what shows through it in stock Zen too.
-   */
-  #releaseTransparentBrowser() {
-    if (this.#previousTransparentBrowser === null) {
-      return;
-    }
-    Services.prefs.setBoolPref(
-      PREF_ALLOW_TRANSPARENT_BROWSER,
-      this.#previousTransparentBrowser
-    );
-    this.#previousTransparentBrowser = null;
-
-    if (Services.prefs.getBoolPref(PREF_ALLOW_TRANSPARENT_BROWSER, false)) {
-      return;
-    }
-    for (const browser of this.#contentBrowsers()) {
-      browser?.removeAttribute(ATTR_ZEN_TRANSPARENT);
-    }
-  }
-
-  // --- The platform's own transparency ---------------------------------------
-
-  /**
-   * Turns on whichever "make the window translucent" pref this platform has.
-   *
-   * One of the four is claimed at most — the media query is what decides which,
-   * so a macOS build never touches Mica — and the user's value is kept so that
-   * switching the master off puts the browser back exactly as it was rather
-   * than leaving a platform pref on that Trance turned on and nothing turns off.
-   */
-  #claimPlatformTransparency() {
-    for (const { pref, media } of PLATFORM_TRANSPARENCY) {
-      if (this.#previousPlatformTransparency.has(pref)) {
-        continue;
-      }
-      if (!this.context.window.matchMedia(media).matches) {
-        continue;
-      }
-      const current = Services.prefs.getBoolPref(pref, false);
-      this.#previousPlatformTransparency.set(pref, current);
-      if (!current) {
-        Services.prefs.setBoolPref(pref, true);
-        TranceLog.log(NS, `enabled ${pref}`);
-      }
-    }
-  }
-
-  #releasePlatformTransparency() {
-    for (const [pref, previous] of this.#previousPlatformTransparency) {
-      Services.prefs.setBoolPref(pref, previous);
-    }
-    this.#previousPlatformTransparency.clear();
+    // `#newtabListening` is deliberately not cleared here: the listeners belong
+    // to `addListener`/`addDisposer` and only go on a full teardown, so
+    // clearing it on a sub-pref flip would attach a second pair next time the
+    // pref came back. `onDisable` is where it is cleared, because that is the
+    // point at which the disposers have actually run.
   }
 }

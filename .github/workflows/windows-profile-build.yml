@@ -14,10 +14,6 @@ on:
         description: "The path to the zip archive containing the profile data"
         required: false
         type: string
-      release-branch:
-        description: "The branch to build"
-        required: true
-        type: string
 
 jobs:
   windows-profile-build:
@@ -28,7 +24,7 @@ jobs:
       matrix:
         arch: [x86_64, aarch64]
 
-    runs-on: ${{ inputs.release-branch == 'release' && 'windows-latest' || 'windows-latest' }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
@@ -48,14 +44,14 @@ jobs:
         run: npm i -g @zen-browser/surfer
 
       - name: Load Surfer CI setup
-        run: npm run surfer -- ci --brand ${{ inputs.release-branch }} --display-version ${{ inputs.build-version }}
+        run: npm run surfer -- ci --brand trance --display-version ${{ inputs.build-version }}
 
       - name: Download artifact
         if: ${{ matrix.arch == 'x86_64' }}
         uses: actions/download-artifact@v4
         with:
           path: C:\artifact
-          name: ${{ matrix.arch == 'aarch64' && 'arm64' || matrix.arch }}-zen-windows-profile-data-and-jarlog.zip
+          name: ${{ matrix.arch == 'aarch64' && 'arm64' || matrix.arch }}-trance-windows-profile-data-and-jarlog.zip
 
       - name: Unpack artifact
         if: ${{ matrix.arch == 'x86_64' }}
@@ -93,7 +89,7 @@ jobs:
           echo 'export PATH=/c/mozilla-build/msys2/usr/bin:$PATH' '' >> mozilla-build-run.sh
           echo './mach --no-interactive bootstrap --application-choice browser' '' >> mozilla-build-run.sh
           echo './mach python ../scripts/download_pgo_extended_corpus.py' '' >> mozilla-build-run.sh
-          echo 'LLVM_PROFDATA=/c/Users/runneradmin/.mozbuild/clang/bin/llvm-profdata.exe JARLOG_FILE=en-US.log ./mach python build/pgo/profileserver.py --binary /c/artifact/zen/zen.exe --extended-corpus ./pgo-extended-corpus --' '' >> mozilla-build-run.sh
+          echo 'LLVM_PROFDATA=/c/Users/runneradmin/.mozbuild/clang/bin/llvm-profdata.exe JARLOG_FILE=en-US.log ./mach python build/pgo/profileserver.py --binary /c/artifact/trance/trance.exe --extended-corpus ./pgo-extended-corpus --' '' >> mozilla-build-run.sh
           C:\mozilla-build\start-shell.bat $workspace_dir_current\mozilla-build-run.sh
 
       - name: Move profile data

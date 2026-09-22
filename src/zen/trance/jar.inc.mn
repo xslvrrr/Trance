@@ -22,6 +22,30 @@
         content/browser/trance-components/TranceIcons.mjs                       (../../zen/trance/core/TranceIcons.mjs)
         content/browser/trance-components/TranceFeature.mjs                     (../../zen/trance/core/TranceFeature.mjs)
 
+# === Ownership services (AUDIT.md Phases 3 and 5) ===
+#
+# Four of these are per *window* and two are per *process*, and a packaging map
+# cannot show the difference, so it is written down here.
+#
+# Per window, imported with `{ global: "current" }`: the feature registry, the
+# navigation/progress router, the tab/group structural cache and the window
+# material owner. Each is state about one browser window and must not be handed
+# to the next one.
+#
+# Per process, imported with no `global` option at all so that they resolve in
+# the shared system global: the global-preference and global-stylesheet
+# registries. Their entire purpose is a refcount that spans windows, and a
+# registry loaded into a window's global is a second private refcount — which is
+# the bug they exist to fix, not a detail of how they are imported (ADR-059).
+
+        content/browser/trance-components/TranceFeatureRegistry.mjs             (../../zen/trance/core/TranceFeatureRegistry.mjs)
+        content/browser/trance-components/TranceNavigation.mjs                  (../../zen/trance/core/TranceNavigation.mjs)
+        content/browser/trance-components/TranceTabCache.mjs                    (../../zen/trance/core/TranceTabCache.mjs)
+        content/browser/trance-components/TranceMaterial.mjs                    (../../zen/trance/core/TranceMaterial.mjs)
+
+        content/browser/trance-components/TranceGlobalPrefs.mjs                 (../../zen/trance/core/TranceGlobalPrefs.mjs)
+        content/browser/trance-components/TranceGlobalSheets.mjs                (../../zen/trance/core/TranceGlobalSheets.mjs)
+
         content/browser/trance-styles/trance.css                                (../../zen/trance/styles/trance.css)
         content/browser/trance-styles/trance-tokens.css                         (../../zen/trance/styles/trance-tokens.css)
         content/browser/trance-styles/trance-reset.css                          (../../zen/trance/styles/trance-reset.css)
@@ -50,8 +74,22 @@
         content/browser/trance-components/TranceTheme.mjs                       (../../zen/trance/features/theme/TranceTheme.mjs)
         content/browser/trance-styles/trance-theme.css                          (../../zen/trance/styles/trance-theme.css)
 
+# The theme splits in two: the state owner is always registered, because a saved
+# theme has to render at startup whether or not anyone opens the picker; the
+# controls and their stylesheet load on the picker's first `popupshowing`
+# (ADR-069).
+
+        content/browser/trance-components/TranceThemeState.mjs                  (../../zen/trance/features/theme/TranceThemeState.mjs)
+
         content/browser/trance-components/TranceOnboarding.mjs                  (../../zen/trance/features/onboarding/TranceOnboarding.mjs)
         content/browser/trance-components/TranceZenImport.mjs                   (../../zen/trance/features/onboarding/TranceZenImport.mjs)
+
+# The persistent half of onboarding — the channel, architecture and mod choices
+# outlive the flow that first asked for them — and the provisioning operations
+# the flow drives.
+
+        content/browser/trance-components/TranceOnboardingSettings.mjs          (../../zen/trance/features/onboarding/TranceOnboardingSettings.mjs)
+        content/browser/trance-components/TranceProvision.mjs                   (../../zen/trance/features/onboarding/TranceProvision.mjs)
         content/browser/trance-styles/trance-onboarding.css                     (../../zen/trance/styles/trance-onboarding.css)
 
         content/browser/trance-components/TranceFirstRun.mjs                    (../../zen/trance/features/firstrun/TranceFirstRun.mjs)

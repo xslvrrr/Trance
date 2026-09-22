@@ -1,0 +1,88 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: upstream prefs Trance ships a different value for.
+#
+# Every entry here already exists in `prefs/firefox/**` or `prefs/zen/**` with
+# a different value. Nothing is *added* by this file — it only re-declares a
+# pref an upstream file already declares, and wins because `ffprefs` sorts any
+# file under a `trance/` directory last and keeps the last declaration of each
+# (name, condition, type). See ADR-077.
+#
+# Why a file instead of editing the upstream ones in place: each of those edits
+# was an upstream touchpoint (AUDIT.md Phase 6.9), and a touchpoint costs a
+# conflict on every rebase for as long as it exists. A pref *value* is the one
+# kind of divergence that does not need to live in the file it diverges from,
+# because ffprefs resolves it by precedence rather than by textual edit. Five
+# touchpoints become none, and the reasons move with the values instead of
+# being scattered through four files somebody else owns.
+#
+# The rule this file lives by: values only. A pref Trance *introduces* belongs
+# in the feature's own file (`prefs/trance/<feature>.yaml`), not here, and a
+# pref nobody upstream declares is not an override.
+
+# === Mark: Address bar ===
+
+# `true`, not Firefox's `false` as Zen sets it. Search suggestions are the
+# address bar doing the job the address bar is for, and Trance's other privacy
+# defaults — the whole of prefs/privatefox/, plus uBlock Origin, Privacy Badger
+# and ClearURLs installed on first run — are about tracking rather than about
+# the search engine you deliberately chose seeing what you deliberately typed
+# into it.
+#
+# The private-window switch (`browser.search.suggest.enabled.private`) stays
+# off, and is deliberately not overridden here. A private window's whole
+# contract is that it does not talk about itself.
+- name: browser.search.suggest.enabled
+  value: true
+
+# `float`, not Zen's `floating-on-type`: the address bar is always the floating
+# panel rather than becoming one when you start typing.
+#
+# Trance paints that panel — it is the one surface outside the single edgeless
+# layer with a `backdrop-filter` of its own, and `trance.chrome.urlbar.focus-*`
+# recedes the page behind it. A bar that is docked until the first keystroke
+# means both of those arrive one character late, which reads as the effect
+# stuttering rather than as the bar changing mode.
+- name: zen.urlbar.behavior
+  value: float
+
+# === Mark: Layout ===
+
+# `false`, not Zen's `true`: Trance ships the sidebar-and-toolbar layout.
+#
+# Single-toolbar puts the address bar inside the sidebar's top strip, which is
+# also where the window buttons, the compact-mode toggle and the space switcher
+# live — four owners for one 36px row, and the row Trance's own top-buttons
+# reveal (`trance.chrome.topbuttons.reveal-on-hover`) is about. With a toolbar
+# of its own the address bar has room to be the thing it is, and the edgeless
+# rules in trance-surfaces.css already handle both layouts.
+- name: zen.view.use-single-toolbar
+  value: false
+
+# The new-tab button lives at the bottom of the tab strip, where Trance's own
+# tabstrip rules put it, rather than above the tabs.
+- name: zen.view.show-newtab-button-top
+  value: false
+
+# === Mark: Site Injection ===
+
+# Zen grants zen-browser.app a privileged injection surface (the mods
+# marketplace actor). Trance has no website of its own and must not hand that
+# surface to a domain it does not control. The pref cannot simply be removed:
+# ZenActorsManager reads it with getStringPref() and no fallback, and the value
+# has to parse as a match pattern. So official builds get a reserved-TLD
+# pattern that can never resolve, and dev builds keep Zen's localhost hatch.
+#
+# Both conditions are re-declared, because ffprefs resolves a pref per
+# (name, condition, type): overriding only the official half would leave Zen's
+# unofficial half untouched, which is the correct value here but by accident.
+- name: zen.injections.match-urls
+  value: "https://trance.invalid/*"
+  locked: true
+  condition: "defined(MOZILLA_OFFICIAL)"
+
+- name: zen.injections.match-urls
+  value: "http://localhost/*"
+  condition: "!defined(MOZILLA_OFFICIAL)"

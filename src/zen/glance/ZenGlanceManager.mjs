@@ -21,6 +21,10 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
   #glances = new Map();
   #currentGlanceID = null;
   #confirmationTimeout = null;
+  // >>> TRANCE
+  #windowActivitySuspended = false;
+  #activityUnsubscribe = null;
+  // <<< TRANCE
 
   // Animation flags
   animatingOpen = false;
@@ -28,7 +32,6 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
   closingGlance = false;
   #duringOpening = false;
   #ignoreClose = false;
-
   // Click handling
   #lastLinkClickData = { clientX: 0, clientY: 0, height: 0, width: 0 };
 
@@ -48,7 +51,41 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
     this.#setupPreferences();
     this.#setupObservers();
     this.#insertIntoContextMenu();
+    // >>> TRANCE
+    this.#activityUnsubscribe = window.gZenWindowActivity?.subscribe(
+      state => this.#onWindowActivityChanged(state),
+      { immediate: true }
+    );
+    window.addEventListener(
+      "unload",
+      () => {
+        this.#activityUnsubscribe?.();
+        this.#activityUnsubscribe = null;
+      },
+      { once: true }
+    );
+    // <<< TRANCE
   }
+
+  // >>> TRANCE
+  #onWindowActivityChanged(state) {
+    this.#windowActivitySuspended = Boolean(state?.suspended);
+    const parentBrowser = this.#currentParentTab?.linkedBrowser;
+    const glanceBrowser = this.#currentBrowser;
+    if (parentBrowser) {
+      this.#setBrowserActivity(parentBrowser, true);
+    }
+    if (glanceBrowser) {
+      this.#setBrowserActivity(glanceBrowser, true);
+    }
+  }
+
+  #setBrowserActivity(browser, active) {
+    const shouldBeActive = active && !this.#windowActivitySuspended;
+    browser.zenModeActive = shouldBeActive;
+    browser.docShellIsActive = shouldBeActive;
+  }
+  // <<< TRANCE
 
   #setupEventListeners() {
     window.addEventListener("TabClose", this.onTabClose.bind(this));
@@ -592,8 +629,9 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
       "zen.glance.deactivate-docshell-during-animation"
     );
     if (shouldDeactivateDocShell) {
-      browserElement.zenModeActive = false;
-      browserElement.docShellIsActive = false;
+      // >>> TRANCE
+      this.#setBrowserActivity(browserElement, false);
+      // <<< TRANCE
     }
     gZenUIManager
       .elementAnimate(this.browserWrapper, arcSequence, {
@@ -604,8 +642,9 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
       })
       .then(() => {
         if (shouldDeactivateDocShell) {
-          browserElement.zenModeActive = activeValue;
-          browserElement.docShellIsActive = true;
+          // >>> TRANCE
+          this.#setBrowserActivity(browserElement, activeValue);
+          // <<< TRANCE
         }
         this.#finalizeGlanceOpening(imageDataElement, browserElement, resolve);
       });
@@ -1282,10 +1321,10 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
    * Set glance browser and tab states
    */
   #setGlanceStates() {
-    this.#currentParentTab.linkedBrowser.zenModeActive = true;
-    this.#currentParentTab.linkedBrowser.docShellIsActive = true;
-    this.#currentBrowser.zenModeActive = true;
-    this.#currentBrowser.docShellIsActive = true;
+    // >>> TRANCE
+    this.#setBrowserActivity(this.#currentParentTab.linkedBrowser, true);
+    this.#setBrowserActivity(this.#currentBrowser, true);
+    // <<< TRANCE
     this.#currentBrowser.setAttribute("zen-glance-selected", true);
     this.fillOverlay(this.#currentBrowser);
     this.#currentParentTab._visuallySelected = true;
@@ -1360,17 +1399,23 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
       if (closeParentTab) {
         browserContainer.classList.remove("deck-selected");
       }
-      this.#currentParentTab.linkedBrowser.zenModeActive = false;
+      // >>> TRANCE
+      this.#setBrowserActivity(
+        this.#currentParentTab.linkedBrowser,
+        !closeParentTab
+      );
+      // <<< TRANCE
     }
 
-    this.#currentBrowser.zenModeActive = false;
-
-    if (closeParentTab && parentHasBrowser) {
-      this.#currentParentTab.linkedBrowser.docShellIsActive = false;
+    // >>> TRANCE
+    if (closeCurrentTab) {
+      this.#setBrowserActivity(this.#currentBrowser, false);
+    } else {
+      this.#currentBrowser.zenModeActive = false;
     }
+    // <<< TRANCE
 
     if (closeCurrentTab) {
-      this.#currentBrowser.docShellIsActive = false;
       this.overlay.classList.remove("deck-selected");
       this.#currentTab._selected = false;
     }
@@ -1382,16 +1427,13 @@ class nsZenGlanceManager extends nsZenDOMOperatedFeature {
     this.#currentBrowser.removeAttribute("zen-glance-selected");
   }
 
-  /**
-   * Open glance on location change if not animating
-   *
-   * @param {Tab} prevTab - The previous tab
-   */
   #onLocationChangeOpenGlance(prevTab) {
     if (!this.animatingOpen) {
       this.quickOpenGlance();
       if (prevTab && prevTab.linkedBrowser) {
-        prevTab.linkedBrowser.docShellIsActive = false;
+        // >>> TRANCE
+        this.#setBrowserActivity(prevTab.linkedBrowser, false);
+        // <<< TRANCE
         prevTab.linkedBrowser
           .closest(".browserSidebarContainer")
           .classList.remove("deck-selected");
