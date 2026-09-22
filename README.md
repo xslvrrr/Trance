@@ -17,7 +17,7 @@ loader or the conflicts, with invisible-window work suspended instead of left ru
 
 ## Download
 
-[**Trance 0.2.0 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.2.0)
+[**Trance 0.2.1 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.2.1)
 
 The [0.2.0 release notes](./docs/trance/release-0.2.0.md) cover the theme controls, the
 performance defaults, the window activity controller and the import-integrity work.

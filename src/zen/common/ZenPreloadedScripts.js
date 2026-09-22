@@ -41,6 +41,7 @@
     "chrome://browser/content/zen-components/ZenEmojiPicker.mjs",
     "chrome://browser/content/zen-components/ZenLiveFoldersUI.mjs",
     "chrome://browser/content/zen-components/ZenDownloadAnimation.mjs",
+    "resource:///modules/zen/share/ZenShareManager.mjs",
     // >>> TRANCE
     // The only Trance entry point. TranceCore imports the rest of the
     // foundation layer and every feature module itself, and only when

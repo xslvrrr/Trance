@@ -18,6 +18,11 @@ on:
         required: true
         type: "boolean"
         default: false
+      disable-pgo:
+        description: "Build without PGO (skips the profile generation stages)"
+        required: false
+        type: "boolean"
+        default: false
   workflow_call:
     inputs:
       create_release:
@@ -33,6 +38,11 @@ on:
       use-sccache:
         description: "Use sccache"
         required: true
+        type: "boolean"
+        default: false
+      disable-pgo:
+        description: "Build without PGO (skips the profile generation stages)"
+        required: false
         type: "boolean"
         default: false
 
@@ -60,6 +70,7 @@ jobs:
           echo "create_release: ${{ inputs.create_release }}"
           echo "update_version: ${{ inputs.update_version }}"
           echo "use sccache: ${{ inputs.use-sccache }}"
+          echo "disable-pgo: ${{ inputs.disable-pgo }}"
           echo "GITHUB_REPOSITORY: ${{ github.repository }}"
           echo "GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}"
           echo "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
@@ -247,6 +258,7 @@ jobs:
   windows-step-1:
     name: Windows build step 1 (PGO build)
     uses: ./.github/workflows/windows-release-build.yml
+    if: ${{ !inputs.disable-pgo }}
     needs: [build-data, buildid]
     permissions:
       contents: write
@@ -261,6 +273,7 @@ jobs:
   windows-step-2:
     name: Windows build step 2 (Generate profile data)
     uses: ./.github/workflows/windows-profile-build.yml
+    if: ${{ !inputs.disable-pgo }}
     permissions:
       contents: write
     secrets: inherit
@@ -275,10 +288,13 @@ jobs:
     permissions:
       contents: write
     secrets: inherit
+    # windows-step-2 is skipped when PGO is disabled, so don't inherit its skip
+    if: ${{ !failure() && !cancelled() }}
     needs: [build-data, windows-step-2, start-self-host, buildid]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: false
+      disable-pgo: ${{ inputs.disable-pgo }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
 
@@ -293,10 +309,12 @@ jobs:
       build-version: ${{ needs.build-data.outputs.version }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
+      disable-pgo: ${{ inputs.disable-pgo }}
 
   mac-step-1:
     name: macOS build step 1 (PGO build)
     uses: ./.github/workflows/macos-release-build.yml
+    if: ${{ !inputs.disable-pgo }}
     needs: [build-data, buildid]
     permissions:
       contents: write
@@ -310,6 +328,7 @@ jobs:
   mac-step-2:
     name: macOS build step 2 (Generate profile data)
     uses: ./.github/workflows/macos-profile-build.yml
+    if: ${{ !inputs.disable-pgo }}
     permissions:
       contents: write
     secrets: inherit
@@ -323,10 +342,13 @@ jobs:
     permissions:
       contents: write
     secrets: inherit
+    # mac-step-2 is skipped when PGO is disabled, so don't inherit its skip
+    if: ${{ !failure() && !cancelled() }}
     needs: [build-data, mac-step-2, start-self-host, buildid]
     with:
       build-version: ${{ needs.build-data.outputs.version }}
       generate-pgo: false
+      disable-pgo: ${{ inputs.disable-pgo }}
       MOZ_BUILD_DATE: ${{needs.buildid.outputs.buildids}}
       use-sccache: ${{ inputs.use-sccache }}
 
@@ -524,6 +546,7 @@ jobs:
 
       - name: Commit
         uses: stefanzweifel/git-auto-commit-action@v5
+        if: ${{ inputs.create_release || inputs.update_branch == 'twilight' }}
         with:
           commit_message: "Update Trance update manifests"
           commit_user_name: Trance CI
@@ -533,8 +556,10 @@ jobs:
       - name: Generate Release Notes
         run: bash .github/workflows/src/generate_release_notes.sh
 
+
       - name: Release
         uses: softprops/action-gh-release@v2.2.2
+
         with:
           token: ${{ secrets.DEPLOY_KEY }}
           tag_name: ${{ needs.build-data.outputs.version }}

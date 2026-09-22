@@ -10,13 +10,15 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
-  TabStateFlusher: "resource:///modules/sessionstore/TabStateFlusher.sys.mjs",
+  TabStateFlusher:
+    "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs",
   // eslint-disable-next-line mozilla/valid-lazy
   ZenSessionStore: "resource:///modules/zen/ZenSessionManager.sys.mjs",
-  TabStateCache: "resource:///modules/sessionstore/TabStateCache.sys.mjs",
+  TabStateCache:
+    "moz-src:///browser/components/sessionstore/TabStateCache.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
-  RunState: "resource:///modules/sessionstore/RunState.sys.mjs",
+  RunState: "moz-src:///browser/components/sessionstore/RunState.sys.mjs",
 });
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -328,7 +330,7 @@ class nsZenWindowSync {
     // browser/components/extensions/parent/ext-browser.js.
     // See: Bug 1960104 - Improve tab group ID generation in addTabGroup
     // This is implemented from gBrowser.addTabGroup.
-    return `${Date.now()}-${Math.round(Math.random() * 100)}`;
+    return `${Date.now()}-${Services.uuid.generateUUID().toString().slice(1, -1)}`;
   }
 
   /**
@@ -381,6 +383,12 @@ class nsZenWindowSync {
 
   handleEvent(aEvent) {
     const window = aEvent.currentTarget.documentGlobal ?? aEvent.currentTarget;
+    // The library builds copies of tabs and folders that fire these same
+    // events while being built. Their ids are suffixed with "-copy" (see
+    // ZenLibrarySpacesSection#renameIds), so never sync anything from one.
+    if (aEvent.target?.id?.endsWith("-copy")) {
+      return;
+    }
     if (
       !window.gZenStartup.isReady ||
       !window.gZenWorkspaces?.shouldHaveWorkspaces ||
@@ -771,8 +779,8 @@ class nsZenWindowSync {
     const otherBrowser = aTab.linkedBrowser;
 
     // We aren't closing the other tab so, we also need to swap its tablisteners.
-    let filter = otherTabBrowser._getTabProgressFilter(aTab);
-    let tabListener = otherTabBrowser._getTabProgressListener(aTab);
+    let filter = otherTabBrowser.zenGetTabProgressFilter(aTab);
+    let tabListener = otherTabBrowser.zenGetTabProgressListener(aTab);
     try {
       otherBrowser.webProgress.removeProgressListener(filter);
       filter.removeProgressListener(tabListener);
@@ -794,7 +802,7 @@ class nsZenWindowSync {
         true,
         false
       );
-      otherTabBrowser._setTabProgressListener(aTab, tabListener);
+      otherTabBrowser.zenSetTabProgressListener(aTab, tabListener);
 
       const notifyAll = Ci.nsIWebProgress.NOTIFY_ALL;
       filter.addProgressListener(tabListener, notifyAll);
