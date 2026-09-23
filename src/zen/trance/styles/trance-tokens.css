@@ -81,6 +81,32 @@
     var(--trance-surface-sheen),
     var(--trance-surface-tint)
   );
+
+  /* The same sheen, scaled by the transparency control.
+   *
+   * `--trance-surface-bg` is an absolute colour, and that is correct for the
+   * things that paint it as a *surface* of their own — a panel background, an
+   * onboarding card, a hover state. It is wrong for the one layer that is
+   * painted over the whole window, because that layer is the only Trance
+   * colour left once `--trance-surface-alpha` reaches 0: the workspace
+   * gradient goes with the alpha, the window is transparent, and an ~8.5%
+   * white-weighted veil over the entire browser is what remained. The
+   * transparency slider therefore had a floor it could not describe — "fully
+   * transparent" was a strong white tint.
+   *
+   * Scaling it here rather than lowering it means the slider's other end is
+   * unchanged: at 100% this resolves to `--trance-surface-bg` exactly, and
+   * every value between is the sheen at the strength the rest of the surface
+   * is being shown at. One control, one material.
+   *
+   * `--trance-surface-alpha` is a `<percentage>`, which is what the second
+   * argument of `color-mix()` takes, so this is the token multiplied rather
+   * than a second value to keep in step. */
+  --trance-surface-veil: color-mix(
+    in srgb,
+    var(--trance-surface-bg) var(--trance-surface-alpha),
+    transparent
+  );
   --trance-surface-border: color-mix(in oklch, currentColor 12%, transparent);
   --trance-surface-highlight: color-mix(in oklch, currentColor 6%, transparent);
 

@@ -41,25 +41,19 @@
  *
  * ── The blur budget ────────────────────────────────────────────────────────
  *
- * At most three `backdrop-filter` surfaces — two in the shipped configuration,
- * and zero of them on a platform whose window is already translucent, where a
- * backdrop filter replaces the operating system's frost with black rather than
- * softening it. See the Blur section below; that is the single most
- * consequential thing in this file.
+ * At most three `backdrop-filter` surfaces, one per region, never nested. See
+ * the Blur section below; that is the single most consequential thing in this
+ * file.
  *
- * Where they do apply: one per region, never nested.
- *
- *   edgeless → #zen-main-app-wrapper             (the default: one layer for the
- *              sidebar, the toolbar and the space around the page at once,
- *              which is what the two below add up to)
- *   sidebar  → #navigator-toolbox                (only with edgeless off)
- *   toolbar  → #zen-appcontent-navbar-wrapper    (only with edgeless off, and
- *              multi-toolbar layout only — in single-toolbar layout the nav bar
- *              lives inside the toolbox, so blurring both would nest, which is
- *              the one case that is strictly worse than either alone: the
- *              parent surface has to be resolved before the child can sample it)
- *   overlay  → #urlbar[breakout-extend]          (either way: it floats over the
- *              page, not over the chrome, so no other surface is behind it)
+ *   sidebar  → #navigator-toolbox                (always; in compact mode it
+ *              floats over the page, which is where the frost shows most)
+ *   toolbar  → #zen-appcontent-navbar-wrapper    (sidebar-and-toolbar layout
+ *              only — in single-toolbar layout the nav bar lives inside the
+ *              toolbox — and not while the address bar is extended, because
+ *              the extended bar is its descendant and nesting is the one case
+ *              strictly worse than either surface alone)
+ *   overlay  → #urlbar[breakout-extend]          (it floats over the page, so
+ *              the page is what it frosts)
  *   internal → browser[trance-internal-page]     (opt-in, and not a chrome
  *              region at all: the browser's own pages, frosted rather than
  *              merely translucent. Painted only while a browser is showing an
@@ -162,7 +156,22 @@
    * deciding what the browser's base colour is on every platform, including the
    * ones where it is what makes an opaque window opaque. A gradient of one
    * colour is a background *layer*, so the sheen composites over whatever Zen
-   * chose and nothing is taken away. */
+   * chose and nothing is taken away.
+   *
+   * ── Why a translucent window gets a weaker one ────────────────────────────
+   *
+   * Because this is the last Trance colour standing. Everything else the
+   * surface paints goes through `--trance-surface-alpha` — the workspace
+   * gradient on `#zen-browser-background` and `#zen-toolbar-background` above
+   * — and this layer did not, so at 0% the chrome was still carrying an ~8.5%
+   * white-weighted veil across the whole window. That is the floor the
+   * transparency slider could not get under: its bottom end said "fully
+   * transparent" and showed a strong white tint over the desktop.
+   *
+   * `--trance-surface-veil` is this same colour multiplied by that alpha, so
+   * 0% is genuinely nothing and 100% is exactly what an opaque theme paints.
+   * The unscaled rule stays for the opaque case, where the alpha has no
+   * meaning and the sheen is simply part of the base colour. */
   & #zen-main-app-wrapper {
     background-image: linear-gradient(
       var(--trance-surface-bg),
@@ -177,6 +186,13 @@
     border-radius: var(--trance-radius-lg);
     box-shadow: var(--trance-elev-2);
   }
+}
+
+:root[trance="true"][trance-surface-transparent="true"] #zen-main-app-wrapper {
+  background-image: linear-gradient(
+    var(--trance-surface-veil),
+    var(--trance-surface-veil)
+  );
 }
 
 /* ── The background image ───────────────────────────────────────────────────
@@ -707,52 +723,44 @@
 /* ── Blur ───────────────────────────────────────────────────────────────────
  *
  * One declaration block per region, each gated on its own attribute plus the
- * shared visibility attribute — and all of it gated on the window *not* already
- * being translucent. That last condition is the whole of this section, and it
- * was learned the hard way.
+ * shared visibility attribute.
  *
- * ── Why a translucent window must not carry a backdrop-filter ─────────────
+ * ── What this gate used to be, and why it is gone ─────────────────────────
  *
- * Frosting comes from two completely different places depending on the
- * platform:
+ * Until Firefox 156 this whole section was also gated on the window *not*
+ * being translucent in its own right — macOS vibrancy, Windows Mica, a
+ * transparent GTK window. The reason was real and measured: a
+ * `backdrop-filter` there established a backdrop root, snapshotted the region
+ * behind the element, and found nothing in it, because the desktop showing
+ * through a transparent window is not something Gecko painted. Filtering that
+ * and compositing the result replaced the operating system's frost with a flat
+ * black rectangle. With `backdrop-filter` on `#navigator-toolbox` the sidebar
+ * rendered solid black; with the identical translucency and no
+ * `backdrop-filter` it rendered as glass.
  *
- *   - Where the window itself is translucent — macOS vibrancy, Windows Mica,
- *     a transparent GTK window — the frost is produced *behind Gecko* by the
- *     compositor, and `#main-window` is `background: transparent` so it shows
- *     through (zen-theme.css). Nothing Gecko paints is involved.
- *   - Everywhere else the window is opaque, the workspace gradient is what is
- *     behind a chrome region, and `backdrop-filter` is how that gets softened.
+ * That is no longer how WebRender resolves a backdrop. Zen's gh-15513 replaced
+ * `allow_backdrop_to_work_on_transparency.patch` with
+ * `backdrop_filter_reads_web_content.patch`, which threads
+ * `backdrop_reads_lower_slices` through the tiled command buffer so a
+ * backdrop-filter on a chrome surface reads back the slices *below* it — the
+ * web content — instead of only its own; and
+ * `gfx.webrender.opaque-backdrop-fallback` resolves what is left as opaque
+ * rather than as transparent black. Upstream then applied the conclusion to
+ * its own sheets: `zen-compact-mode.css` and `zen-omnibox.css` now carry
+ * `backdrop-filter` with no platform term at all, only
+ * `:not(:-moz-window-inactive)`.
  *
- * Putting a `backdrop-filter` on a region of a *translucent* window does not
- * blur the desktop showing through it. It establishes a backdrop root, snapshots
- * the empty region behind the element, filters that, and composites the result
- * over the transparent area — which replaces the operating system's frost with
- * a flat black rectangle. Measured, not theorised: with `backdrop-filter` on
- * `#navigator-toolbox` the sidebar rendered solid black; with the identical
- * translucency and no `backdrop-filter` it rendered as glass over the desktop.
+ * So the premise the gate was built on is false in this tree, and keeping it
+ * cost the one thing a gate should never cost: `trance.surface.blur.radius`
+ * had no consumer in Trance's own default configuration, which is macOS with
+ * vibrancy on. The master blur knob read that as "inert" and could not be
+ * moved at all. `TranceTheme#blurHasConsumer` is the same question in
+ * JavaScript and loses the same term.
  *
- * That is the answer to three separate reports at once — "frosting is pure
- * black", "the area around the tab window is unfrosted", and "blur radius does
- * nothing". The blur was not doing nothing. It was the thing painting the black.
- *
- * So where one of those materials is actually in effect the blur budget is
- * zero surfaces and the operating system is the whole effect, which is also
- * the cheapest possible outcome (TRANCE.md §3.3). Where Gecko paints the
- * backdrop, the budget is the same three regions it always was.
- *
- * The gate is therefore "is this window translucent in its own right", not "is
- * this macOS". It used to be the second, and that made `trance.surface.blur.radius`
- * a pref with no consumer on a whole platform *even with transparency turned
- * off* — where the window is opaque, Gecko is painting the backdrop and the
- * blur is both correct and the only frost available. macOS and Linux are now
- * asked through `-moz-pref()` on the platform switch `TranceSurfaces` claims;
- * Mica answers through `-moz-windows-mica`, which reports what is in effect
- * rather than what was requested. `TranceTheme#blurHasConsumer` is the same
- * question in JavaScript, and it is what makes the master blur knob go inert
- * instead of writing a number nothing reads.
- *
- * `flat` opts out of blur even where it would work: translucency without a
- * single Gaussian pass.
+ * What survives is the part that was never about the platform: a person who
+ * has asked for reduced transparency is asking for fewer of these passes, not
+ * more, and `flat` opts out of blur even where it works — translucency without
+ * a single Gaussian pass. The budget is still three regions (ADR-019).
  *
  * The other half of the "blur does nothing" report was a plain bug:
  * `trance-surface-visible` was never set at startup, because `TranceSurfaces`
@@ -761,21 +769,51 @@
  * session. See `TranceSurfaces#observeVisibility`.
  */
 
-/* stylelint-disable-next-line media-query-no-invalid */
-@media (prefers-reduced-transparency: no-preference) and (not ((-moz-windows-mica) or ((-moz-platform: macos) and -moz-pref('zen.widget.macos.window-vibrancy')) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')))) {
+@media (prefers-reduced-transparency: no-preference) {
   :root[trance="true"][trance-surface-visible="true"] {
-    /* One surface for the whole browser. `#zen-main-app-wrapper` spans the
-     * sidebar, the toolbar and the space around the page, so this is the whole
-     * of the chrome in one pass — and it cannot nest, because there is only
-     * one. */
-    & #zen-main-app-wrapper {
+    /* ── Why the regions, and not `#zen-main-app-wrapper` ──────────────────
+     *
+     * The surface used to be one declaration on the wrapper, on the grounds
+     * that it spans the sidebar, the toolbar and the space around the page at
+     * once. It did, and it blurred nothing. A `backdrop-filter` softens what
+     * is painted *behind* its element, and everything this sheet paints — the
+     * workspace gradient, the texture on `::before`, the sheen — is painted
+     * by the wrapper or inside it. Its backdrop was the window background:
+     * transparent on a translucent window, a flat colour on an opaque one.
+     * Measured on a vibrancy window, the sidebar was byte-identical at 0px and
+     * at 60px, so the radius had no visible reader on any platform, and the
+     * master blur knob was a control with no effect even once it could move.
+     *
+     * One level in, the regions do have something behind them: the texture
+     * and the gradient under the sidebar and the toolbar, and — in compact
+     * mode — the page under the floating sidebar, which is where glass
+     * matters most. With Firefox 156's backdrop patch none of them resolves
+     * to a black slab over native translucency.
+     *
+     * One per region, never nested, which is the budget TRANCE.md §3.3 set
+     * before the surface had been folded into one. */
+    & #navigator-toolbox {
+      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+
+    /* The toolbar row above the page, in the sidebar-and-toolbar layout only:
+     * in single-toolbar layout the nav bar lives inside the toolbox, which is
+     * already a surface.
+     *
+     * It steps aside while the address bar is extended. The extended bar is a
+     * descendant of this row, so leaving both on would nest two surfaces —
+     * the one arrangement strictly worse than either alone — and the bar
+     * covers the row while it is open anyway. */
+    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+     * One id-matched element, and an attribute the browser already
+     * invalidates on. The alternative is a second attribute mirrored from JS
+     * on every focus and blur of the address bar. */
+    &:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper:not(:has(#urlbar[breakout-extend])) {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
 
     /* The expanded address bar keeps its own surface: it floats over the page
-     * rather than over the chrome, so the layer above is not behind it and
-     * cannot do this job. Two surfaces at most, and only while the bar is
-     * actually extended. */
+     * rather than over the chrome. */
     & #urlbar[breakout-extend] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
@@ -786,14 +824,19 @@
      * fourth *chrome* region — it is the same page-transparency feature the
      * internal-pages switch already ships, with the blur that makes a
      * translucent page read as glass instead of as a washed-out slab
-     * (ADR-026). It costs a pass only while a browser is actually showing an
-     * `about:` page, which is what `[trance-internal-page]` marks, and only on
-     * the platforms this whole block is gated to — where the window is
-     * translucent in its own right the operating system has already done it.
+     * (ADR-026).
+     *
+     * Only on a pane that is actually displayed: the selected one, or the
+     * panes of a split view. `[trance-internal-page]` marks every browser
+     * showing an `about:` page, background tabs included, and a declaration on
+     * each of those is a surface on each of them the moment it is shown — the
+     * budget counts what is declared, not what happens to be visible now.
      *
      * It is also mutually exclusive with the edgeless surface in practice: the
      * page paints over that layer, so the two never sample each other. */
-    &[trance-surface-internal-blur="true"] browser[trance-internal-page="true"] {
+    &[trance-surface-internal-blur="true"]
+      .browserSidebarContainer:is(.deck-selected, [zen-split="true"])
+      browser[trance-internal-page="true"] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
   }

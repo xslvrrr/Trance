@@ -356,3 +356,58 @@ add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
 
   ok(mask().includes("about-logo.svg"), "reversibly");
 });
+
+add_task(async function test_the_sidebar_is_laid_out_expanded() {
+  // The 0.2.0 regression, end to end. Touchpoint #33's field block replaced
+  // `_eventListeners` and `_removeHoverFrames` on `gZenCompactModeManager`
+  // instead of following them, so `ZenUIManager.init` threw on
+  // `gZenCompactModeManager.addEventListener(updateEvent)` before its first
+  // layout pass. No window got `zen-sidebar-expanded`: the toolbox sat at the
+  // 60px rail, every expanded-only rule was dead, and the collapsed-sidebar
+  // rule in trance-chrome.css revealed the window buttons for good (ADR-085).
+  //
+  // Asserted on what a person sees rather than on the field: the attribute the
+  // whole of Zen's and Trance's sidebar CSS is keyed on, and the width.
+  ok(
+    Services.prefs.getBoolPref("zen.view.sidebar-expanded"),
+    "the shipped default is an expanded sidebar"
+  );
+  is(
+    document.documentElement.getAttribute("zen-sidebar-expanded"),
+    "true",
+    "the root carries zen-sidebar-expanded"
+  );
+  is(
+    gNavToolbox.getAttribute("zen-sidebar-expanded"),
+    "true",
+    "and so does the toolbox"
+  );
+  const rail = Services.prefs.getIntPref("trance.tabstrip.rail.width", 60);
+  Assert.greater(
+    gNavToolbox.getBoundingClientRect().width,
+    rail,
+    "the expanded sidebar is wider than the collapsed rail"
+  );
+
+  if (
+    document.documentElement.getAttribute("trance-chrome-topbuttons") ===
+      "true" &&
+    !document.documentElement.hasAttribute("trance-chrome-topbuttons-near")
+  ) {
+    const buttons = document.querySelector(
+      "#zen-sidebar-top-buttons .titlebar-buttonbox-container"
+    );
+    if (buttons) {
+      // The strip fades rather than snapping, so a sample taken while an
+      // earlier task's pointer is still leaving reads a value in between.
+      await Promise.all(
+        buttons.getAnimations().map(a => a.finished.catch(() => {}))
+      );
+      is(
+        window.getComputedStyle(buttons).opacity,
+        "0",
+        "the window buttons stay hidden until the pointer is near them"
+      );
+    }
+  }
+});

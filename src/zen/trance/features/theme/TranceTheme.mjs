@@ -95,28 +95,6 @@ const PREF_SURFACE_BLUR = "trance.surface.blur.radius";
 /** The frost's own switch. With it off nothing consumes the blur radius. */
 const PREF_SURFACE_ENABLED = "trance.surface.enabled";
 
-/**
- * The platform switches that make the *window* translucent, and the media
- * condition under which each one means anything.
- *
- * Where one of them is on, the frost is produced behind Gecko by the
- * compositor at a radius the operating system owns, and `--trance-surface-blur`
- * has no consumer — see the Blur section of trance-surfaces.css, which is
- * gated on exactly this. Windows is absent because Mica answers for itself
- * through `-moz-windows-mica`, which reports whether it is actually in effect
- * rather than whether it was asked for.
- */
-const PLATFORM_TRANSLUCENCY = Object.freeze([
-  {
-    pref: "zen.widget.macos.window-vibrancy",
-    media: "(-moz-platform: macos)",
-  },
-  {
-    pref: "zen.widget.linux.transparency",
-    media: "(-moz-platform: linux)",
-  },
-]);
-
 /** Zen's own switch for the custom-colour list. Claimed and released. */
 const PREF_ZEN_CUSTOM_COLORS = "zen.theme.gradient.show-custom-colors";
 
@@ -144,8 +122,8 @@ const BLUR_STEP = 2;
 /** The blur knob's tooltip, in each of the two states it has. */
 const BLUR_TITLE = "Frost blur — drag to turn, or use the arrow keys";
 const BLUR_TITLE_INERT =
-  "Frost blur — inert here: this window is translucent in its own right, so " +
-  "the operating system produces the frost at a radius it owns";
+  "Frost blur — inert here: the frosted surface is switched off, or this " +
+  "system has asked for reduced transparency";
 
 /**
  * How many slots the saved page draws.
@@ -1203,20 +1181,23 @@ export class TranceTheme extends TranceFeature {
    * Whether `--trance-surface-blur` has anything reading it in this window.
    *
    * This is the JavaScript half of the media query the Blur section of
-   * trance-surfaces.css is gated on, and it has to stay the same question:
-   * where the *window* is translucent in its own right — macOS vibrancy,
-   * Windows Mica, a transparent GTK window — the frost is produced behind
-   * Gecko by the compositor at a radius the operating system owns, and a
-   * `backdrop-filter` there replaces that frost with a flat rectangle instead
-   * of softening it. So on those platforms nothing consumes the radius, and a
-   * knob that wrote it anyway would be a control with no effect.
+   * trance-surfaces.css is gated on, and it has to stay the same question —
+   * which is why it changed when that query did.
    *
-   * It goes inert instead, and says why in its tooltip. Turning transparency
-   * off — which is what "pure flat" means — hands the frost back to Gecko and
-   * the knob back to the user.
+   * It used to answer "no" wherever the window was translucent in its own
+   * right, because a `backdrop-filter` there snapshotted an empty backdrop and
+   * painted a flat rectangle over the operating system's frost. Firefox 156
+   * and Zen's gh-15513 make a chrome backdrop-filter read the slices below it,
+   * and upstream's own compact-mode and omnibox sheets now carry one with no
+   * platform term. The radius has a consumer on every platform.
    *
-   * Mica is asked through `-moz-windows-mica` rather than through its pref
-   * because the pref is a request and the media feature is the answer.
+   * That term was also the whole of the "the blur knob cannot be moved"
+   * report: Trance's default configuration is macOS with vibrancy on, so the
+   * knob was born disabled and stayed there.
+   *
+   * What is left is the two cases where the frost genuinely is not painted:
+   * the surface switched off, and a person who has asked the platform for
+   * reduced transparency.
    *
    * @returns {boolean}
    */
@@ -1225,16 +1206,7 @@ export class TranceTheme extends TranceFeature {
     if (!Services.prefs.getBoolPref(PREF_SURFACE_ENABLED, true)) {
       return false;
     }
-    if (
-      win.matchMedia("(prefers-reduced-transparency: reduce)").matches ||
-      win.matchMedia("(-moz-windows-mica)").matches
-    ) {
-      return false;
-    }
-    return !PLATFORM_TRANSLUCENCY.some(
-      ({ pref, media }) =>
-        win.matchMedia(media).matches && Services.prefs.getBoolPref(pref, false)
-    );
+    return !win.matchMedia("(prefers-reduced-transparency: reduce)").matches;
   }
 
   // --- The palette and the heart ---------------------------------------------
@@ -1505,21 +1477,21 @@ export class TranceTheme extends TranceFeature {
       this.addDisposer(() => Services.prefs.removeObserver(pref, prefObserver));
     }
 
-    // The master controls' prefs, and the platform switches that decide
-    // whether the blur one has a consumer. These get `#syncMaster` rather than
-    // `#sync`: they are written from a drag, and the full sync recomputes the
-    // lightness track and the saved-theme keys, none of which a surface value
-    // can have changed. The settings page writes the same prefs, so this is
-    // also what keeps the two surfaces agreeing while both are open.
+    // The master controls' prefs. These get `#syncMaster` rather than `#sync`:
+    // they are written from a drag, and the full sync recomputes the lightness
+    // track and the saved-theme keys, none of which a surface value can have
+    // changed. The settings page writes the same prefs, so this is also what
+    // keeps the two surfaces agreeing while both are open.
+    //
+    // The platform translucency switches used to be observed here too, because
+    // they decided whether the blur knob had a consumer. They no longer do —
+    // see `#blurHasConsumer` — so observing them would be a wake-up for a
+    // recomputation that cannot change anything.
     if (this.#nodes.masterSlider || this.#nodes.blurKnob) {
-      const platform = PLATFORM_TRANSLUCENCY.filter(
-        ({ media }) => this.context.window.matchMedia(media).matches
-      ).map(({ pref }) => pref);
       for (const pref of [
         PREF_SURFACE_OPACITY,
         PREF_SURFACE_BLUR,
         PREF_SURFACE_ENABLED,
-        ...platform,
       ]) {
         const prefObserver = { observe: () => this.#syncMaster() };
         Services.prefs.addObserver(pref, prefObserver);

@@ -106,39 +106,31 @@ add_task(async function test_range_readouts_report_the_preference() {
   });
 });
 
-add_task(async function test_the_blur_slider_is_absent_where_it_cannot_work() {
+add_task(async function test_the_blur_sliders_are_always_reachable() {
+  // Both rows used to be swapped out for a note wherever the window was
+  // translucent in its own right, because trance-surfaces.css shipped no
+  // `backdrop-filter` there. Firefox 156 and Zen's gh-15513 make a chrome
+  // backdrop-filter read the slices below it, that gate is gone from the
+  // stylesheet, and a hidden row would now be the settings page disagreeing
+  // with the sheet.
+  //
+  // This is the second surface of the "blur cannot be changed" report: the
+  // picker's knob was disabled and this row was not rendered at all, so in
+  // Trance's default configuration there was nowhere to set the radius.
   await withSettings(win => {
     const doc = win.document;
-    // Same condition trance-surfaces.css uses to decide whether to ship any
-    // `backdrop-filter` at all (ADR-022, ADR-081). The two must never
-    // disagree: a control that provably cannot do anything is worse than an
-    // absent one.
-    //
-    // The condition is the platform *switch*, not the platform. It used to be
-    // `(-moz-platform: macos)` unconditionally, which hid this row on that
-    // platform even with transparency turned off — where the window is opaque,
-    // the browser paints the backdrop and the radius is the only frost there
-    // is.
-    const translucentWindow = win.matchMedia(
-      "(-moz-windows-mica) or " +
-        "((-moz-platform: macos) and (-moz-pref('zen.widget.macos.window-vibrancy'))) or " +
-        "((-moz-platform: linux) and (-moz-pref('zen.widget.linux.transparency')))"
-    ).matches;
+    const display = id => win.getComputedStyle(doc.getElementById(id)).display;
 
-    const row = doc.getElementById("tranceSurfaceBlurRow");
-    const note = doc.getElementById("tranceSurfaceBlurNote");
-    ok(row && note, "the blur row and its replacement note both exist");
-    if (!row || !note) {
-      return;
+    for (const id of ["tranceSurfaceBlurRow", "tranceInternalBlurRow"]) {
+      ok(doc.getElementById(id), `${id} exists`);
+      isnot(display(id), "none", `${id} is shown`);
     }
 
-    const display = element => win.getComputedStyle(element).display;
-    if (translucentWindow) {
-      is(display(row), "none", "the blur slider is hidden");
-      isnot(display(note), "none", "and the note explaining why is shown");
-    } else {
-      isnot(display(row), "none", "the blur slider is shown");
-      is(display(note), "none", "and the note is not");
+    for (const id of ["tranceSurfaceBlurNote", "tranceInternalBlurNote"]) {
+      ok(
+        !doc.getElementById(id),
+        `${id} is gone rather than left as markup no rule reaches`
+      );
     }
   });
 });

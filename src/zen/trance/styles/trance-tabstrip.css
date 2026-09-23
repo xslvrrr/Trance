@@ -254,7 +254,14 @@
       overflow-clip-margin: 0;
     }
 
-    & .tabbrowser-tab[visuallyselected] {
+    /* trance-specificity: the toolbox and the tab container, both by id. Zen's
+       Firefox 156 sync added `:is(#navigator-toolbox, …)[zen-sidebar-expanded]
+       #tabbrowser-tabs .tabbrowser-tab { overflow: visible }` — two ids — and
+       a rule without them loses to it the moment the sidebar is expanded,
+       which put the glow back inside the selected row. Naming the same two
+       ids is matching Zen's selector, not outbidding it: Trance's root
+       attributes are what decide between them. */
+    & #navigator-toolbox #tabbrowser-tabs .tabbrowser-tab[visuallyselected] {
       /* The clip margin only works on a clipping box. Zen does not declare
          one on tabs, so the old margin was inert and the glow stayed inside
          the selected row. */

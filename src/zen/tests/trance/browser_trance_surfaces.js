@@ -15,15 +15,17 @@ const SURFACE_SHEET =
   "chrome://browser/content/trance-styles/trance-surfaces.css";
 
 /**
- * Every element that may carry a `backdrop-filter`, which is now two.
+ * Every element that may carry a `backdrop-filter`: one per region.
  *
- * The per-region switches are gone (ADR-040): the frost is one layer on
- * `#zen-main-app-wrapper`, spanning the sidebar, the toolbar and the space
- * around the page, and the expanded address bar keeps its own because it floats
- * over the page rather than over the chrome.
+ * The frost was briefly one layer on `#zen-main-app-wrapper` (ADR-040). That
+ * layer's backdrop is the empty window — everything it could soften is its own
+ * descendant — so it blurred nothing at any radius (ADR-082). The regions sit
+ * over the texture and the gradient, and the expanded address bar floats over
+ * the page.
  */
 const SURFACES = [
-  { id: "app", selector: "#zen-main-app-wrapper" },
+  { id: "sidebar", selector: "#navigator-toolbox" },
+  { id: "toolbar", selector: "#zen-appcontent-navbar-wrapper" },
   { id: "overlay", selector: "#urlbar" },
 ];
 
@@ -115,106 +117,93 @@ add_task(async function test_blur_budget_is_respected() {
   );
 
   // Nesting is the one case strictly worse than either surface alone: the
-  // parent has to be resolved before the child can sample it. The one chrome
-  // layer is an ancestor of everything, so nothing else in the chrome may
-  // carry a filter of its own.
+  // parent has to be resolved before the child can sample it. The surfaces
+  // are the regions, so no ancestor of a region may carry one — the wrapper
+  // included, which is where the single surface used to live and blurred
+  // nothing, because everything it could have softened is its own descendant.
   const wrapper = document.querySelector("#zen-main-app-wrapper");
-  const toolbox = document.querySelector("#navigator-toolbox");
-  if (wrapper && toolbox && wrapper.contains(toolbox)) {
+  if (wrapper) {
     is(
-      window.getComputedStyle(toolbox).backdropFilter,
+      window.getComputedStyle(wrapper).backdropFilter,
       "none",
-      "blur surfaces are never nested"
+      "the wrapper is not a surface: its backdrop is the empty window"
     );
+  }
+  // Walk up from each region that is actually blurred. An element that is
+  // not rendered reports `""` rather than `"none"`, so both mean "no pass".
+  const blurred = el => {
+    const value = window.getComputedStyle(el).backdropFilter;
+    return Boolean(value) && value !== "none";
+  };
+  for (const { selector } of SURFACES) {
+    const region = document.querySelector(selector);
+    if (!region || !blurred(region)) {
+      continue;
+    }
+    for (let el = region.parentElement; el; el = el.parentElement) {
+      ok(
+        !blurred(el),
+        `${selector} is not nested inside another surface (${el.id || el.localName})`
+      );
+    }
   }
 });
 
-add_task(
-  async function test_blur_follows_the_platform_switch_not_the_platform() {
-    // Where the window is translucent in its own right the frost is produced
-    // behind Gecko by the compositor, and a `backdrop-filter` there replaces it
-    // with a flat rectangle rather than softening it — which is why the Blur
-    // section is gated at all.
-    //
-    // The gate used to be `(-moz-platform: macos)`, unconditionally, so on that
-    // platform `trance.surface.blur.radius` had no consumer *even with
-    // transparency turned off* — where the window is opaque, Gecko is painting
-    // the backdrop and the blur is both correct and the only frost available.
-    // The gate is the switch now, and this is that difference.
-    await SimpleTest.promiseFocus(window);
-    const wrapper = document.querySelector("#zen-main-app-wrapper");
-    if (
-      !wrapper ||
-      window.matchMedia("(prefers-reduced-transparency: reduce)").matches
-    ) {
-      ok(true, "no chrome surface to blur on this configuration");
-      return;
-    }
-
-    // Mica is not a pref this can flip: `-moz-windows-mica` reports what is in
-    // effect, which is what makes it the right question to ask there.
-    if (window.matchMedia("(-moz-windows-mica)").matches) {
-      is(
-        window.getComputedStyle(wrapper).backdropFilter,
-        "none",
-        "Mica owns the frost, so Gecko adds no pass"
-      );
-      return;
-    }
-
-    const switches = [
-      ["(-moz-platform: macos)", "zen.widget.macos.window-vibrancy"],
-      ["(-moz-platform: linux)", "zen.widget.linux.transparency"],
-    ].filter(([media]) => window.matchMedia(media).matches);
-
-    if (!switches.length) {
-      isnot(
-        window.getComputedStyle(wrapper).backdropFilter,
-        "none",
-        "a window that can never be natively translucent gets Gecko's blur"
-      );
-      return;
-    }
-
-    // `-moz-pref()` invalidation goes through
-    // `LookAndFeel::NotifyChangedAllWindows`, which posts rather than restyles
-    // in place, so the pref write has to be given a turn of the event loop and a
-    // flush before the computed value is asked for. Without the settle this
-    // reads the previous frame's answer and fails on a stylesheet that is
-    // correct.
-    const settle = async () => {
-      await new Promise(resolve =>
-        window.requestAnimationFrame(() =>
-          window.requestAnimationFrame(resolve)
-        )
-      );
-      await window.promiseDocumentFlushed(() => {});
-    };
-
-    for (const [, pref] of switches) {
-      const original = Services.prefs.getBoolPref(pref, false);
-      try {
-        Services.prefs.setBoolPref(pref, false);
-        await settle();
-        isnot(
-          window.getComputedStyle(wrapper).backdropFilter,
-          "none",
-          `${pref} off: the window is opaque, so Gecko's blur is the frost`
-        );
-
-        Services.prefs.setBoolPref(pref, true);
-        await settle();
-        is(
-          window.getComputedStyle(wrapper).backdropFilter,
-          "none",
-          `${pref} on: the operating system's frost is left alone`
-        );
-      } finally {
-        Services.prefs.setBoolPref(pref, original);
-      }
-    }
+add_task(async function test_the_chrome_surface_is_blurred_on_this_platform() {
+  // The Blur section used to be gated on the window *not* being translucent in
+  // its own right: a `backdrop-filter` there snapshotted an empty backdrop and
+  // painted a flat rectangle over the operating system's frost. Firefox 156
+  // and Zen's gh-15513 thread `backdrop_reads_lower_slices` through the tiled
+  // command buffer, so a chrome backdrop-filter reads the web content beneath
+  // it, and upstream's own compact-mode and omnibox sheets now carry one with
+  // no platform term.
+  //
+  // The regression this guards is the one that made the whole chain visible:
+  // with that gate in place `trance.surface.blur.radius` had no consumer in
+  // Trance's default configuration — macOS with vibrancy on — so the picker's
+  // knob was permanently disabled and the settings row was not rendered.
+  //
+  // `prefers-reduced-transparency` is the one condition that still removes the
+  // pass, and it is a platform setting rather than a pref, so it is honoured
+  // rather than driven.
+  //
+  // The radius has to reach a region, not the wrapper: the wrapper's backdrop
+  // is the empty window, so a surface there blurred nothing at any radius.
+  await SimpleTest.promiseFocus(window);
+  const toolbox = document.getElementById("navigator-toolbox");
+  ok(toolbox, "the sidebar region exists");
+  if (
+    !toolbox ||
+    window.matchMedia("(prefers-reduced-transparency: reduce)").matches
+  ) {
+    ok(true, "no chrome surface to blur on this configuration");
+    return;
   }
-);
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.surface.blur.radius", 37]],
+  });
+  ok(
+    window.getComputedStyle(toolbox).backdropFilter.includes("blur(37px)"),
+    "the sidebar carries Gecko's blur at the configured radius, whatever the " +
+      "window is made of"
+  );
+  await SpecialPowers.popPrefEnv();
+
+  // The same question the picker's knob asks, so the two cannot disagree about
+  // whether the radius has a reader.
+  const original = Services.prefs.getBoolPref("trance.surface.enabled", true);
+  try {
+    Services.prefs.setBoolPref("trance.surface.enabled", false);
+    await window.promiseDocumentFlushed(() => {});
+    ok(
+      !document.documentElement.hasAttribute("trance-surface-visible"),
+      "and the switch that does remove it still removes it"
+    );
+  } finally {
+    Services.prefs.setBoolPref("trance.surface.enabled", original);
+  }
+});
 
 add_task(async function test_sidebar_region_is_translucency_not_a_tint() {
   // The regression this guards: the first implementation painted a
@@ -291,14 +280,22 @@ add_task(async function test_there_is_no_content_region_left() {
     "setting the removed pref does nothing: there is no attribute for it"
   );
 
-  const pane = document.querySelector(CONTENT_PANE_SELECTOR);
-  if (pane) {
-    is(
-      window.getComputedStyle(pane).backdropFilter,
-      "none",
-      "and the content pane is still never part of the blur budget"
-    );
-  }
+  // On an ordinary page. The harness tab is an `about:` page, and an internal
+  // page is frosted on purpose (ADR-026, `[trance-internal-page]`) — that is a
+  // different feature, and one the platform gate used to hide on macOS.
+  await BrowserTestUtils.withNewTab(
+    "data:text/html,<p>page</p>",
+    async browser => {
+      const pane = browser.matches(CONTENT_PANE_SELECTOR) ? browser : null;
+      if (pane) {
+        is(
+          window.getComputedStyle(pane).backdropFilter,
+          "none",
+          "and the content pane is still never part of the blur budget"
+        );
+      }
+    }
+  );
 
   await SpecialPowers.popPrefEnv();
 });
@@ -717,40 +714,6 @@ add_task(
   }
 );
 
-add_task(async function test_a_translucent_window_carries_no_backdrop_filter() {
-  // The most consequential thing this feature has learned, and the answer to
-  // three separate reports at once: on a platform whose window is translucent
-  // in its own right — macOS vibrancy, Windows Mica, a transparent GTK window —
-  // the frost is produced behind Gecko by the compositor. A `backdrop-filter`
-  // over that does not soften it; it establishes a backdrop root, filters the
-  // empty region behind the element and composites the result over the
-  // transparent area, replacing the operating system's frost with flat black.
-  //
-  // Measured, not theorised: with the filter on #navigator-toolbox the sidebar
-  // rendered solid black, and with identical translucency and no filter it
-  // rendered as glass over the desktop.
-  const translucentWindow = window.matchMedia(
-    "(-moz-windows-mica) or (-moz-platform: macos) or " +
-      "((-moz-platform: linux) and (-moz-pref('zen.widget.linux.transparency')))"
-  ).matches;
-
-  if (!translucentWindow) {
-    Assert.lessOrEqual(
-      blurredElementCount(),
-      3,
-      "an opaque window keeps the three-surface budget (TRANCE.md §3.3)"
-    );
-    return;
-  }
-
-  is(
-    blurredElementCount(),
-    0,
-    "a translucent window spends none of the blur budget: the compositor is " +
-      "the frost, and filtering it would paint black over it"
-  );
-});
-
 add_task(async function test_page_transparency_reaches_a_real_tab() {
   // Checked end to end rather than at the pref: a CSS background on the
   // <browser> sits behind the content process's canvas, so "the pref is set"
@@ -783,10 +746,10 @@ add_task(async function test_page_transparency_reaches_a_real_tab() {
 });
 
 add_task(async function test_the_frost_is_one_layer() {
-  // The frost is one surface on `#zen-main-app-wrapper` — the sidebar, the
+  // The *sheen* is one layer on `#zen-main-app-wrapper` — the sidebar, the
   // toolbar and the space around the page at once — and nothing inside it
-  // paints a second. Check both halves: the layer is painted, and the elements
-  // the per-region switches used to own are not.
+  // paints a second. The *blur* is per region (ADR-082), because the wrapper's
+  // backdrop is the empty window and a blur there softens nothing.
   is(
     document.documentElement.getAttribute("trance-surface-edgeless"),
     "true",
@@ -821,8 +784,9 @@ add_task(async function test_the_frost_is_one_layer() {
 
   Assert.lessOrEqual(
     blurredElementCount(),
-    2,
-    "the chrome layer, and at most the expanded address bar on top of it"
+    3,
+    "one blur per region: the sidebar, the toolbar, and the expanded address " +
+      "bar in the toolbar's place"
   );
 });
 

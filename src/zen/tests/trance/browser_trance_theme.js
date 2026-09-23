@@ -47,6 +47,43 @@ function panel() {
   return document.getElementById(PANEL);
 }
 
+/**
+ * Opens the picker and resolves once it is shown.
+ *
+ * The Theme feature is popup-gated (TranceCore's registry): its module is not
+ * parsed, and none of its controls exist, until this panel first opens. The
+ * file was written before that and assumed a feature built at startup, so
+ * every task after the first failed on a missing node.
+ */
+async function openPanel() {
+  const el = panel();
+  if (el.state === "open") {
+    return;
+  }
+  const shown = BrowserTestUtils.waitForEvent(el, "popupshown");
+  el.openPopup(gNavToolbox, "after_start");
+  await shown;
+}
+
+async function closePanel() {
+  const el = panel();
+  if (el.state === "closed") {
+    return;
+  }
+  const hidden = BrowserTestUtils.waitForEvent(el, "popuphidden");
+  el.hidePopup();
+  await hidden;
+}
+
+add_setup(async function () {
+  await openPanel();
+  await TestUtils.waitForCondition(
+    () => theme()?.enabled && panel().querySelector(".trance-theme-knob-blur"),
+    "the popup-gated Theme feature loads and builds its controls"
+  );
+  await closePanel();
+});
+
 add_task(async function test_feature_is_registered_and_attached() {
   const feature = theme();
   ok(feature, "the theme feature is constructed");
@@ -251,56 +288,71 @@ add_task(async function test_the_master_controls_write_the_surface_prefs() {
   await SpecialPowers.popPrefEnv();
 });
 
-add_task(async function test_the_blur_knob_is_inert_where_nothing_reads_it() {
-  // The knob writes `trance.surface.blur.radius`, and where the *window* is
-  // translucent in its own right nothing consumes that value: the frost comes
-  // from the compositor at a radius the operating system owns. A control with
-  // no effect is worse than no control, so it goes inert and says why.
+add_task(async function test_the_blur_knob_can_actually_be_moved() {
+  // The reported defect, directly: the knob could not be moved at all.
   //
-  // Driven from the same switch trance-surfaces.css gates its blur on, so the
-  // knob and the stylesheet cannot come to different conclusions.
+  // It was disabled wherever the window was translucent in its own right,
+  // because the Blur section of trance-surfaces.css shipped no
+  // `backdrop-filter` there and a knob writing a value nothing reads is worse
+  // than no knob. Trance's default configuration *is* a translucent window on
+  // macOS, so the knob was born disabled and stayed there for the whole
+  // session — and the settings page's own blur row was hidden by the same
+  // condition, leaving nowhere at all to set the radius.
+  //
+  // Firefox 156 and Zen's gh-15513 gave the radius a reader on every platform.
+  // `#blurHasConsumer` lost the platform term with the stylesheet, and this is
+  // that contract: live here, and driven by both of its inputs.
   const knob = panel().querySelector(".trance-theme-knob-blur");
-  const switches = [
-    ["(-moz-platform: macos)", "zen.widget.macos.window-vibrancy"],
-    ["(-moz-platform: linux)", "zen.widget.linux.transparency"],
-  ].filter(([media]) => window.matchMedia(media).matches);
+  ok(knob, "the blur knob exists");
 
-  if (!switches.length) {
-    // Windows asks `-moz-windows-mica`, and everywhere else the answer is
-    // always "Gecko paints the backdrop", so there is nothing to drive.
-    ok(
-      knob.title.length > 0,
-      "the knob says what it does on a platform with no switch to flip"
-    );
-    return;
-  }
+  ok(!knob.hasAttribute("disabled"), "and it is live rather than inert");
 
-  for (const [, pref] of switches) {
-    await SpecialPowers.pushPrefEnv({ set: [[pref, true]] });
-    ok(
-      knob.hasAttribute("disabled"),
-      `${pref} on: the knob is inert, because the radius has no consumer`
-    );
-    ok(knob.title.includes("inert"), "and it says so rather than looking grey");
-    await SpecialPowers.popPrefEnv();
+  const before = Services.prefs.getIntPref("trance.surface.blur.radius");
+  knob.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })
+  );
+  const after = Services.prefs.getIntPref("trance.surface.blur.radius");
+  Assert.greater(after, before, "an arrow key moves the radius");
+  is(knob.textContent, `${after}px`, "and the readout follows it");
 
-    await SpecialPowers.pushPrefEnv({ set: [[pref, false]] });
-    ok(
-      !knob.hasAttribute("disabled"),
-      `${pref} off: the window is opaque, so the knob is live again`
-    );
+  // A drag is the other input, and it is the one the report was about. The
+  // gesture is `mousedown` anywhere in the circle; the arc is 270° with its gap
+  // at the bottom, so straight up is the middle of the range. Measured from a
+  // radius that is not already the midpoint, so the write is observable.
+  // The panel is opened for this half only: a closed popup lays out nothing,
+  // and the bearing is measured against the knob's own box.
+  await openPanel();
+  Services.prefs.setIntPref("trance.surface.blur.radius", 4);
+  const rect = knob.getBoundingClientRect();
+  knob.dispatchEvent(
+    new MouseEvent("mousedown", {
+      bubbles: true,
+      button: 0,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top,
+    })
+  );
+  document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  is(
+    Services.prefs.getIntPref("trance.surface.blur.radius"),
+    30,
+    "pressing at the top of the arc writes the middle of the range"
+  );
+  await closePanel();
 
-    const before = Services.prefs.getIntPref("trance.surface.blur.radius");
-    knob.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })
-    );
-    const after = Services.prefs.getIntPref("trance.surface.blur.radius");
-    Assert.greater(after, before, "an arrow key moves the radius");
-    is(knob.textContent, `${after}px`, "and the readout follows it");
+  Services.prefs.clearUserPref("trance.surface.blur.radius");
+});
 
-    Services.prefs.clearUserPref("trance.surface.blur.radius");
-    await SpecialPowers.popPrefEnv();
-  }
+add_task(async function test_the_blur_knob_goes_inert_with_the_surface_off() {
+  // The one condition that still means nothing reads the radius. The knob has
+  // to follow it, because `#syncMaster` runs off the same pref observer the
+  // settings page writes through.
+  const knob = panel().querySelector(".trance-theme-knob-blur");
+  await SpecialPowers.pushPrefEnv({ set: [["trance.surface.enabled", false]] });
+  ok(knob.hasAttribute("disabled"), "the surface is off, so the knob is inert");
+  ok(knob.title.includes("inert"), "and it says so rather than looking grey");
+  await SpecialPowers.popPrefEnv();
+  ok(!knob.hasAttribute("disabled"), "and it comes back with the surface");
 });
 
 add_task(async function test_the_translucency_slider_has_its_whole_range() {
@@ -378,15 +430,25 @@ add_task(async function test_the_angle_rotates_the_gradient_zen_produced() {
   // angle in it that a regex can be checked against.
   workspace.theme = zenPicker.constructor.getTheme(colors, 0.5, 0);
   workspace.theme.tranceAngle = 0;
+  // Zen's own angle is read, not assumed. It was a hard-coded -45deg until
+  // Zen's Firefox 156 sync moved it to -30deg, and the rotation is relative to
+  // whatever Zen emits — so the contract is "Zen's angle plus ours".
+  const angleOf = gradient =>
+    parseFloat(/linear-gradient\(\s*(-?[\d.]+)deg/.exec(gradient)?.[1]);
   const flat = zenPicker.getGradient(colors, true);
-  ok(flat.includes("-45deg"), "Zen's own gradient is at its hard-coded -45deg");
+  const base = angleOf(flat);
+  ok(
+    Number.isFinite(base),
+    `Zen's own gradient carries an angle, got: ${flat}`
+  );
 
   workspace.theme.tranceAngle = 90;
   zenPicker.onWorkspaceChange(workspace);
   const rotated = zenPicker.getGradient(colors, true);
-  ok(
-    rotated.includes("45deg") && !rotated.includes("-45deg"),
-    `90 degrees of rotation lands at 45deg, got: ${rotated}`
+  is(
+    angleOf(rotated),
+    (base + 90) % 360,
+    `90 degrees of rotation lands 90 degrees past Zen's angle, got: ${rotated}`
   );
 
   workspace.theme = original;

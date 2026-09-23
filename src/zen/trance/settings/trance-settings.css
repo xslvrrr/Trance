@@ -790,39 +790,17 @@ checkbox.trance-switch {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Platform notes ─────────────────────────────────────────────────────────
+/* The two blur rows used to be hidden here, and replaced by a note, wherever
+ * the window was translucent in its own right — macOS vibrancy, Windows Mica,
+ * a transparent GTK window. trance-surfaces.css shipped no blur surfaces
+ * there, so the sliders would have been controls that provably did nothing.
  *
- * Blur, on the platforms where it can do something.
- *
- * Where the window is translucent in its own right — macOS vibrancy, Windows
- * Mica, a transparent GTK window — the frost is produced behind the browser by
- * the compositor, and a `backdrop-filter` over it replaces it with a flat
- * rectangle instead of softening it. trance-surfaces.css therefore ships no
- * blur surfaces there at all, so these controls would be controls that provably
- * cannot do anything. A note takes their place, and the two swap over on
- * exactly the same condition the stylesheet uses — which is whether the
- * platform switch is *on*, not which platform this is. Turning transparency
- * off makes the window opaque, which hands the backdrop back to Gecko and
- * these two rows back to the user.
+ * Firefox 156 and Zen's gh-15513 changed the premise: a chrome
+ * `backdrop-filter` now reads the slices below it rather than an empty
+ * backdrop. The blur section of trance-surfaces.css lost the same gate, so
+ * both rows have a consumer on every platform and both are simply shown. The
+ * notes are gone with the gate rather than left as markup no rule reaches.
  */
-
-#tranceSurfaceBlurNote,
-#tranceInternalBlurNote {
-  display: none;
-}
-
-/* stylelint-disable-next-line media-query-no-invalid */
-@media (-moz-windows-mica) or ((-moz-platform: macos) and -moz-pref('zen.widget.macos.window-vibrancy')) or ((-moz-platform: linux) and -moz-pref('zen.widget.linux.transparency')) {
-  #tranceSurfaceBlurRow,
-  #tranceInternalBlurRow {
-    display: none;
-  }
-
-  #tranceSurfaceBlurNote,
-  #tranceInternalBlurNote {
-    display: flex;
-  }
-}
 
 /* A row that is a note rather than a setting: full width, no control column. */
 .trance-note {

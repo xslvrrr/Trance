@@ -69,7 +69,14 @@ ChromeUtils.defineESModuleGetters(
 
 window.gZenCompactModeManager = {
   _flashTimeouts: {},
+  _eventListeners: [],
+  _removeHoverFrames: {},
   // >>> TRANCE
+  // Additive only. This block once *replaced* the two lines above instead of
+  // following them, which deleted `_eventListeners` and `_removeHoverFrames`:
+  // `ZenUIManager.init` then threw on `addEventListener` before its first
+  // layout pass, so no window ever got `zen-sidebar-expanded` and the sidebar
+  // sat at the 60px rail with the window buttons showing (ADR-085).
   _hoverTimeouts: new Set(),
   _hoverFrames: new Set(),
   _activityUnsubscribe: null,

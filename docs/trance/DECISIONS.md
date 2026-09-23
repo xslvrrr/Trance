@@ -3798,3 +3798,204 @@ only surface was `about:preferences#trance` — two windows away from the colour
   panel needs a way to say so.
 - No upstream file was edited. Every change is inside `src/zen/trance/`, `prefs/trance/` or
   `src/zen/tests/trance/`, and the picker changes remain reversible node-for-node on disable.
+
+---
+
+## ADR-082 — The blur gate was a fact about Gecko, and the fact changed
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Supersedes:** the blur half of ADR-081 and of ADR-040; amends ADR-022 and ADR-065
+
+**Context:**
+
+Trance gated every `backdrop-filter` it ships on the window *not* being translucent in its own
+right — macOS vibrancy, Windows Mica, a transparent GTK window. The reason was measured rather than
+assumed: a `backdrop-filter` there established a backdrop root, snapshotted the region behind the
+element, found nothing in it (the desktop showing through a transparent window is not something
+Gecko painted), filtered that, and composited the result. The sidebar rendered solid black.
+
+That gate had three surfaces, all asking the same question:
+
+- the `@media` on the Blur section of `trance-surfaces.css`;
+- `TranceTheme#blurHasConsumer`, which disabled the picker's blur knob;
+- an `@media` in `trance-settings.css` that hid `#tranceSurfaceBlurRow` and
+  `#tranceInternalBlurRow` and showed a note in their place.
+
+Trance's shipped configuration on macOS is vibrancy on. So in the default configuration the radius
+had no reader, the knob was born disabled, and the settings row was not rendered — which is the
+"the blur knob cannot be moved at all" report, from all three directions at once.
+
+Zen's gh-15513 (upstream `be04ad6d5`) replaced `allow_backdrop_to_work_on_transparency.patch` with
+`backdrop_filter_reads_web_content.patch`. The new patch threads `backdrop_reads_lower_slices`
+through WebRender's tiled command buffer and adds `update_cross_slice_backdrops`, so a
+backdrop-filter on a chrome surface reads back the slices *below* it — the web content — rather
+than only its own; `gfx.webrender.opaque-backdrop-fallback` resolves what is left as opaque rather
+than as transparent black. Upstream then applied the conclusion to its own sheets: `zen-omnibox.css`
+and `zen-compact-mode.css` now carry `backdrop-filter` with no platform term, guarded only by
+`:not(:-moz-window-inactive)`.
+
+**Decision:**
+
+Drop the platform-translucency term from all three surfaces. Keep the two conditions that are still
+about whether the frost is painted at all: `trance.surface.enabled`, and
+`prefers-reduced-transparency`.
+
+Delete `#tranceSurfaceBlurNote` and `#tranceInternalBlurNote` rather than leave them as markup no
+rule reaches.
+
+Move the chrome surface off `#zen-main-app-wrapper` and back onto the regions: `#navigator-toolbox`,
+and `#zen-appcontent-navbar-wrapper` in the sidebar-and-toolbar layout (stepping aside while the
+address bar is extended, since the extended bar is its descendant). This is the second half of the
+report and it was found by measuring rather than by reading: once the knob could move, the sidebar
+was byte-identical at 0px and at 60px on a vibrancy window. A `backdrop-filter` softens what is
+painted *behind* its element, and everything Trance paints in the chrome — the workspace gradient,
+the texture on `::before`, the sheen — is painted by the wrapper or inside it. The wrapper's
+backdrop was the window background, transparent or flat, so the single surface ADR-040 introduced
+had blurred nothing on any platform. The regions sit over the texture and the gradient, and in
+compact mode the floating sidebar sits over the page.
+
+**Consequences:**
+- `trance.surface.blur.radius` has a reader on every platform, and a visible one. The picker's knob
+  is live, the settings rows are shown, and turning the radius changes the frost.
+- Two surfaces at idle instead of one, inside the three-surface budget (ADR-019) and never nested:
+  sidebar and toolbar, with the extended address bar taking the toolbar's place while it is open.
+  That is the per-region layout TRANCE.md §3.3 set; ADR-040's single surface is superseded for the
+  blur and kept for the sheen, which is a background layer and has no backdrop to read. The
+  suppression rules that make the budget affordable are untouched: no blur while the window is
+  unfocused, minimised or occluded (`trance-surface-visible`), none at motion level 0, none under
+  reduced transparency.
+- `KNOWN_OVERLAPS` lost `gfx/wr/webrender/src/renderer/mod.rs` and
+  `modules/libpref/init/StaticPrefList.yaml`: the patch that shared them with corner-shape and with
+  Zen's pref list is the one upstream deleted, so both have one owner again and the declarations
+  had become `stale-overlap`.
+- The tests that pinned the old contract are replaced rather than re-pinned:
+  `test_the_blur_knob_is_inert_where_nothing_reads_it` becomes
+  `test_the_blur_knob_can_actually_be_moved` plus a narrower inert test driven by
+  `trance.surface.enabled`; `test_blur_follows_the_platform_switch_not_the_platform` becomes
+  `test_the_chrome_surface_is_blurred_on_this_platform`; and the settings test asserts both rows are
+  reachable and both notes are gone.
+
+---
+
+## ADR-083 — The surface sheen is part of the surface, so it follows the transparency control
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Amends:** ADR-081
+
+**Context:**
+
+`trance.surface.opacity` reached the window through two different mechanisms, and only one of them
+scaled.
+
+`#zen-browser-background` and `#zen-toolbar-background` — Zen's two workspace-gradient layers — take
+`opacity: var(--trance-surface-alpha)`, so at 0% they contribute nothing. But `#zen-main-app-wrapper`
+takes a second layer, `background-image: linear-gradient(var(--trance-surface-bg), …)`: the sheen
+that stops a frosted pane reading as a hole. `--trance-surface-bg` is
+`color-mix(in srgb, 7% white, 10% accent)` — around 8.5% alpha, weighted towards white — and it is
+an absolute colour.
+
+So the transparency slider had a floor it could not describe. At its bottom end the gradient was
+gone, the window was transparent, and an 8.5% white-weighted veil was still painted across the whole
+browser. The reported symptom is exactly that: "the fully transparent state has a pretty strong
+white tint".
+
+`--trance-surface-bg` could not simply be lowered. It is also the background of panels, menupopups,
+onboarding cards and their hover states, where it is a surface in its own right and an absolute
+colour is correct.
+
+**Decision:**
+
+Add `--trance-surface-veil`, which is `--trance-surface-bg` multiplied by `--trance-surface-alpha`,
+and use it for the one layer that is painted over the whole window, under
+`[trance-surface-transparent="true"]`. The unscaled rule stays for the opaque case, where the alpha
+has no meaning and the sheen is part of the base colour.
+
+`--trance-surface-alpha` is a `<percentage>`, which is what the second argument of `color-mix()`
+takes, so this is the token multiplied rather than a second value to keep in step.
+
+**Consequences:**
+- 0% surface opacity now means no Trance-painted colour at all: the window is what you see.
+- 100% is unchanged — `color-mix(in srgb, C 100%, transparent)` is `C`.
+- Every value between is slightly more transparent than before, by the sheen's own 8.5%, which is
+  the correction rather than a side effect.
+- Panels, menus and onboarding cards are untouched: they read `--trance-surface-bg`, which did not
+  change.
+
+---
+
+## ADR-084 — The empty-tab mark asks whether the tab is loading, not only what it shows
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+`TranceSurfaces#syncNewtab` decided whether to paint the empty-tab mark by comparing
+`gBrowser.selectedBrowser.currentURI.spec` against `about:newtab`, `about:blank` and `about:home`,
+and it ran on `TabSelect`, `TabOpen` and the navigation router's `onNavigate`.
+
+`currentURI` is the document a browser is *showing*, not the one it is fetching, and `onNavigate` is
+driven by `onLocationChange`, which does not fire until the new document commits. Clicking a link on
+the new-tab page therefore left the spec at `about:newtab` for the whole network wait, and a tab
+opened for `about:preferences` left it at `about:blank` for the whole of its load. The mark was
+hiding at the right moment; it was showing for the entire load before it — which is the "the mark
+shows up on loading pages, and occasionally on the settings page" report.
+
+**Decision:**
+
+Subscribe to `onProgress` as well as `onNavigate`, and require the selected browser not to be
+loading. The loading fact comes from `TranceNavigation#stateFor`, which already maintains it per
+browser for the loading bar, with `browser.webProgress.isLoadingDocument` as the fallback for a
+browser the router has not seen a state change for yet.
+
+**Consequences:**
+- The mark is shown on an empty tab that is idle, and on nothing else.
+- One more subscriber on a router callback the window already dispatches; no new listener, no new
+  observer, and `#syncNewtab` is two property reads and at most one `setAttribute` the style system
+  discards when nothing changed.
+
+---
+
+## ADR-085 — A touchpoint adds to an object literal; it never replaces the lines it follows
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+Touchpoint #33 (`src/zen/compact-mode/ZenCompactMode.mjs`, Phase 0–6) added four fields to the
+`gZenCompactModeManager` literal for the window-activity work. The `>>> TRANCE` block was written
+over the two lines that followed `_flashTimeouts: {}` rather than after them, and deleted
+`_eventListeners: []` and `_removeHoverFrames: {}`.
+
+`ZenUIManager.init` calls `gZenCompactModeManager.addEventListener(updateEvent)` before its first
+layout pass. With `_eventListeners` undefined that call throws, `init` stops, and the vertical-tabs
+layout is never computed. No window ever received `zen-sidebar-expanded` although
+`zen.view.sidebar-expanded` was true, so:
+
+- `#navigator-toolbox` fell to Zen's collapsed-rail rule and Trance's rail width — 60px, the
+  "constant toolbar width";
+- every rule keyed on `[zen-sidebar-expanded="true"]`, Zen's and Trance's, was dead — the "missing
+  styling elements";
+- `trance-chrome.css` reveals the window buttons permanently on a collapsed sidebar, so they showed
+  for the whole session.
+
+`_removeHoverFrames` is written by the compact-mode hover path before anything initialises it, so
+compact-mode hover would have thrown too. The browser console carried
+`ZenCompactMode.mjs, line 397: TypeError: can't access property "push", this._eventListeners is
+undefined` on every window. 0.2.0 shipped with it.
+
+**Decision:**
+
+Restore both fields to upstream's text and put the Trance fields after them, with a comment saying
+the block is additive. No other touchpoint from the same commit deletes a field that is still read;
+that was checked across all eight Zen JS touchpoints against the fork point.
+
+**Consequences:**
+- The sidebar lays out expanded at its stored width, and the window buttons follow the reveal.
+- `browser_trance_chrome.js` gains `test_the_sidebar_is_laid_out_expanded`, which asserts the
+  attribute on both elements, a width greater than the rail, and the hidden window buttons — the
+  three things a person saw, rather than the field.
+- The touchpoint's diff against upstream is two lines smaller.

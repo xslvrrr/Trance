@@ -748,20 +748,58 @@ export class TranceSurfaces extends TranceFeature {
       this.onFrame(() => this.#syncNewtab(), { once: true });
     });
 
+    // `onProgress` as well as `onNavigate`, and that pair is the whole of the
+    // "mark over a loading page" report.
+    //
+    // A browser's `currentURI` is the document it is *showing*, not the one it
+    // is fetching. Clicking a link on the new-tab page therefore leaves the
+    // spec at `about:newtab` — and a tab opened for `about:preferences` leaves
+    // it at `about:blank` — for the whole network wait, because
+    // `onLocationChange` does not fire until the new document commits. The
+    // mark was hiding at the right moment; it was showing for the entire load
+    // before it. `onNavigate` alone cannot see that interval, since the only
+    // event inside it is the load starting.
     this.observeNavigation(
-      { onNavigate: () => this.#syncNewtab() },
+      {
+        onNavigate: () => this.#syncNewtab(),
+        onProgress: () => this.#syncNewtab(),
+      },
       { selectedOnly: true }
     );
   }
 
+  /**
+   * Whether the selected browser is between a load starting and that load
+   * finishing.
+   *
+   * The router's own state first, because it is the same fact the loading bar
+   * is drawn from and it is already maintained per browser. `webProgress` is
+   * the fallback for the one case the router has no answer for: a browser it
+   * has not seen a state change for yet, at startup.
+   *
+   * @param {object} browser
+   * @returns {boolean}
+   */
+  #isLoading(browser) {
+    if (!browser) {
+      return false;
+    }
+    const state = this.context.navigation?.stateFor(browser);
+    if (state && typeof state.loading === "boolean") {
+      return state.loading;
+    }
+    return Boolean(browser.webProgress?.isLoadingDocument);
+  }
+
   #syncNewtab() {
     const root = this.context.document.documentElement;
-    const spec =
-      this.context.window.gBrowser?.selectedBrowser?.currentURI?.spec;
+    const browser = this.context.window.gBrowser?.selectedBrowser;
+    const spec = browser?.currentURI?.spec;
     const empty =
       !!this.#newtabLogo &&
       !!spec &&
-      EMPTY_PAGES.includes(spec.replace(/[?#].*$/, ""));
+      EMPTY_PAGES.includes(spec.replace(/[?#].*$/, "")) &&
+      !this.#isLoading(browser);
     if (empty) {
       root.setAttribute(ATTR_NEWTAB, "true");
     } else {

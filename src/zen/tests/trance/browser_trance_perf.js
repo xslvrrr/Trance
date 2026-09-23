@@ -46,6 +46,14 @@ function compositorSurfaces(doc = document) {
     if (!view) {
       continue;
     }
+    // Nor is anything without a box. A `display: none` element, and every
+    // item in a popup that is not open, still resolves a computed `filter` —
+    // Zen hides `#zen-toolbar-background` outside compact mode, and closed
+    // panels' buttons carry one — but none of them forces a surface.
+    // Counting them measured the stylesheet, not the compositor.
+    if (!el.checkVisibility()) {
+      continue;
+    }
     const cs = view.getComputedStyle(el);
     const reasons = [];
     if (cs.backdropFilter && cs.backdropFilter !== "none") {
