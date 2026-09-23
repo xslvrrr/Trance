@@ -1,6 +1,6 @@
 {
   "name": "trance-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "",
   "lint-staged": {
     "**/*": ""
@@ -36,7 +36,7 @@
     "reset-ff": "surfer reset",
     "surfer": "surfer",
     "test": "python3 scripts/run_tests.py",
-    "test:unit": "node --experimental-vm-modules --test src/zen/trance/tests/",
+    "test:unit": "node --experimental-vm-modules --test src/zen/trance/tests/*.test.mjs",
     "test:dbg": "python3 scripts/run_tests.py --jsdebugger --debug-on-failure",
     "test:gtest": "cd engine && ./mach gtest Zen*",
     "ffprefs": "cd tools/ffprefs && cargo run --bin ffprefs -- ../../",

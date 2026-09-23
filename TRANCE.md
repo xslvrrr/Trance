@@ -1852,8 +1852,8 @@ tell which of them were decisions and which were defects.
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1 and 0.2.0 were built locally rather than in
-      CI; the current 0.2.0 artefact is a development build.
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0 and 0.2.1 were built locally rather
+      than in CI; the current 0.2.1 artefact is a development build.
 
 **Release history**
 
@@ -1863,11 +1863,14 @@ tell which of them were decisions and which were defects.
 - **0.1.1 (2026-08-28):** local follow-up build in which Sine was present but its
   `chrome.manifest` was absorbed by the packager; the staged file was changed to
   `chrome.manifest.in` (ADR-058).
-- **0.2.0 (current):** macOS Apple Silicon development build containing the separated theme
+- **0.2.0:** macOS Apple Silicon development build containing the separated theme
   controls, performance defaults, window-activity suspension, single-owner navigation/material
   paths, transactional lazy feature setup and import-integrity checks
-  (`docs/trance/release-0.2.0.md:1-110`; `package.json:2-3`). It has no PGO/LTO and is not signed
-  or notarised (`README.md:20-33`).
+  (`docs/trance/release-0.2.0.md:1-110`). It has no PGO/LTO and is not signed or notarised.
+- **0.2.1 (current, 2026-09-23):** rebased onto Zen `4c92731b2` (Firefox 156.0.1) and fixes four
+  0.2.0 defects: the sidebar never initialising (ADR-085), the empty-tab mark over loading pages
+  (ADR-084), the immovable and ineffective blur knob (ADR-082), and the white floor under 0%
+  transparency (ADR-083) (`docs/trance/release-0.2.1.md`). Same build shape as 0.2.0.
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
