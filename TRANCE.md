@@ -730,7 +730,7 @@ Machine-readable version: `docs/trance/mods-inventory.json`.
 | 20 | Zen Context Menu | 3.1 | Zen | `KiKaraage/ZenMods` | MIT | ADAPT | 5 |
 | 21 | Zen Custom URL Bar | 2.0.3 | Sine | `rasyidrafi/zen-custom-urlbar` | Apache-2.0 | ADAPT | 5 |
 | 22 | Zen Folder Tree Connectors | 2.1 | Sine | `JustAdumbPrsn/ZenFolderTreeConnectors` | **GPL-3.0** | PREINSTALL (ADR-027) | — |
-| 23 | **Zen Library** | 1.0.0 | Sine | `12th-devs/Zen-Library` | none | PREINSTALL (ADR-030) | — |
+| 23 | **Zen Library** | 1.0.0 | Sine | `12th-devs/Zen-Library` | none | ~~PREINSTALL (ADR-030)~~ → ZEN (ADR-086): native in Zen 1.23 | — |
 
 ### 8.1 Overlap and merge notes
 
@@ -1528,6 +1528,8 @@ replacement.
 
 **Deliverables**
 - ~~`TranceLibrary`~~, ~~`TranceCalendar`~~ — not written
+- *(2026-09-23)* `zen-library` left `PREINSTALLED_MODS` again when Zen shipped a native Library (gh-15438),
+  and is switched off once in profiles that had it (`RETIRED_MODS`, ADR-086).
 - `zen-library` and `zen-live-calendar` added to `PREINSTALLED_MODS` in `scripts/trance-cosine.py`,
   pinned, staged into the app so a fresh profile gets them
 - Investigation docs (`docs/trance/mods/zen-library.md`, `live-calendar.md`) and ADR-030

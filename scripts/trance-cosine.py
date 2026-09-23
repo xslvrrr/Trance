@@ -180,12 +180,17 @@ def zen_store_api(mod_id: str, ref: str) -> str:
 # still an approximation of someone else's line. Same trade, same answer
 # (ADR-027).
 #
-# ── Two because reimplementing them would buy nothing ─────────────────────
+# ── One because reimplementing it would buy nothing ───────────────────────
 #
-# "Zen Library" (`12th-devs/Zen-Library`) and "Live Calendar"
-# (`Vertex-Mods/Zen-Live-Calendar`) were both scheduled as clean-room
-# reimplementations for phase 7, and both had their verdict changed to
-# PREINSTALL by their investigations (ADR-030).
+# "Live Calendar" (`Vertex-Mods/Zen-Live-Calendar`) was scheduled as a
+# clean-room reimplementation for phase 7, and its investigation changed the
+# verdict to PREINSTALL (ADR-030). "Zen Library" (`12th-devs/Zen-Library`) had
+# the same verdict for the same reason until Zen shipped a native Library of
+# its own (gh-15438, Zen 1.23). The mod registers the same widget id, the same
+# custom element and the same `gZenLibrary` global, and destroys the native
+# instance on load, so it is no longer preinstalled and is retired from
+# existing profiles below (RETIRED_MODS, ADR-086). The paragraphs that follow
+# are the case as it was made for both.
 #
 # The argument that justifies every other reimplementation in this project is
 # *ownership*: two stylesheets over one element, with a winner decided by load
@@ -261,12 +266,6 @@ PREINSTALLED_MODS = (
         "pin": "912af66a325928af0365bb1a4fa70317a3891ed3",
     },
     {
-        "id": "zen-library",
-        "store": "sine",
-        "expect_version": "1.0.0",
-        "pin": "cd0cf2c0eb963cababf33e68ef260ae4d8cb518d",
-    },
-    {
         "id": "zen-live-calendar",
         "store": "sine",
         "expect_version": "1.0.0",
@@ -304,6 +303,16 @@ PREINSTALLED_MODS = (
         # header: `main` is not a revision, it is a promise about one.
         "pin": "f1a23de04c7a63d14647b9626756ad58184bff19",  # 2026-05-08
     },
+)
+
+# Mods an earlier Trance preinstalled and this one no longer does, because
+# something in the browser now owns what they did. `config.js` switches each
+# one off once in a profile that has it, before Sine reads `mods.json`, and
+# records that it did so in `pref`, so a person who turns it back on in Sine
+# keeps it on. Disabled, not deleted: the mod's folder and settings are left
+# where they are (ADR-086).
+RETIRED_MODS = (
+    {"id": "zen-library", "pref": "trance.mods.retired.zen-library"},
 )
 
 # Files the provisioner owns, relative to their install root. Anything listed
@@ -365,6 +374,45 @@ if (!Services.appinfo.inSafeMode) {
     mods.append("sine-mods");
     if (!mods.exists()) {
       mods.create(Ci.nsIFile.DIRECTORY_TYPE, 0o755);
+    }
+
+    // Mods an earlier Trance preinstalled and something in the browser now
+    // owns (RETIRED_MODS in the provisioner). Switched off once, before Sine
+    // reads this file, and never again: the pref is how a person who turns one
+    // back on keeps it on. Synchronous on purpose — Sine's own read is the
+    // next thing that happens.
+    const retired = %(retired)s;
+    const pending = retired.filter(({ pref }) => !Services.prefs.getBoolPref(pref, false));
+    const data = mods.clone();
+    data.append("mods.json");
+    if (pending.length && data.exists()) {
+      const input = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
+      input.init(data, -1, 0, 0);
+      const reader = Cc["@mozilla.org/intl/converter-input-stream;1"].createInstance(Ci.nsIConverterInputStream);
+      reader.init(input, "UTF-8", 0, 0);
+      let text = "";
+      const chunk = {};
+      while (reader.readString(0xffffffff, chunk)) {
+        text += chunk.value;
+      }
+      reader.close();
+      const installed = JSON.parse(text || "{}");
+      let changed = false;
+      for (const { id, pref } of pending) {
+        if (installed[id]?.enabled) {
+          installed[id].enabled = false;
+          changed = true;
+        }
+        Services.prefs.setBoolPref(pref, true);
+      }
+      if (changed) {
+        const output = Cc["@mozilla.org/network/file-output-stream;1"].createInstance(Ci.nsIFileOutputStream);
+        output.init(data, 0x02 | 0x08 | 0x20, 0o644, 0);
+        const writer = Cc["@mozilla.org/intl/converter-output-stream;1"].createInstance(Ci.nsIConverterOutputStream);
+        writer.init(output, "UTF-8");
+        writer.writeString(JSON.stringify(installed));
+        writer.close();
+      }
     }
 
     // The staged manifest is called `chrome.manifest.in` inside the app,
@@ -640,7 +688,15 @@ def install_bootloader(app_root: Path, profile: Path) -> None:
         shutil.copyfile(source, destination)
         print(f"  app     {relative}")
 
-    (app_root / "config.js").write_text(SEED_JS % {"stage": STAGE_DIR})
+    (app_root / "config.js").write_text(
+        SEED_JS
+        % {
+            "stage": STAGE_DIR,
+            "retired": json.dumps(
+                [{"id": m["id"], "pref": m["pref"]} for m in RETIRED_MODS]
+            ),
+        }
+    )
     print("  app     config.js (with profile seeding)")
 
     replace_tree(unpacked / "profile" / "utils", profile / "chrome" / "utils")

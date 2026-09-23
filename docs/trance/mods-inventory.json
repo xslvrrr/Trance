@@ -379,13 +379,13 @@
       "storeId": "zen-library",
       "source": "https://github.com/12th-devs/Zen-Library",
       "license": "NONE",
-      "verdict": "PREINSTALL",
+      "verdict": "ZEN",
       "phase": 7,
       "cluster": "apps",
-      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030). Ships in full, as the author's own build rather than as a Trance rewrite of it: 7,500 lines with no interval, no MutationObserver, no backdrop-filter and no infinite animation, and one static will-change as the only section 3 offence in it. Still unlicensed, so nothing may be copied and nothing is.",
+      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030), then PREINSTALL->ZEN when Zen shipped a native Library (gh-15438, Zen 1.23, merged for Trance 0.2.1). The mod registers the same `zen-library-button` widget, the same `zen-library` element and the same `gZenLibrary` global, and destroys the native instance on load, so the PREINSTALL premise (no second owner) stopped being true. No longer provisioned; switched off once in profiles an earlier Trance provisioned it into (RETIRED_MODS in scripts/trance-cosine.py, ADR-086).",
       "investigated": "2026-08-26",
       "investigationDoc": "docs/trance/mods/zen-library.md",
-      "implemented": "preinstalled"
+      "implemented": "upstream"
     }
   ],
   "extensions": [

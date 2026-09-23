@@ -3999,3 +3999,41 @@ that was checked across all eight Zen JS touchpoints against the fork point.
   attribute on both elements, a width greater than the rail, and the hidden window buttons — the
   three things a person saw, rather than the field.
 - The touchpoint's diff against upstream is two lines smaller.
+
+---
+
+## ADR-086 — Zen Library is Zen's now, so Trance stops preinstalling the mod
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Supersedes:** the Zen Library half of ADR-030
+
+**Context:**
+
+ADR-030 changed Zen Library (`12th-devs/Zen-Library`) from a clean-room reimplementation to a
+preinstall, on the ground that it "opens a surface of its own that nothing in Trance competes for":
+no second owner, so nothing for a reimplementation to remove.
+
+Zen 1.23 implemented the Library natively (gh-15438), and the 0.2.1 merge brings it in. The mod
+and the native Library register the same `zen-library-button` widget, define the same `zen-library`
+element and use the same `window.gZenLibrary` global, and the mod's first act on load is
+`window.gZenLibrary.destroy()`. On the packaged 0.2.1 build with the mod still preinstalled, the
+mod's `CustomizableUI.createWidget` threw on the duplicate id and its fallback wired itself to Zen's
+button instead. Two owners of one surface, with the winner decided by load order — the failure
+TRANCE.md §3.1 describes, arriving from upstream.
+
+**Decision:**
+
+- Verdict `ZEN` in `mods-inventory.json`; the mod leaves `PREINSTALLED_MODS`.
+- Add `RETIRED_MODS` to `scripts/trance-cosine.py`. The generated `config.js` — which already runs on
+  every startup before Sine — sets `enabled: false` on each retired mod in the profile's
+  `mods.json` once, synchronously, and records that in `trance.mods.retired.<id>`. Disabled, not
+  deleted; the pref means a person who re-enables it in Sine keeps it enabled.
+- The mod guard's entry becomes `native`, owned by Zen, recommending uninstall.
+
+**Consequences:**
+- New profiles get five preinstalled mods instead of six.
+- Profiles upgraded from 0.2.0 lose the mod's Library and get Zen's. Verified on the packaged
+  artefact: the mod is switched off on first launch, every other mod is untouched, the native widget
+  is registered by Zen alone, and a re-enable survives the next restart.
+- No upstream file is touched; the retirement lives in the provisioner Trance already owns.

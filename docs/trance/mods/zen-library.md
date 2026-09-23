@@ -6,10 +6,27 @@
 | **User's version** | 1.0.0 |
 | **Source** | `12th-devs/Zen-Library` (author: JustADumbPrsn) |
 | **License** | **None** — no `LICENSE` file in the repository |
-| **Verdict** | ~~NATIVE — clean-room, ships in full~~ → **PREINSTALL** (ADR-030) |
+| **Verdict** | ~~NATIVE — clean-room, ships in full~~ → ~~PREINSTALL~~ (ADR-030) → **ZEN** (ADR-086) |
 | **Phase** | 7 |
 | **Cluster** | apps |
 | **Investigated** | 2026-08-26 |
+
+## Superseded (2026-09-23): Zen ships a Library of its own
+
+Zen 1.23 implemented the Library natively (gh-15438, `src/zen/library/`), and Trance 0.2.1 merges
+it. The argument below rested on one fact — "there is no second owner to remove" — and that fact is
+gone: the native Library registers the `zen-library-button` widget, defines the `zen-library`
+element and sets `window.gZenLibrary`, and this mod does all three and calls
+`window.gZenLibrary.destroy()` on load. With both present the mod's widget creation throws and the
+Library in the browser becomes the mod's rather than Zen's.
+
+So the verdict is ZEN: the browser already does this. Trance no longer provisions the mod, and the
+generated `config.js` switches it off once in any profile an earlier Trance installed it into,
+before Sine reads `mods.json` — disabled rather than deleted, and never again after a person turns
+it back on. The mod guard marks it as owned by Zen. ADR-086.
+
+The rest of this document is the case as it was made in August, kept because the reasoning is what
+decided the verdict at the time.
 
 ## 0. Verdict: this one is installed, not reimplemented
 

@@ -35,13 +35,14 @@ const TRANCE_XHTML_NS = "http://www.w3.org/1999/xhtml";
  * `names` — display names, matched case- and punctuation-insensitively as a
  *           fallback for mods installed from a raw repo URL, where the id is
  *           whatever the mod's own JSON says.
- * `status`— "native" if Trance already ships the behaviour, "partial" if only
- *           some of it has landed, "planned" if the phase that owns it has
- *           not landed yet, "dropped" if investigation decided Trance will
- *           never build it (a DEFER verdict in the inventory), and "shipped"
- *           if Trance installs the mod itself rather than reimplementing it.
+ * `status`— "native" if the browser already ships the behaviour — Trance or,
+ *           where Zen has since built it, Zen — "partial" if only some of it
+ *           has landed, "planned" if the phase that owns it has not landed
+ *           yet, "dropped" if investigation decided Trance will never build it
+ *           (a DEFER verdict in the inventory), and "shipped" if Trance
+ *           installs the mod itself rather than reimplementing it.
  *
- *           "shipped" is not a warning and is not coloured like one. Six mods
+ *           "shipped" is not a warning and is not coloured like one. Five mods
  *           are in that category, for four different reasons.
  *
  *           Two are a licence question, from opposite ends of the spectrum: an
@@ -50,10 +51,11 @@ const TRANCE_XHTML_NS = "http://www.w3.org/1999/xhtml";
  *           not copy (ADR-027). In both cases a clean-room reimplementation
  *           could only ever approximate someone else's drawing.
  *
- *           Two are a value question: Zen Library and Live Calendar each open a
- *           surface of their own and own no element Trance owns, so
- *           reimplementing them would remove no conflict and would arrive at
- *           the same runtime cost as the original (ADR-030).
+ *           One is a value question: Live Calendar opens a surface of its own
+ *           and owns no element Trance owns, so reimplementing it would remove
+ *           no conflict and would arrive at the same runtime cost as the
+ *           original (ADR-030). Zen Library was the second, until Zen shipped
+ *           a Library of its own and the mod became its second owner (ADR-086).
  *
  *           One had nothing on either side of the trade: Pimp your PiP is 88
  *           lines of CSS over a window no Trance stylesheet reaches, so there
@@ -64,7 +66,7 @@ const TRANCE_XHTML_NS = "http://www.w3.org/1999/xhtml";
  *           button with two owners and a user with part of what they installed.
  *           Shipping the author's own distribution ends both (ADR-049).
  *
- *           In all six cases anyone — including this provisioner — may install
+ *           In all five cases anyone — including this provisioner — may install
  *           the author's own distribution. The banner is there so that the
  *           reason it is preinstalled, and what turning it off costs, are
  *           visible where the mod is.
@@ -326,15 +328,16 @@ const TRANCE_REPLACED_MODS = [
   {
     keys: ["zen-library"],
     names: ["Zen Library"],
-    status: "shipped",
-    owner: "Trance apps",
+    status: "native",
+    owner: "Zen (built-in Library)",
     detail:
-      "Trance provisions this mod itself, at the version its author " +
-      "publishes. 7,500 lines with no interval, no MutationObserver and no " +
-      "infinite animation, opening a surface of its own that nothing in " +
-      "Trance competes for — so a reimplementation would have removed no " +
-      "conflict and cost what the original costs. Uninstalling it here is " +
-      "supported and leaves nothing behind (ADR-030).",
+      "Zen now ships the Library natively, and this mod was the Library " +
+      "before it did. The two register the same toolbar button, the same " +
+      "element and the same global, and the mod tears the built-in one down " +
+      "when it loads — so with it on, the Library in the browser is this " +
+      "mod's, not Zen's. Trance no longer installs it, and switched it off " +
+      "once in profiles it had installed it into. Uninstalling it is " +
+      "recommended (ADR-086).",
   },
   {
     keys: ["599a1599-e6ab-4749-ab22-de533860de2c"],
