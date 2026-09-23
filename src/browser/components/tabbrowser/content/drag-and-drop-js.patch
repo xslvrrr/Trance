@@ -1,5 +1,5 @@
 diff --git a/browser/components/tabbrowser/content/drag-and-drop.js b/browser/components/tabbrowser/content/drag-and-drop.js
-index f9623f82499e516050d523068e70ebaa4fe9a66a..95bcc078a86b4ec4b35f5916b7e4a5e305afba9e 100644
+index f9623f82499e516050d523068e70ebaa4fe9a66a..e45b741bbe457803ade0c226c498cbb10bf2b13a 100644
 --- a/browser/components/tabbrowser/content/drag-and-drop.js
 +++ b/browser/components/tabbrowser/content/drag-and-drop.js
 @@ -42,6 +42,9 @@
@@ -292,31 +292,3 @@ index f9623f82499e516050d523068e70ebaa4fe9a66a..95bcc078a86b4ec4b35f5916b7e4a5e3
        // moving tabs don't adjust for RTL
        for (let item of selectedElements) {
          if (
-@@ -1978,7 +1996,6 @@
-       for (let item of this._tabbrowserTabs.dragAndDropElements) {
-         delete item._moveTogetherSelectedTabsData;
-         item = elementToMove(item);
--        item.style.transform = "";
-         item.removeAttribute("multiselected-move-together");
-       }
-     }
-@@ -2830,7 +2847,6 @@
-         tab.style.top = "";
-         tab.style.maxWidth = "";
-         tab.style.pointerEvents = "";
--        tab.removeAttribute("dragtarget");
-         tab.removeAttribute("small-stack");
-         tab.removeAttribute("big-stack");
-       }
-@@ -2839,11 +2855,9 @@
-       )) {
-         label.style.width = "";
-         label.style.maxWidth = "";
--        label.style.height = "";
-         label.style.left = "";
-         label.style.top = "";
-         label.style.pointerEvents = "";
--        label.removeAttribute("dragtarget");
-       }
-       for (let label of draggedTabContainer.getElementsByClassName(
-         "tab-group-label"

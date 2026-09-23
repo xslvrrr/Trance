@@ -3,30 +3,14 @@
   "schema": 1,
   "generator": "scripts/trance-patches.py manifest",
   "counts": {
-    "patches": 256,
-    "patchedFiles": 300,
-    "symlinkedFiles": 1390,
-    "filesWithMultipleOwners": 6,
+    "patches": 257,
+    "patchedFiles": 271,
+    "symlinkedFiles": 1448,
+    "filesWithMultipleOwners": 4,
     "orderSensitiveFiles": 3,
-    "deadPaths": 10
+    "deadPaths": 11
   },
   "overlappingFiles": {
-    "gfx/wr/webrender/src/renderer/mod.rs": {
-      "patches": [
-        "src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch",
-        "src/external-patches/firefox/css_corner_shape_rendering.patch"
-      ],
-      "reason": "Two unrelated Firefox patches in one WebRender file: the opaque-backdrop fallback (ADR-065) and corner-shape rendering.",
-      "declared": true
-    },
-    "modules/libpref/init/StaticPrefList.yaml": {
-      "patches": [
-        "src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch",
-        "src/modules/libpref/init/StaticPrefList-yaml.patch"
-      ],
-      "reason": "The opaque-backdrop patch declares `gfx.webrender.opaque-backdrop-fallback`; Zen's own patch declares Zen's static prefs. Both append entries to a long list and never touch each other's.",
-      "declared": true
-    },
     "toolkit/components/pictureinpicture/PictureInPicture.sys.mjs": {
       "patches": [
         "src/external-patches/firefox/issue_14710.patch",
@@ -139,293 +123,72 @@
         "kind": "and-false",
         "line": "+          this._tabbrowserTabs.verticalMode && tab.pinned && false"
       }
+    ],
+    "src/browser/extensions/newtab/lib/AboutPreferences-sys-mjs.patch": [
+      {
+        "kind": "if-false",
+        "line": "+      if (false) {"
+      }
     ]
   },
   "patches": [
     {
-      "patch": "src/external-patches/firefox/allow_backdrop_to_work_on_transparency.patch",
+      "patch": "src/external-patches/firefox/backdrop_filter_reads_web_content.patch",
       "owner": "external:firefox",
       "pin": {
-        "sha256": "b45f95aa1bb5d3ce252d6499da8035300bc27a2fd580392930f411be01972d0e",
-        "origin": {
-          "type": "local"
-        }
-      },
-      "targets": [
-        {
-          "path": "gfx/webrender_bindings/WebRenderAPI.cpp",
-          "base": null,
-          "result": null
-        },
-        {
-          "path": "gfx/webrender_bindings/src/bindings.rs",
-          "base": null,
-          "result": null
-        },
-        {
-          "path": "gfx/wr/webrender/src/device/gl.rs",
-          "base": null,
-          "result": null
-        },
-        {
-          "path": "gfx/wr/webrender/src/renderer/init.rs",
-          "base": null,
-          "result": null
-        },
-        {
-          "path": "gfx/wr/webrender/src/renderer/mod.rs",
-          "base": null,
-          "result": null
-        },
-        {
-          "path": "modules/libpref/init/StaticPrefList.yaml",
-          "base": null,
-          "result": null
-        }
-      ]
-    },
-    {
-      "patch": "src/external-patches/firefox/bug_2011236.patch",
-      "owner": "external:firefox",
-      "pin": {
-        "sha256": "c683ecd734351c78977185913a177aa0f330a0a86266e6e2def9afe635c933c9",
+        "sha256": "09c7d548278218643f2749131a36ec0668b3613a54760fa7f29a92d0e81c508f",
         "origin": {
           "type": "phabricator",
           "revisions": [
-            "D320897"
+            "D327914"
           ]
         }
       },
       "targets": [
         {
-          "path": "browser/components/sessionstore/test/browser.toml",
-          "base": null,
-          "result": null
+          "path": "gfx/wr/webrender/src/command_buffer.rs",
+          "base": "9369cea",
+          "result": "8c70d29"
         },
         {
-          "path": "browser/components/sessionstore/test/browser_policy_container_not_stored.js",
-          "base": null,
-          "result": null,
-          "creates": true
+          "path": "gfx/wr/webrender/src/frame_builder.rs",
+          "base": "068182d",
+          "result": "1442528"
         },
         {
-          "path": "browser/components/sessionstore/test/browser_policy_container_sample.html",
-          "base": null,
-          "result": null,
-          "creates": true
-        },
-        {
-          "path": "browser/components/sessionstore/test/browser_policy_container_sample_frame.html",
-          "base": null,
-          "result": null,
-          "creates": true
-        },
-        {
-          "path": "docshell/shistory/SessionHistoryEntry.cpp",
-          "base": null,
-          "result": null
-        }
-      ]
-    },
-    {
-      "patch": "src/external-patches/firefox/css_corner_shape_rendering.patch",
-      "owner": "external:firefox",
-      "pin": {
-        "sha256": "c97cd4c83ee58e7e513e46f23982f4a1d157a77ed91cc97170fc183c2d36fbfb",
-        "origin": {
-          "type": "local"
-        }
-      },
-      "targets": [
-        {
-          "path": "gfx/wr/webrender/res/border_shared.glsl",
-          "base": "f385449fa7",
-          "result": "76eba024bd"
-        },
-        {
-          "path": "gfx/wr/webrender/res/cs_border_segment.glsl",
-          "base": "6a94117405",
-          "result": "51c9318b31"
-        },
-        {
-          "path": "gfx/wr/webrender/res/cs_border_solid.glsl",
-          "base": "90584346a4",
-          "result": "05d314571e"
-        },
-        {
-          "path": "gfx/wr/webrender/res/ellipse.glsl",
-          "base": "cb7d5d89af",
-          "result": "7ce1bcacb4"
-        },
-        {
-          "path": "gfx/wr/webrender/res/ps_quad_box_shadow.glsl",
-          "base": "1153b21193",
-          "result": "73514b7c4e"
-        },
-        {
-          "path": "gfx/wr/webrender/res/ps_quad_mask.glsl",
-          "base": "6949a343a1",
-          "result": "351f300fbc"
-        },
-        {
-          "path": "gfx/wr/webrender/src/batch.rs",
-          "base": "e137afd807",
-          "result": "eb5de7a9fb"
-        },
-        {
-          "path": "gfx/wr/webrender/src/border.rs",
-          "base": "eb9381f7d1",
-          "result": "b6158fde38"
-        },
-        {
-          "path": "gfx/wr/webrender/src/gpu_types.rs",
-          "base": "a53058b470",
-          "result": "6373884471"
-        },
-        {
-          "path": "gfx/wr/webrender/src/pattern/box_shadow.rs",
-          "base": "1cee87e980",
-          "result": "6d0cb1797d"
-        },
-        {
-          "path": "gfx/wr/webrender/src/pattern/mod.rs",
-          "base": "e3c1d9c771",
-          "result": "8fb3d66f74"
-        },
-        {
-          "path": "gfx/wr/webrender/src/quad.rs",
-          "base": "1a5d92bf6d",
-          "result": "185f6e3ee6"
+          "path": "gfx/wr/webrender/src/picture.rs",
+          "base": "9b100ee",
+          "result": "8f476e5"
         },
         {
           "path": "gfx/wr/webrender/src/render_target.rs",
-          "base": "d393c99a72",
-          "result": "21853655a9"
+          "base": "2185365",
+          "result": "d3ca780"
         },
         {
-          "path": "gfx/wr/webrender/src/render_task.rs",
-          "base": "4501e2de8b",
-          "result": "b4e1478192"
+          "path": "gfx/wr/webrender/src/renderer/composite.rs",
+          "base": "032a0e1",
+          "result": "dd91394"
         },
         {
           "path": "gfx/wr/webrender/src/renderer/mod.rs",
-          "base": "024e1b63c4",
-          "result": "d177263096"
+          "base": "d177263",
+          "result": "a45ec70"
         },
         {
-          "path": "gfx/wr/webrender/src/renderer/shade.rs",
-          "base": "0a88c76bf8",
-          "result": "575275d3b4"
+          "path": "gfx/wr/webrender/src/surface.rs",
+          "base": "20536bb",
+          "result": "f8a8709"
         },
         {
-          "path": "gfx/wr/webrender_build/src/shader_features.rs",
-          "base": "87a60097a6",
-          "result": "873f413557"
+          "path": "gfx/wr/webrender/src/tile_cache/mod.rs",
+          "base": "731be26",
+          "result": "d20e6ac"
         },
         {
-          "path": "gfx/wr/wrench/reftests/border/border-shape-2.yaml",
-          "base": "0000000000",
-          "result": "44f12d74f3",
-          "creates": true
-        },
-        {
-          "path": "gfx/wr/wrench/reftests/border/border-shape-3.yaml",
-          "base": "0000000000",
-          "result": "5085c083dc",
-          "creates": true
-        },
-        {
-          "path": "gfx/wr/wrench/reftests/border/border-shape-4.yaml",
-          "base": "0000000000",
-          "result": "27c9b2fd9d",
-          "creates": true
-        },
-        {
-          "path": "gfx/wr/wrench/reftests/border/border-shape-inset.yaml",
-          "base": "0000000000",
-          "result": "4b6e51ee3e",
-          "creates": true
-        },
-        {
-          "path": "gfx/wr/wrench/reftests/border/border-shape.yaml",
-          "base": "0000000000",
-          "result": "c0ac275110",
-          "creates": true
-        },
-        {
-          "path": "gfx/wr/wrench/reftests/border/reftest.list",
-          "base": "98550ba96a",
-          "result": "8813005879"
-        },
-        {
-          "path": "layout/painting/nsDisplayList.cpp",
-          "base": "9aed0b1841",
-          "result": "221e296ade"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-bevel.html.ini",
-          "base": "48f1f399ff",
-          "result": "64de30993d"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-notch-mixed.html.ini",
-          "base": "e8f92f3417",
-          "result": "0cef33e8c4"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-notch.html.ini",
-          "base": "e69fb19cc6",
-          "result": "9cd5ad23a6"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-scoop.html.ini",
-          "base": "b8df36dfff",
-          "result": "bebaeb9706"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-square-notch-mixed.html.ini",
-          "base": "d33e0df628",
-          "result": "e829d53044"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-square-notch-superellipse.html.ini",
-          "base": "d66f06741d",
-          "result": "12d5bac673"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-square.html.ini",
-          "base": "e9b1a330d2",
-          "result": "5aca5449b0"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-superellipse-bevel.html.ini",
-          "base": "1a106e3e3c",
-          "result": "f175e3fb97"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-superellipse-negative-100.html.ini",
-          "base": "df13a251a0",
-          "result": "6a32def3ac"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-superellipse-negative-inf.html.ini",
-          "base": "c6a7827768",
-          "result": "4c2ad71472"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/corner-shape-superellipse-scoop.html.ini",
-          "base": "f3e23852d0",
-          "result": "fc98f5a2f2"
-        },
-        {
-          "path": "testing/web-platform/meta/css/css-borders/corner-shape/render-corner-shape.html.ini",
-          "base": "84c9fe0339",
-          "result": "6c121825bb"
-        },
-        {
-          "path": "widget/ThemeDrawing.cpp",
-          "base": "c2550d9c2d",
-          "result": "ec7aa4bb1c"
+          "path": "gfx/wr/webrender/src/tile_cache/slice_builder.rs",
+          "base": "f81edc9",
+          "result": "d8759bc"
         }
       ]
     },
@@ -453,7 +216,7 @@
       "patch": "src/external-patches/firefox/issue_14710.patch",
       "owner": "external:firefox",
       "pin": {
-        "sha256": "4219b834681952586f4a4c7729b3bce7fd10872fecd365cf8e3365e07686421f",
+        "sha256": "56929c4973c9f341351bd886f57baf41c03637fbd06dd085005c76845819159f",
         "origin": {
           "type": "phabricator",
           "revisions": [
@@ -464,6 +227,11 @@
       "targets": [
         {
           "path": "toolkit/components/pictureinpicture/PictureInPicture.sys.mjs",
+          "base": null,
+          "result": null
+        },
+        {
+          "path": "toolkit/components/pictureinpicture/tests/browser_autotoggle.js",
           "base": null,
           "result": null
         }
@@ -511,10 +279,51 @@
       ]
     },
     {
+      "patch": "src/external-patches/firefox/issue_15123.patch",
+      "owner": "external:firefox",
+      "pin": {
+        "sha256": "ab4271f8206be75f1fb8c2487943b335817e8e3933de870c8135ad471fd217e6",
+        "origin": {
+          "type": "phabricator",
+          "revisions": [
+            "D323933"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "path": "toolkit/modules/subprocess/subprocess_shared_unix.js",
+          "base": null,
+          "result": null
+        },
+        {
+          "path": "toolkit/modules/subprocess/subprocess_unix.sys.mjs",
+          "base": null,
+          "result": null
+        },
+        {
+          "path": "toolkit/modules/subprocess/subprocess_unix.worker.js",
+          "base": null,
+          "result": null
+        },
+        {
+          "path": "toolkit/modules/subprocess/test/xpcshell/test_subprocess_pipe_flags.js",
+          "base": null,
+          "result": null,
+          "creates": true
+        },
+        {
+          "path": "toolkit/modules/subprocess/test/xpcshell/xpcshell.toml",
+          "base": null,
+          "result": null
+        }
+      ]
+    },
+    {
       "patch": "src/external-patches/firefox/native_macos_popovers_fix.patch",
       "owner": "external:firefox",
       "pin": {
-        "sha256": "fedecbe02278ba2092230f2905cbdbd0f33b31bdc5669fd0b2e90bf8ea642ab9",
+        "sha256": "fa4679f2de418114814aa7d78501f385c8a51b4ee353b7219a793956a1f91375",
         "origin": {
           "type": "phabricator",
           "revisions": [
@@ -558,6 +367,23 @@
       ]
     },
     {
+      "patch": "src/external-patches/firefox/override_cert_checks_temp.patch",
+      "owner": "external:firefox",
+      "pin": {
+        "sha256": "4cb004c25e3cd1a7c607cfe502e5c50f82593382fb1ff4509aa32b43c01d6c60",
+        "origin": {
+          "type": "local"
+        }
+      },
+      "targets": [
+        {
+          "path": "toolkit/mozapps/update/common/registrycertificates.cpp",
+          "base": "f7f5acdfa08879a0ff3095e15eebf7b436cf5092",
+          "result": "5915141b3f4a6d3536841cc1040e70afe033e058"
+        }
+      ]
+    },
+    {
       "patch": "src/external-patches/librewolf/firefox-in-ua.patch",
       "owner": "external:librewolf",
       "pin": {
@@ -593,7 +419,7 @@
         {
           "path": ".stylelintignore",
           "base": "185490999507b8a5032977237af50f5e61c71df1",
-          "result": "77c1635d90c6480af4ebd3c6e3ec49780eaca571"
+          "result": "4b1b1dc76d316f38f60c90e6cbd74d9569800d04"
         }
       ]
     },
@@ -878,8 +704,8 @@
       "targets": [
         {
           "path": "browser/base/content/navigator-toolbox.inc.xhtml",
-          "base": "dd2f391096968564086911c532f696dc7ffb8ae1",
-          "result": "c968e5f0ebb5f0151fb124bafe10d8d5361e060f"
+          "base": "a76bb7aae7636c07989a4acb35281777d3103505",
+          "result": "d35aa0457307e95ad00464861fcee2827325193e"
         }
       ]
     },
@@ -994,6 +820,17 @@
       ]
     },
     {
+      "patch": "src/browser/components/contextualidentity/content/ContainerCreationPanel-mjs.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "browser/components/contextualidentity/content/ContainerCreationPanel.mjs",
+          "base": "e04d7a4738192703e8f7f8555f50aaf0a619a5bd",
+          "result": "b86e4853c421856f84ad8e017062f0d611b88aad"
+        }
+      ]
+    },
+    {
       "patch": "src/browser/components/controlcenter/content/identityPanel-inc-xhtml.patch",
       "owner": "zen",
       "targets": [
@@ -1010,8 +847,8 @@
       "targets": [
         {
           "path": "browser/components/customizableui/CustomizableUI.sys.mjs",
-          "base": "6d1885a54815d10b3a4e79f7e5acd61ab3abb159",
-          "result": "97e07d85c69ec97baeab05aedd57bd8869254d59"
+          "base": "875f8b03d979353ef44a57c15ef1ae09d33ab730",
+          "result": "3d6e092e7ed126cdee8c32229df2cfa13303d3a3"
         }
       ]
     },
@@ -1142,8 +979,8 @@
       "targets": [
         {
           "path": "browser/components/preferences/config/account-sync.mjs",
-          "base": "b503987a08e2ce64bfc01c4e3a21e5e19ef834f0",
-          "result": "b1c03a0b219fd3eddd93c1deaeb18ab79c85f168"
+          "base": "b01fd4bb163ad53139fcbd8e79e12ef994d1fa13",
+          "result": "7e3c2f6852b77192b4505bb3d5a7b58586da6548"
         }
       ]
     },
@@ -1208,8 +1045,8 @@
       "targets": [
         {
           "path": "browser/components/preferences/main.js",
-          "base": "88675d1bcbf000b10d85a9c0980bc6069d88052c",
-          "result": "ed3a1e809eb0fcccc5a957be7affb77be8978e32"
+          "base": "5a56d348146c1c37c088ced60327fffebcf8fac0",
+          "result": "abd65594d365fbc0a74af3953c71f410301898ad"
         }
       ]
     },
@@ -1296,8 +1133,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionFile.sys.mjs",
-          "base": "5580838acd72bf0e1189d367984859529d89f5b4",
-          "result": "e5fa6076a9cc6ada016ccc4e129cad455010a522"
+          "base": "370e5c105c3d9bee05c2d9d7b63d0ee45b8331e1",
+          "result": "1c37c19794ebe863a25f780e9a74d63526b929d7"
         }
       ]
     },
@@ -1307,8 +1144,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionSaver.sys.mjs",
-          "base": "9141793550f7c7ff6aa63d4c85bf571b4499e2d0",
-          "result": "f00314ebf75ac826e1c9cca8af264ff8aae106c0"
+          "base": "1f26bc5fdb83f55bdf0b9b7d01fafe1cd37f77f4",
+          "result": "4e812b405777b176f9e0e2ec17817c4430b726fa"
         }
       ]
     },
@@ -1318,8 +1155,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionStartup.sys.mjs",
-          "base": "86600ffb5178599ab23270a964064ca657a3283f",
-          "result": "693948b5392944839252665cac68f8a99531e9bf"
+          "base": "919d4536c5462603346684bbe26794ae9279b517",
+          "result": "3dd59142dccddeadae1e2552eed3b1c27f1bac1b"
         }
       ]
     },
@@ -1329,8 +1166,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionStore.sys.mjs",
-          "base": "76a984f6e21409941ea038218d161e67f2e0c23d",
-          "result": "32fb0c9b8bc8ffc54672578ed54fd84944ab595d"
+          "base": "52fc803050cd257d6de52b1e4a92f3211cbaba88",
+          "result": "d4a7d082bda9fa6464a05f4746638c9ffa981e1d"
         }
       ]
     },
@@ -1351,8 +1188,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/TabState.sys.mjs",
-          "base": "a33deeb5b587d6a950960a1a4781176e4e730ad7",
-          "result": "e96cfb9a5ffbe4feccdffa8b6d18ececb48d4c52"
+          "base": "bb7bd8c7ca88f776188fce64e0c85beb5ceb27a5",
+          "result": "bdec77ba26172fe1b41369b1d45d5a6f9d52ae25"
         }
       ]
     },
@@ -1401,6 +1238,17 @@
       ]
     },
     {
+      "patch": "src/browser/components/tabbrowser/Tabbrowser-sys-mjs.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "browser/components/tabbrowser/Tabbrowser.sys.mjs",
+          "base": "f68e37926001384d0c8e80a3c163dc89e9c4ee5c",
+          "result": "a9a5dfbc38348f2c070f22af2954a089db94a6d3"
+        }
+      ]
+    },
+    {
       "patch": "src/browser/components/tabbrowser/TabsList-sys-mjs.patch",
       "owner": "zen",
       "targets": [
@@ -1428,8 +1276,8 @@
       "targets": [
         {
           "path": "browser/components/tabbrowser/content/drag-and-drop.js",
-          "base": "70b37f93c4e8ff4ad9a2452681e468d23914c1b5",
-          "result": "aea58220824dcde0791bb3712d1062d37cfd6b3b"
+          "base": "f9623f82499e516050d523068e70ebaa4fe9a66a",
+          "result": "e45b741bbe457803ade0c226c498cbb10bf2b13a"
         }
       ]
     },
@@ -1456,24 +1304,13 @@
       ]
     },
     {
-      "patch": "src/browser/components/tabbrowser/content/tabbrowser-js.patch",
-      "owner": "zen",
-      "targets": [
-        {
-          "path": "browser/components/tabbrowser/content/tabbrowser.js",
-          "base": "43180487a2fac15b7a65fac94f233eeed9094990",
-          "result": "ae1288974cae29da929f27b78ff8db542566eba2"
-        }
-      ]
-    },
-    {
       "patch": "src/browser/components/tabbrowser/content/tabgroup-js.patch",
       "owner": "zen",
       "targets": [
         {
           "path": "browser/components/tabbrowser/content/tabgroup.js",
           "base": "237950fb2c449ce088c204d33a70b1d95dae549b",
-          "result": "af200a043dcd2e24393fcefe32493e356c9f8c6f"
+          "result": "635f9dbc5c79b6bb869b4ab4ec2d4b4e226b4672"
         }
       ]
     },
@@ -1516,8 +1353,8 @@
       "targets": [
         {
           "path": "browser/components/urlbar/UrlbarProviderHeuristicFallback.sys.mjs",
-          "base": "cfc232f038cd491db32e0c0ca35622360dd9dec5",
-          "result": "4806a725ddefa9d0709020d537eae5464249a294"
+          "base": "e32b02941a6019703212cede4660a24b88845120",
+          "result": "5cb363ed20d49c1ae8abedecc3b08540406b7a1b"
         }
       ]
     },
@@ -1529,17 +1366,6 @@
           "path": "browser/components/urlbar/UrlbarProvidersManager.sys.mjs",
           "base": "67f51c7996c24549f39594c9a518bc5316350ce7",
           "result": "d66969f2411bb687c15448ad828b64ddf43c3389"
-        }
-      ]
-    },
-    {
-      "patch": "src/browser/components/urlbar/UrlbarUtils-sys-mjs.patch",
-      "owner": "zen",
-      "targets": [
-        {
-          "path": "browser/components/urlbar/UrlbarUtils.sys.mjs",
-          "base": "178cd5e84fda74a28b2de59b671b3399cc28fac4",
-          "result": "b03c6e06de4ee9a95dcb4d33d7ac9f0b053be4e1"
         }
       ]
     },
@@ -1560,19 +1386,19 @@
       "targets": [
         {
           "path": "browser/components/urlbar/content/UrlbarChildController.mjs",
-          "base": "a17a4de079b69d2818388b33a2c1746cc6148c73",
-          "result": "4fee63a22919972af08716db2d2de1c7549ff100"
+          "base": "52ed36deac35d3de9f7f537313159fb4debe98a6",
+          "result": "3bbc612a2e10eedafdabdaa8e17cf36831a6a27c"
         }
       ]
     },
     {
-      "patch": "src/browser/components/urlbar/content/UrlbarInput-mjs.patch",
+      "patch": "src/browser/components/urlbar/content/UrlbarInputBase-mjs.patch",
       "owner": "zen",
       "targets": [
         {
-          "path": "browser/components/urlbar/content/UrlbarInput.mjs",
-          "base": "319fb6870ec18d87b9f1263bd960edaa39b0447c",
-          "result": "554cc90fb2307450ddc68033968cefd1a95e28b8"
+          "path": "browser/components/urlbar/content/UrlbarInputBase.mjs",
+          "base": "8be35b58c5369e123ca69426e852e3849bf75513",
+          "result": "778d8aecce4da6748ecbf8b86a38c2da6e01bec5"
         }
       ]
     },
@@ -1593,8 +1419,8 @@
       "targets": [
         {
           "path": "browser/components/urlbar/content/UrlbarShared.mjs",
-          "base": "4e67dad66ae006842abc6eed547e4a244320d57a",
-          "result": "393b61b4d2543c73e60afd334a353f36119ae73e"
+          "base": "0ac5330223c84fbb98880a5c2d83ae58a8f3079e",
+          "result": "ff488cf5a2c8b7857a8e145e40aaf861cfa655ec"
         }
       ]
     },
@@ -1617,6 +1443,17 @@
           "path": "browser/components/urlbar/content/enUS-searchFeatures.ftl",
           "base": "e405f0f8844eea7081e4302cc35ccd8d8124aa90",
           "result": "90baec46971c6bd3ec738a338834af0351872d14"
+        }
+      ]
+    },
+    {
+      "patch": "src/browser/extensions/newtab/lib/AboutPreferences-sys-mjs.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "browser/extensions/newtab/lib/AboutPreferences.sys.mjs",
+          "base": "4562efc05b76d5dddd35bda79bd7d5d98a51ffc9",
+          "result": "ad9b6f55f5e77065ce74535daf6457a5c4b44058"
         }
       ]
     },
@@ -1661,6 +1498,17 @@
           "path": "browser/installer/windows/nsis/installer.nsi",
           "base": "785e5ccfba55a98390652a61be9dbdef1e4815eb",
           "result": "cba2c3bb3b2e5bcbe8ba58a40bc9bc145df81fdd"
+        }
+      ]
+    },
+    {
+      "patch": "src/browser/installer/windows/nsis/shared-nsh.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "browser/installer/windows/nsis/shared.nsh",
+          "base": "b81c7ef59be0d25f67668215028008a451860df2",
+          "result": "fa0ab8947e011289d25158cab17ff9388b5cab0d"
         }
       ]
     },
@@ -1714,8 +1562,8 @@
       "targets": [
         {
           "path": "browser/modules/ExtensionsUI.sys.mjs",
-          "base": "95a4b6e40bd568c3ea5003b648b0acbf96bbb725",
-          "result": "6ab8a658721aa6470d482dc958e4b3ac78f49f44"
+          "base": "73ef024602cb4554a024de4ddef83f492adc33ef",
+          "result": "959c3403a48a3e4294ad5d2f72bad0e5d4fbfd75"
         }
       ]
     },
@@ -1813,8 +1661,8 @@
       "targets": [
         {
           "path": "browser/themes/shared/tabbrowser/content-area.css",
-          "base": "2374ed38bd9361d6c7e1886117099c6761e403b8",
-          "result": "72f1f52a13096f19ca4009037ad0cdc880775ff7"
+          "base": "86400b643c8b2af4207d226fbd6d91e5e74548b9",
+          "result": "3044e4ab87b7ebcfaa2ac624680da1cc5653c861"
         }
       ]
     },
@@ -1846,19 +1694,19 @@
       "targets": [
         {
           "path": "browser/themes/shared/toolbarbuttons.css",
-          "base": "94b1a2a841d8fd47a491616d52e5bf544f0c0bf9",
-          "result": "9e98266b98c6b66fed26fec12fa3391fc5fcc79b"
+          "base": "bbf906c7bf1d6f0d71744953aeeb750c5181639a",
+          "result": "dd116e22c38dc376c9c6b34dfa569bf4661a8971"
         }
       ]
     },
     {
-      "patch": "src/browser/themes/shared/urlbar-searchbar-css.patch",
+      "patch": "src/browser/themes/shared/urlbar-css.patch",
       "owner": "zen",
       "targets": [
         {
-          "path": "browser/themes/shared/urlbar-searchbar.css",
-          "base": "149f123e26cd79e89432dfeb504ca7218ee04810",
-          "result": "7e0e6d981d6c2aa53bc2a76d82d2078419659065"
+          "path": "browser/themes/shared/urlbar.css",
+          "base": "06183c82e2869290a5fb476c47fb7db92bbef57f",
+          "result": "c64cde1eef50d3457fb1c540d95fe3b8aa087294"
         }
       ]
     },
@@ -1901,7 +1749,7 @@
       "targets": [
         {
           "path": "build/moz.configure/lto-pgo.configure",
-          "base": "df2b0bf0081edfdc2c7bccaefc780d2b0c6555ff",
+          "base": "c72af5ed5f88fc80c810ef626e57a8b991dee514",
           "result": "53a3b55de7650799e3730372e72ad7b4bb2eea03"
         }
       ]
@@ -2308,8 +2156,8 @@
       "targets": [
         {
           "path": "layout/painting/nsImageRenderer.cpp",
-          "base": "6e464b48c90174b8954aad8a79bae30a7a30cbc9",
-          "result": "9ea9a4963ceae679f092e014ac24a0d24fb106ce"
+          "base": "7ddc4f7e259272e7b905f44aff7316c1ba540c22",
+          "result": "277a92e5d10e6a04b12373854ffe6791d562215e"
         }
       ]
     },
@@ -2418,8 +2266,8 @@
       "targets": [
         {
           "path": "layout/svg/SVGGradientFrame.cpp",
-          "base": "b0d38b0fab01797328af0b1f1f48af8fb5eebe4d",
-          "result": "953feffdc96143dc2d8f8e57f8bb4a6aeb33f0c5"
+          "base": "eebcced86ec1e9010b761d5df4a92684dde44009",
+          "result": "4dc018a73a979f50ac7842e4a3f3fcf9d0071b56"
         }
       ]
     },
@@ -2440,8 +2288,8 @@
       "targets": [
         {
           "path": "layout/svg/SVGImageContext.h",
-          "base": "ad833c7c2ee6a4c4984efdb0d59e3576c2d1bc19",
-          "result": "36864a34badc0cbfe44d6295798622fd6178f9e3"
+          "base": "63f3c4926cfdb8b12e9e4a38016fc66f50cf3129",
+          "result": "5ba3f2c07f521905a086ee6eea87975d5a3441ec"
         }
       ]
     },
@@ -2787,17 +2635,6 @@
       ]
     },
     {
-      "patch": "src/toolkit/content/widgets/panel-list/panel-list-mjs.patch",
-      "owner": "zen",
-      "targets": [
-        {
-          "path": "toolkit/content/widgets/panel-list/panel-list.mjs",
-          "base": "68ad2fafc8b31dfff541cf8381d9b9533e376d1c",
-          "result": "fa62fec6bfb33338091fc06d3736fb76fd5c47c4"
-        }
-      ]
-    },
-    {
       "patch": "src/toolkit/content/widgets/tabbox-js.patch",
       "owner": "zen",
       "targets": [
@@ -3001,8 +2838,8 @@
       "targets": [
         {
           "path": "toolkit/themes/shared/design-system/dist/tokens-shared.css",
-          "base": "15c0d98a18b4f19e7f2e03d2b78066b0353f416a",
-          "result": "b32f6244c7a07e93894bab422691a605456034a1"
+          "base": "b0f8fa146de335c53e73d46853f45dda9b15cc73",
+          "result": "1b7592c0e9ca12fd9d1f8a555633fd39c2efb537"
         }
       ]
     },
@@ -3254,8 +3091,8 @@
       "targets": [
         {
           "path": "widget/cocoa/nsCocoaWindow.mm",
-          "base": "887e4c052d5dd2b73d4c2059463529fb4b09dcab",
-          "result": "58f224908ef52796a13d15415531ff9ac7cc636f"
+          "base": "5e02a34001f90c14a9c1d56e7f55ddaf7486c98a",
+          "result": "a1da5c2087db3b8b120ad46744f24c3c04878196"
         }
       ]
     },
@@ -3266,7 +3103,7 @@
         {
           "path": "widget/cocoa/nsDragService.mm",
           "base": "340a9ad81c5cb23bb7e5f927d11d5cffdde7ce70",
-          "result": "32fc707ccfa56fa8c307860868d092c4a9050419"
+          "result": "ba597ba4373ba3ace7455ce0859f2339349ffc06"
         }
       ]
     },
@@ -3389,6 +3226,34 @@
     {
       "source": "src/browser/themes/shared/zen-icons/check_unused_icons.py",
       "engine": "browser/themes/shared/zen-icons/check_unused_icons.py"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-boosts-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-boosts-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-downloads-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-downloads-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-history-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-history-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-media-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-media-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-spaces-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-spaces-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library-sprite.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library-sprite.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/common/library/library.svg",
+      "engine": "browser/themes/shared/zen-icons/common/library/library.svg"
     },
     {
       "source": "src/browser/themes/shared/zen-icons/common/selectable/CREDITS.md",
@@ -4167,6 +4032,10 @@
       "engine": "browser/themes/shared/zen-icons/nucleo/print.svg"
     },
     {
+      "source": "src/browser/themes/shared/zen-icons/nucleo/private-window-small.svg",
+      "engine": "browser/themes/shared/zen-icons/nucleo/private-window-small.svg"
+    },
+    {
       "source": "src/browser/themes/shared/zen-icons/nucleo/private-window.svg",
       "engine": "browser/themes/shared/zen-icons/nucleo/private-window.svg"
     },
@@ -4317,6 +4186,10 @@
     {
       "source": "src/browser/themes/shared/zen-icons/nucleo/trash.svg",
       "engine": "browser/themes/shared/zen-icons/nucleo/trash.svg"
+    },
+    {
+      "source": "src/browser/themes/shared/zen-icons/nucleo/u-turn-to-left.svg",
+      "engine": "browser/themes/shared/zen-icons/nucleo/u-turn-to-left.svg"
     },
     {
       "source": "src/browser/themes/shared/zen-icons/nucleo/unpin.svg",
@@ -4607,8 +4480,16 @@
       "engine": "zen/common/styles/schemes/light.inc.css"
     },
     {
+      "source": "src/zen/common/styles/squircle-exclusions.inc.css",
+      "engine": "zen/common/styles/squircle-exclusions.inc.css"
+    },
+    {
       "source": "src/zen/common/styles/zen-animations.css",
       "engine": "zen/common/styles/zen-animations.css"
+    },
+    {
+      "source": "src/zen/common/styles/zen-backdrop-filters.svg",
+      "engine": "zen/common/styles/zen-backdrop-filters.svg"
     },
     {
       "source": "src/zen/common/styles/zen-branding.css",
@@ -4625,6 +4506,14 @@
     {
       "source": "src/zen/common/styles/zen-buttons.css",
       "engine": "zen/common/styles/zen-buttons.css"
+    },
+    {
+      "source": "src/zen/common/styles/zen-library-media-preview.css",
+      "engine": "zen/common/styles/zen-library-media-preview.css"
+    },
+    {
+      "source": "src/zen/common/styles/zen-library-widget.css",
+      "engine": "zen/common/styles/zen-library-widget.css"
     },
     {
       "source": "src/zen/common/styles/zen-omnibox.css",
@@ -4811,6 +4700,10 @@
       "engine": "zen/drag-and-drop/nsZenDragAndDrop.h"
     },
     {
+      "source": "src/zen/drag-and-drop/nsZenDropLandingCocoa.mm",
+      "engine": "zen/drag-and-drop/nsZenDropLandingCocoa.mm"
+    },
+    {
       "source": "src/zen/drag-and-drop/nsZenNativeWindowMove.mm",
       "engine": "zen/drag-and-drop/nsZenNativeWindowMove.mm"
     },
@@ -4825,6 +4718,10 @@
     {
       "source": "src/zen/folders/jar.inc.mn",
       "engine": "zen/folders/jar.inc.mn"
+    },
+    {
+      "source": "src/zen/folders/zen-folder-icon.inc.css",
+      "engine": "zen/folders/zen-folder-icon.inc.css"
     },
     {
       "source": "src/zen/folders/zen-folders.css",
@@ -4955,6 +4852,62 @@
       "engine": "zen/kbs/jar.inc.mn"
     },
     {
+      "source": "src/zen/library/ZenLibrary.mjs",
+      "engine": "zen/library/ZenLibrary.mjs"
+    },
+    {
+      "source": "src/zen/library/ZenLibraryDragAndDrop.mjs",
+      "engine": "zen/library/ZenLibraryDragAndDrop.mjs"
+    },
+    {
+      "source": "src/zen/library/ZenLibraryFileTypes.sys.mjs",
+      "engine": "zen/library/ZenLibraryFileTypes.sys.mjs"
+    },
+    {
+      "source": "src/zen/library/ZenLibraryMediaPreview.mjs",
+      "engine": "zen/library/ZenLibraryMediaPreview.mjs"
+    },
+    {
+      "source": "src/zen/library/ZenLibraryWidget.sys.mjs",
+      "engine": "zen/library/ZenLibraryWidget.sys.mjs"
+    },
+    {
+      "source": "src/zen/library/jar.inc.mn",
+      "engine": "zen/library/jar.inc.mn"
+    },
+    {
+      "source": "src/zen/library/moz.build",
+      "engine": "zen/library/moz.build"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibraryBoostsSection.mjs",
+      "engine": "zen/library/sections/ZenLibraryBoostsSection.mjs"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibraryDownloadsSection.mjs",
+      "engine": "zen/library/sections/ZenLibraryDownloadsSection.mjs"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibraryHistorySection.mjs",
+      "engine": "zen/library/sections/ZenLibraryHistorySection.mjs"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibraryMediaSection.mjs",
+      "engine": "zen/library/sections/ZenLibraryMediaSection.mjs"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibrarySearchSection.mjs",
+      "engine": "zen/library/sections/ZenLibrarySearchSection.mjs"
+    },
+    {
+      "source": "src/zen/library/sections/ZenLibrarySpacesSection.mjs",
+      "engine": "zen/library/sections/ZenLibrarySpacesSection.mjs"
+    },
+    {
+      "source": "src/zen/library/zen-library.css",
+      "engine": "zen/library/zen-library.css"
+    },
+    {
       "source": "src/zen/live-folders/LiveFoldersComponents.manifest",
       "engine": "zen/live-folders/LiveFoldersComponents.manifest"
     },
@@ -5067,12 +5020,36 @@
       "engine": "zen/sessionstore/moz.build"
     },
     {
+      "source": "src/zen/share/ZenShareClient.sys.mjs",
+      "engine": "zen/share/ZenShareClient.sys.mjs"
+    },
+    {
+      "source": "src/zen/share/ZenShareManager.mjs",
+      "engine": "zen/share/ZenShareManager.mjs"
+    },
+    {
+      "source": "src/zen/share/jar.inc.mn",
+      "engine": "zen/share/jar.inc.mn"
+    },
+    {
       "source": "src/zen/share/moz.build",
       "engine": "zen/share/moz.build"
     },
     {
       "source": "src/zen/share/share.schema.json",
       "engine": "zen/share/share.schema.json"
+    },
+    {
+      "source": "src/zen/share/zen-share-confirm.inc.xhtml",
+      "engine": "zen/share/zen-share-confirm.inc.xhtml"
+    },
+    {
+      "source": "src/zen/share/zen-share-confirm.js",
+      "engine": "zen/share/zen-share-confirm.js"
+    },
+    {
+      "source": "src/zen/share/zen-share.css",
+      "engine": "zen/share/zen-share.css"
     },
     {
       "source": "src/zen/space-routing/SpaceRoutingComponents.manifest",
@@ -5337,6 +5314,34 @@
     {
       "source": "src/zen/tests/container_essentials/browser_container_specific_essentials.js",
       "engine": "zen/tests/container_essentials/browser_container_specific_essentials.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser.toml",
+      "engine": "zen/tests/device_sync/browser.toml"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser_apply_skew.js",
+      "engine": "zen/tests/device_sync/browser_apply_skew.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser_folder_delete.js",
+      "engine": "zen/tests/device_sync/browser_folder_delete.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser_normal_tabs_apply.js",
+      "engine": "zen/tests/device_sync/browser_normal_tabs_apply.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser_normal_tabs_order.js",
+      "engine": "zen/tests/device_sync/browser_normal_tabs_order.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/browser_normal_tabs_projection.js",
+      "engine": "zen/tests/device_sync/browser_normal_tabs_projection.js"
+    },
+    {
+      "source": "src/zen/tests/device_sync/head.js",
+      "engine": "zen/tests/device_sync/head.js"
     },
     {
       "source": "src/zen/tests/folders/browser.toml",
@@ -6779,6 +6784,10 @@
       "engine": "zen/tests/mochitests/sessionstore/browser_restore_redirect.js"
     },
     {
+      "source": "src/zen/tests/mochitests/sessionstore/browser_restore_respects_pending_minimize.js",
+      "engine": "zen/tests/mochitests/sessionstore/browser_restore_respects_pending_minimize.js"
+    },
+    {
       "source": "src/zen/tests/mochitests/sessionstore/browser_restore_reversed_z_order.js",
       "engine": "zen/tests/mochitests/sessionstore/browser_restore_reversed_z_order.js"
     },
@@ -7127,6 +7136,14 @@
       "engine": "zen/tests/mochitests/sessionstore/marionette/test_restore_windows_after_windows_shutdown.py"
     },
     {
+      "source": "src/zen/tests/mochitests/sessionstore/marionette/test_shutdown_flush_timeout.py",
+      "engine": "zen/tests/mochitests/sessionstore/marionette/test_shutdown_flush_timeout.py"
+    },
+    {
+      "source": "src/zen/tests/mochitests/sessionstore/marionette/test_splitview_hidden.py",
+      "engine": "zen/tests/mochitests/sessionstore/marionette/test_splitview_hidden.py"
+    },
+    {
       "source": "src/zen/tests/mochitests/sessionstore/marionette/test_splitview_restore.py",
       "engine": "zen/tests/mochitests/sessionstore/marionette/test_splitview_restore.py"
     },
@@ -7379,6 +7396,10 @@
       "engine": "zen/tests/mochitests/shell/unit/test_dynamicLauncher.js"
     },
     {
+      "source": "src/zen/tests/mochitests/shell/unit/test_isOneClickSetDefaultEnabled.js",
+      "engine": "zen/tests/mochitests/shell/unit/test_isOneClickSetDefaultEnabled.js"
+    },
+    {
       "source": "src/zen/tests/mochitests/shell/unit/test_linuxDesktopEntry.js",
       "engine": "zen/tests/mochitests/shell/unit/test_linuxDesktopEntry.js"
     },
@@ -7389,6 +7410,10 @@
     {
       "source": "src/zen/tests/mochitests/shell/unit/test_secondaryTileJs.js",
       "engine": "zen/tests/mochitests/shell/unit/test_secondaryTileJs.js"
+    },
+    {
+      "source": "src/zen/tests/mochitests/shell/unit/test_taskbarPinningPolicy.js",
+      "engine": "zen/tests/mochitests/shell/unit/test_taskbarPinningPolicy.js"
     },
     {
       "source": "src/zen/tests/mochitests/shell/unit/test_writeShortcutIcon.js",
@@ -7919,6 +7944,10 @@
       "engine": "zen/tests/mochitests/tabMediaIndicator/browser_sound_indicator_silent_video.js"
     },
     {
+      "source": "src/zen/tests/mochitests/tabMediaIndicator/browser_sound_indicator_tab_move.js",
+      "engine": "zen/tests/mochitests/tabMediaIndicator/browser_sound_indicator_tab_move.js"
+    },
+    {
       "source": "src/zen/tests/mochitests/tabMediaIndicator/browser_webAudio_hideSoundPlayingIcon.js",
       "engine": "zen/tests/mochitests/tabMediaIndicator/browser_webAudio_hideSoundPlayingIcon.js"
     },
@@ -8171,6 +8200,34 @@
       "engine": "zen/tests/popover/browser_popover_height_constraint.js"
     },
     {
+      "source": "src/zen/tests/share/browser.toml",
+      "engine": "zen/tests/share/browser.toml"
+    },
+    {
+      "source": "src/zen/tests/share/browser_share_client.js",
+      "engine": "zen/tests/share/browser_share_client.js"
+    },
+    {
+      "source": "src/zen/tests/share/browser_share_import.js",
+      "engine": "zen/tests/share/browser_share_import.js"
+    },
+    {
+      "source": "src/zen/tests/share/browser_share_serialize.js",
+      "engine": "zen/tests/share/browser_share_serialize.js"
+    },
+    {
+      "source": "src/zen/tests/share/browser_share_split_link.js",
+      "engine": "zen/tests/share/browser_share_split_link.js"
+    },
+    {
+      "source": "src/zen/tests/share/browser_share_url_parsing.js",
+      "engine": "zen/tests/share/browser_share_url_parsing.js"
+    },
+    {
+      "source": "src/zen/tests/share/head.js",
+      "engine": "zen/tests/share/head.js"
+    },
+    {
       "source": "src/zen/tests/site_control/browser.toml",
       "engine": "zen/tests/site_control/browser.toml"
     },
@@ -8217,6 +8274,10 @@
     {
       "source": "src/zen/tests/space_routing/browser_space_routing_fuzz.js",
       "engine": "zen/tests/space_routing/browser_space_routing_fuzz.js"
+    },
+    {
+      "source": "src/zen/tests/space_routing/browser_space_routing_lifecycle.js",
+      "engine": "zen/tests/space_routing/browser_space_routing_lifecycle.js"
     },
     {
       "source": "src/zen/tests/space_routing/browser_space_routing_on_add_tab.js",
@@ -8437,6 +8498,10 @@
     {
       "source": "src/zen/tests/urlbar/browser_issue_7385.js",
       "engine": "zen/tests/urlbar/browser_issue_7385.js"
+    },
+    {
+      "source": "src/zen/tests/urlbar/browser_sidebar_provider.js",
+      "engine": "zen/tests/urlbar/browser_sidebar_provider.js"
     },
     {
       "source": "src/zen/tests/urlbar/browser_single_toolbar_blur_revert.js",
@@ -8789,6 +8854,10 @@
     {
       "source": "src/zen/urlbar/ZenUBResultsLearner.sys.mjs",
       "engine": "zen/urlbar/ZenUBResultsLearner.sys.mjs"
+    },
+    {
+      "source": "src/zen/urlbar/ZenUBSidebarProvider.sys.mjs",
+      "engine": "zen/urlbar/ZenUBSidebarProvider.sys.mjs"
     },
     {
       "source": "src/zen/urlbar/moz.build",

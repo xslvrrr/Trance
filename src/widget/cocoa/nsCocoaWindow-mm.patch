@@ -1,8 +1,16 @@
 diff --git a/widget/cocoa/nsCocoaWindow.mm b/widget/cocoa/nsCocoaWindow.mm
-index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75093546d3 100644
+index 5e02a34001f90c14a9c1d56e7f55ddaf7486c98a..a1da5c2087db3b8b120ad46744f24c3c04878196 100644
 --- a/widget/cocoa/nsCocoaWindow.mm
 +++ b/widget/cocoa/nsCocoaWindow.mm
-@@ -86,6 +86,8 @@
+@@ -72,6 +72,7 @@
+ #include "gfxPlatform.h"
+ #include "qcms.h"
+ 
++#import <objc/runtime.h>
+ #include <algorithm>
+ #include "mozilla/AutoRestore.h"
+ #include "mozilla/BasicEvents.h"
+@@ -86,6 +87,8 @@
  #include "mozilla/StaticPrefs_gfx.h"
  #include "mozilla/StaticPrefs_ui.h"
  #include "mozilla/StaticPrefs_widget.h"
@@ -11,13 +19,72 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
  #include "mozilla/WritingModes.h"
  #include "mozilla/dom/Document.h"
  #include "mozilla/layers/CompositorBridgeChild.h"
-@@ -1332,6 +1334,110 @@ - (NSRect)_opaqueRectForWindowMoveWhenInTitlebar {
+@@ -1332,6 +1335,212 @@ mozilla::VibrancyManager& nsCocoaWindow::EnsureVibrancyManager() {
  }
  @end
  
 +@interface ZenWindowMaterialView : NSVisualEffectView
 +- (void)prefChanged;
++- (void)windowActivityChanged:(NSNotification*)aNotification;
 +@end
++
++// >>> TRANCE
++// The material is a continuous compositor effect: macOS keeps resolving it for
++// a window that is minimised, fully occluded or behind another application,
++// and for a machine in Low Power Mode that is work nobody asked for. AppKit
++// exposes the switch as NSVisualEffectStateInactive, which stops the effect
++// without taking the view down and without a relayout when it comes back.
++//
++// The power-mode half is a process-wide fact, so it is mirrored into a default
++// -branch pref rather than read per view: one notification observer for the
++// process, and the existing pref-callback path is what wakes every live view.
++static constexpr const char* kZenLowPowerModePref =
++    "zen.performance.low-power-mode";
++
++static void ZenUpdateLowPowerModePref() {
++  bool enabled = false;
++  if (@available(macOS 12.0, *)) {
++    enabled = NSProcessInfo.processInfo.lowPowerModeEnabled;
++  }
++  Preferences::SetBool(kZenLowPowerModePref, enabled, PrefValueKind::Default);
++}
++
++@interface ZenPowerModeMonitor : NSObject
+++ (void)start;
++@end
++
++@implementation ZenPowerModeMonitor
+++ (void)start {
++  static ZenPowerModeMonitor* monitor;
++  static dispatch_once_t once;
++  dispatch_once(&once, ^{
++    monitor = [[ZenPowerModeMonitor alloc] init];
++  });
++}
++
++- (instancetype)init {
++  self = [super init];
++  if (self) {
++    ZenUpdateLowPowerModePref();
++    if (@available(macOS 12.0, *)) {
++      [NSNotificationCenter.defaultCenter
++          addObserver:self
++             selector:@selector(powerModeChanged:)
++                 name:NSProcessInfoPowerStateDidChangeNotification
++               object:nil];
++    }
++  }
++  return self;
++}
++
++- (void)powerModeChanged:(NSNotification*)aNotification {
++  (void)aNotification;
++  dispatch_async(dispatch_get_main_queue(), ^{
++    ZenUpdateLowPowerModePref();
++  });
++}
++@end
++// <<< TRANCE
 +
 +static void ZenWindowMaterialPrefChanged(const char* aPref, void* aClosure) {
 +  [static_cast<ZenWindowMaterialView*>(aClosure) prefChanged];
@@ -26,6 +93,9 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
 +static constexpr nsLiteralCString kZenWindowMaterialPrefs[] = {
 +    "zen.widget.macos.window-material"_ns,
 +    "zen.view.grey-out-inactive-windows"_ns,
++    // >>> TRANCE
++    "zen.performance.low-power-mode"_ns,
++    // <<< TRANCE
 +};
 +
 +static NSVisualEffectMaterial ZenWindowMaterial() {
@@ -54,6 +124,19 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
 +  self.appearance = nil;
 +  self.emphasized = NO;
 +  self.blendingMode = NSVisualEffectBlendingModeBehindWindow;
++  // >>> TRANCE
++  for (NSNotificationName name in @[
++         NSWindowDidChangeOcclusionStateNotification,
++         NSWindowDidMiniaturizeNotification,
++         NSWindowDidDeminiaturizeNotification,
++       ]) {
++    [NSNotificationCenter.defaultCenter addObserver:self
++                                           selector:@selector
++                                           (windowActivityChanged:)
++                                               name:name
++                                             object:nil];
++  }
++  // <<< TRANCE
 +  [self prefChanged];
 +  for (const auto& pref : kZenWindowMaterialPrefs) {
 +    Preferences::RegisterCallback(ZenWindowMaterialPrefChanged, pref, self);
@@ -62,6 +145,9 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
 +}
 +
 +- (void)dealloc {
++  // >>> TRANCE
++  [NSNotificationCenter.defaultCenter removeObserver:self];
++  // <<< TRANCE
 +  for (const auto& pref : kZenWindowMaterialPrefs) {
 +    Preferences::UnregisterCallback(ZenWindowMaterialPrefChanged, pref, self);
 +  }
@@ -69,10 +155,31 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
 +}
 +
 +- (void)prefChanged {
++  self.material = ZenWindowMaterial();
++  // >>> TRANCE
++  [self windowActivityChanged:nil];
++}
++
++- (void)viewDidMoveToWindow {
++  [super viewDidMoveToWindow];
++  [self windowActivityChanged:nil];
++}
++
++- (void)windowActivityChanged:(NSNotification*)aNotification {
++  if (aNotification && aNotification.object != self.window) {
++    return;
++  }
++  NSWindow* window = self.window;
++  bool visible = window && !window.miniaturized &&
++                 (window.occlusionState & NSWindowOcclusionStateVisible);
++  if (!visible || Preferences::GetBool(kZenLowPowerModePref, false)) {
++    self.state = NSVisualEffectStateInactive;
++    return;
++  }
++  // <<< TRANCE
 +  self.state = StaticPrefs::zen_view_grey_out_inactive_windows()
 +                   ? NSVisualEffectStateFollowsWindowActiveState
 +                   : NSVisualEffectStateActive;
-+  self.material = ZenWindowMaterial();
 +}
 +@end
 +
@@ -88,6 +195,9 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
 +    return;
 +  }
 +  mIsBrowserWindow = true;
++  // >>> TRANCE
++  [ZenPowerModeMonitor start];
++  // <<< TRANCE
 +  Preferences::RegisterCallback(ZenWindowVibrancyPrefChanged,
 +                                "zen.widget.macos.window-vibrancy", this);
 +  UpdateWindowMaterial();
@@ -122,7 +232,7 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
  void nsCocoaWindow::UpdateWindowDraggingRegion(
      const LayoutDeviceIntRegion& aRegion) {
    // mChildView returns YES from mouseDownCanMoveWindow, so we need to put
-@@ -3858,7 +3964,9 @@ - (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender {
+@@ -3877,7 +4086,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  // NSDraggingDestination
  - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
    MOZ_LOG(sCocoaLog, LogLevel::Info, ("ChildView draggingUpdated: entered\n"));
@@ -133,7 +243,7 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
  }
  
  // NSDraggingDestination
-@@ -3874,6 +3982,9 @@ - (void)draggingExited:(id<NSDraggingInfo>)sender {
+@@ -3893,6 +4104,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
    nsAutoRetainCocoaObject kungFuDeathGrip(self);
    BOOL handled = [self doDragAction:eDrop sender:sender] != NSDragOperationNone;
@@ -143,7 +253,7 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
    NS_IF_RELEASE(mDragService);
    return handled;
  }
-@@ -4919,6 +5030,10 @@ - (BOOL)wantsBestResolutionOpenGLSurface {
+@@ -4938,6 +5152,10 @@ void nsCocoaWindow::DestroyNativeWindow() {
  nsCocoaWindow::~nsCocoaWindow() {
    NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
  
@@ -154,3 +264,71 @@ index 887e4c052d5dd2b73d4c2059463529fb4b09dcab..36da18e19018b1b216576c299f938e75
    RemoveAllChildren();
    if (mWindow && mWindowMadeHere) {
      CancelAllTransitions();
+@@ -5730,7 +5948,6 @@ bool nsCocoaWindow::ShouldShowAsNSPopover() const {
+   nsMenuPopupFrame* popupFrame = GetPopupFrame();
+   return [mWindow isKindOfClass:[PopupWindow class]] &&
+          [(PopupWindow*)mWindow usePopover] && popupFrame &&
+-         popupFrame->ShouldFollowAnchor() &&
+          !popupFrame->PopupElement().GetBoolAttr(nsGkAtoms::nonnative);
+ }
+ 
+@@ -6961,6 +7178,27 @@ static nsSizeMode GetWindowSizeMode(NSWindow* aWindow, bool aFullScreen) {
+   return nsSizeMode_Normal;
+ }
+ 
++// The tiling state lives in a private NSWindow ivar "_tilingStateController"
++// (an _NSWMWindowTilingStateController). That controller's -tilingState returns
++// a non-nil _WMWindowTilingState only while the window is tiled by the system
++// window manager. None of this is public API, so it is all guarded and degrades
++// to false if the internals ever change.
++static bool WindowIsTiled(NSWindow* aWindow) {
++  if (!aWindow) {
++    return false;
++  }
++  static Ivar sControllerIvar =
++      class_getInstanceVariable([NSWindow class], "_tilingStateController");
++  if (!sControllerIvar) {
++    return false;
++  }
++  id controller = object_getIvar(aWindow, sControllerIvar);
++  if (![controller respondsToSelector:@selector(tilingState)]) {
++    return false;
++  }
++  return [controller performSelector:@selector(tilingState)] != nil;
++}
++
+ void nsCocoaWindow::ReportMoveEvent() {
+   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+ 
+@@ -6974,6 +7212,7 @@ void nsCocoaWindow::ReportMoveEvent() {
+   mInReportMoveEvent = true;
+ 
+   UpdateBounds();
++  SetIsTiled(WindowIsTiled(mWindow));
+ 
+   // The zoomed state can change when we're moving, in which case we need to
+   // update our internal mSizeMode. This can happen either if we're maximized
+@@ -7068,6 +7307,7 @@ void nsCocoaWindow::ReportSizeEvent() {
+   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+ 
+   UpdateBounds();
++  SetIsTiled(WindowIsTiled(mWindow));
+   LayoutDeviceIntRect innerBounds = GetClientBounds();
+   if (mWidgetListener) {
+     mWidgetListener->WindowResized(this, innerBounds.Size());
+@@ -8995,6 +9235,15 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
+     return;
+   }
+ 
++  if (!positioningRect.size.width && !positioningRect.size.height &&
++      mLastPopoverRect.size.width && mLastPopoverRect.size.height) {
++    // Sometimes, specially when downloading addons from unofficial sources,
++    // the popover is shown in a very fast motion and the positioningRect is
++    // empty.
++    positioningRect = mLastPopoverRect;
++  }
++  mLastPopoverRect = positioningRect;
++
+   // Close existing popover if it's already shown
+   if (mPopover.shown) {
+     [mPopover close];

@@ -76,16 +76,15 @@ DEFAULT_OWNER = "zen"
 # fails `manifest --check` and `verify`.
 #
 KNOWN_OVERLAPS = {
-    "gfx/wr/webrender/src/renderer/mod.rs": (
-        "Two unrelated Firefox patches in one WebRender file: the "
-        "opaque-backdrop fallback (ADR-065) and corner-shape rendering."
-    ),
-    "modules/libpref/init/StaticPrefList.yaml": (
-        "The opaque-backdrop patch declares `gfx.webrender."
-        "opaque-backdrop-fallback`; Zen's own patch declares Zen's static "
-        "prefs. Both append entries to a long list and never touch each "
-        "other's."
-    ),
+    # `gfx/wr/webrender/src/renderer/mod.rs` and
+    # `modules/libpref/init/StaticPrefList.yaml` used to be here. Zen's
+    # gh-15513 deleted `allow_backdrop_to_work_on_transparency.patch` — the
+    # patch that declared `gfx.webrender.opaque-backdrop-fallback` in
+    # StaticPrefList and shared the renderer with corner-shape — and replaced
+    # it with `backdrop_filter_reads_web_content.patch`, which touches nine
+    # WebRender files and no pref list. Both paths have one owner again, and a
+    # declaration for an overlap that no longer exists is what `verify` calls
+    # `stale-overlap`: it would hide a real second owner arriving later.
     "toolkit/components/pictureinpicture/PictureInPicture.sys.mjs": (
         "A Firefox fix (issue 14710) meeting Zen's own PiP patch."
     ),

@@ -18,7 +18,7 @@ diff --git a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs b/tool
    lazy,
    "PIP_ENABLED",
    "media.videocontrols.picture-in-picture.enabled",
-@@ -119,10 +125,19 @@
+@@ -119,9 +125,18 @@
        }
        case "PictureInPicture:VideoTabHidden": {
          if (!lazy.PIP_ENABLED || !lazy.PIP_WHEN_SWITCHING_TABS) {
@@ -37,7 +37,6 @@ diff --git a/toolkit/components/pictureinpicture/PictureInPicture.sys.mjs b/tool
          if (browser.documentGlobal.gBrowser.selectedBrowser == browser) {
            break;
          }
-         let actor = browsingContext.currentWindowGlobal.getActor(
 @@ -261,10 +276,13 @@
    maxConcurrentPlayerCount: 0,
  
