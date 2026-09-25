@@ -188,15 +188,14 @@ Preferences.addAll([
   // Onboarding (TRANCE.md §13 Phase 13)
   //
   // `completed` is state, surfaced as a button for the same reason
-  // `trance.firstrun.completed` is. The other three are ordinary settings that
+  // `trance.firstrun.completed` is. The other two are ordinary settings that
   // happen to be *asked* during the flow rather than owned by it — which is why
   // they are here as well as there, and why the observer on each belongs to
   // `TranceOnboardingSettings` rather than to the flow: the flow is parsed once
-  // and then never again after completion, while a channel or architecture
+  // and then never again after completion, while a mod-channel or architecture
   // change has to be honoured for the rest of the session (ADR-051, ADR-069).
   { id: "trance.onboarding.enabled", type: "bool", default: true },
   { id: "trance.onboarding.completed", type: "bool", default: false },
-  { id: "trance.onboarding.channel", type: "string", default: "stable" },
   { id: "trance.mods.channel", type: "string", default: "cosine" },
   { id: "trance.perf.arch", type: "string", default: "arm64" },
 
@@ -368,6 +367,7 @@ var gTranceSettings = {
     this.initSavedThemes();
     this.initFirstRun();
     this.initOnboarding();
+    this.initModEngine();
     this.initImport();
     this.initImagePicker({
       pref: "trance.surface.image",
@@ -596,6 +596,78 @@ var gTranceSettings = {
         item.setAttribute("label", label);
       }
     }
+  },
+
+  /**
+   * The Sine engine row.
+   *
+   * The channel menulist above it records a channel and rewrites the installed
+   * engine's version so Sine's own updater follows it — at its next update
+   * check, which may be days away. This button is the install that happens
+   * now: the newest release on the selected channel, through the same
+   * `TranceProvision` calls the first-run page's mod-manager question commits
+   * with (ADR-073), and then the refresh of the profile's theme-store mods the
+   * onboarding button it replaces used to run. Unlike that page it does not
+   * skip a release that is already installed, because repairing a broken
+   * engine is half of why anyone presses it.
+   *
+   * `TranceProvision` is loaded into the browser window that hosts this page,
+   * the global the first-run page already runs it in, and into neither of the
+   * two nearer ones. This document's CSP is `default-src chrome:`, so a fetch
+   * from it to GitHub is refused; the shared system global has no window, so
+   * `AbortSignal.timeout` in its downloads throws. Calling the host window's
+   * own `ChromeUtils` is what makes `global: "current"` mean that window.
+   * The readout is the row's progress as well as its state — one label, so a
+   * failure is still on screen after the button comes back.
+   */
+  initModEngine() {
+    const shown = document.getElementById("tranceModsEngine");
+    const button = document.getElementById("tranceModsInstall");
+    const channel = Preferences.get("trance.mods.channel");
+    if (!shown || !button || !channel) {
+      return;
+    }
+    const host = window.browsingContext.topChromeWindow;
+    const { TranceProvision } = host.ChromeUtils.importESModule(
+      "chrome://browser/content/trance-components/TranceProvision.mjs",
+      { global: "current" }
+    );
+
+    // Without the bootloader an engine is a directory nothing loads, so the
+    // button stays inert rather than downloading one.
+    const show = async () => {
+      const [bootloader, version] = await Promise.all([
+        TranceProvision.hasBootloader(),
+        TranceProvision.engineVersion(),
+      ]);
+      shown.value = bootloader ? version || "Not installed" : "No bootloader";
+      button.disabled = !bootloader;
+    };
+
+    button.addEventListener("command", async () => {
+      button.disabled = true;
+      try {
+        shown.value = "Finding the newest release…";
+        const release = await TranceProvision.resolveSineRelease({
+          channel: channel.value,
+        });
+        shown.value = `Installing ${release.tag}…`;
+        const version = await TranceProvision.installSineEngine(release);
+        shown.value = "Refreshing theme-store mods…";
+        const { missing } = await TranceProvision.installZenStoreMods();
+        shown.value = missing.length
+          ? `${version}, loads on restart (not in the store: ${missing.join(", ")})`
+          : `${version}, loads on restart`;
+      } catch (error) {
+        console.error("Trance: could not install the Sine engine", error);
+        shown.value = "Could not install";
+      } finally {
+        button.disabled = false;
+      }
+    });
+    show().catch(error =>
+      console.error("Trance: could not read the Sine engine", error)
+    );
   },
 
   /**

@@ -346,30 +346,6 @@
   background-color: var(--trance-accent-wash);
 }
 
-.trance-onboarding-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--trance-gap-sm);
-  margin: 0;
-  padding: 0;
-  max-width: 34em;
-  list-style: none;
-  counter-reset: trance-onboarding-step;
-}
-
-.trance-onboarding-list li {
-  counter-increment: trance-onboarding-step;
-  padding: var(--trance-gap-md) var(--trance-gap-lg);
-  border-radius: var(--trance-radius-md);
-  background-color: var(--trance-surface-tint);
-}
-
-.trance-onboarding-list li::before {
-  content: counter(trance-onboarding-step) ". ";
-  font-weight: 600;
-  color: var(--trance-accent-vivid);
-}
-
 /* ── The status strip ────────────────────────────────────────────────────── */
 
 /* Same argument `trance-firstrun.css` makes: "installed" versus "not found" is
@@ -458,6 +434,16 @@
 #trance-onboarding-edgeless[edgeless]
   .trance-onboarding-preview-rail {
   border-radius: var(--trance-radius-lg) 0 0 var(--trance-radius-lg);
+}
+
+/* ── The theme picker's anchor ───────────────────────────────────────────── */
+
+/* The colours page opens Zen's picker panel with its left-middle point on this
+ * empty line's left end, and the module gives the line the panel's width. The
+ * pane already centres the line vertically; `align-self` centres it across,
+ * which `stretch` stops doing the moment it has a width. */
+#trance-onboarding-theme-anchor {
+  align-self: center;
 }
 
 /* ── The summary ─────────────────────────────────────────────────────────── */

@@ -517,4 +517,67 @@
       --zen-toolbar-element-bg: var(--trance-essentials-bg-unloaded);
     }
   }
+  /* ── Minimal workspace indicators ────────────────────────────────────────
+   *
+   * Keep the sidebar's workspace rail quiet until it is selected or hovered.
+   * The active icon is always retained, including while a neighbouring button
+   * is hovered. Neighbour selectors stay scoped to this small strip. */
+  & #zen-workspaces-button {
+    gap: 1.8px;
+
+    & > toolbarbutton[zen-workspace-id] {
+      transform: translateY(0);
+      transition: transform var(--trance-dur-fast) var(--trance-ease-standard);
+
+      &::before {
+        content: "";
+        position: absolute;
+        inline-size: 4px;
+        block-size: 4px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 1;
+        transition: opacity var(--trance-hover-dur) var(--trance-ease-standard);
+      }
+
+      & .zen-workspace-icon {
+        opacity: 0;
+        scale: 0;
+        transition:
+          opacity var(--trance-hover-dur) var(--trance-ease-standard),
+          scale var(--trance-hover-dur) var(--trance-ease-standard);
+      }
+
+      &:is([active="true"], :hover) {
+        &::before {
+          opacity: 0;
+        }
+
+        & .zen-workspace-icon {
+          opacity: 1;
+          scale: 1;
+        }
+      }
+
+      &:hover {
+        transform: translateY(calc(-1 * var(--trance-gap-sm)));
+      }
+
+      /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+       * The subtree is one sibling, the next workspace button, and `:hover` is
+       * state the browser already invalidates on. The JS alternative is a
+       * pointer listener on the strip mirroring hover into an attribute. */
+      &:has(+ toolbarbutton[zen-workspace-id]:hover),
+      &:hover + toolbarbutton[zen-workspace-id] {
+        transform: translateY(calc(-0.5 * var(--trance-gap-sm)));
+      }
+    }
+  }
+
+  /* Zen's expanded-toolbox gap rule is two IDs, which outranks the one-ID
+   * rule above; this matches it so its 0.5ch cannot undo the 1.8px spacing. */
+  /* stylelint-disable-next-line trance/max-specificity -- matches Zen's own #navigator-toolbox #zen-workspaces-button gap rule */
+  & #navigator-toolbox #zen-workspaces-button {
+    gap: 1.8px;
+  }
 }

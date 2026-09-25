@@ -399,7 +399,7 @@ add_task(async function test_a_preview_repaint_is_coalesced_onto_a_frame() {
   zenPicker.onWorkspaceChange(workspace);
 });
 
-add_task(async function test_the_saved_page_is_first_but_not_shown_first() {
+add_task(async function test_the_saved_page_is_first_and_shown_first() {
   const pages = document.getElementById(
     "PanelUI-zen-gradient-generator-color-pages"
   );
@@ -410,9 +410,14 @@ add_task(async function test_the_saved_page_is_first_but_not_shown_first() {
   );
   is(pages.children.length, 6, "and the other five are still there");
   ok(
-    !document.getElementById("PanelUI-zen-gradient-generator-color-page-left")
+    document.getElementById("PanelUI-zen-gradient-generator-color-page-left")
       .disabled,
-    "the left arrow is live, so the saved page is reachable"
+    "Zen's pager is on its first page, which is the saved page"
+  );
+  ok(
+    !document.getElementById("PanelUI-zen-gradient-generator-color-page-right")
+      .disabled,
+    "and the right arrow is live, so the presets are reachable"
   );
 });
 

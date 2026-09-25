@@ -86,3 +86,12 @@
 - name: zen.injections.match-urls
   value: "http://localhost/*"
   condition: "!defined(MOZILLA_OFFICIAL)"
+
+# === Mark: Library ===
+
+# `true`, not Zen's twilight-only default. Zen 1.23 implemented the Library
+# natively (ADR-086); Trance ships one brand, and `IS_TWILIGHT` resolving to
+# false for it left the native button permanently off, falling back to a bare
+# downloads button with no library at all.
+- name: zen.library.enabled
+  value: true

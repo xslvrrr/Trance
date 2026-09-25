@@ -383,6 +383,9 @@
    * gesture, and a mark that can be set to lean 60° is not a setting anyone
    * wants, it is a bug report. */
   --trance-newtab-logo-tilt: 14deg;
+  /* The same lean while the mark is held down: clearly further than the hover
+   * lean, and still short of a mark turned on its edge. */
+  --trance-newtab-logo-tilt-pressed: 24deg;
 
   /* Half the background-position range, which is as far as this can go: the
    * sheen sits at `50%` at rest and swings this far either side of it, so

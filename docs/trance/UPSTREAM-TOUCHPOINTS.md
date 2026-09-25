@@ -141,6 +141,8 @@ Mark every change in-place:
 | 34 | `src/zen/split-view/ZenViewSplitter.mjs` | Split-pane docshell activation follows `gZenWindowActivity`, suspending linked browsers while the chrome window is hidden and restoring them on resume | 0–6 | — |
 | 35 | `src/zen/glance/ZenGlanceManager.mjs` | Glance browser/docshell activity follows `gZenWindowActivity`; cached element previews remain available without re-rendering on resume | 0–6 | — |
 | 36 | `src/zen/live-folders/ZenLiveFolder.sys.mjs` | Deferred live-folder network refreshes are gated by `gZenWindowActivity`, so hidden or occluded windows do not fetch | 0–6 | — |
+| 37 | `src/toolkit/themes/shared/popup-css.patch` (`toolkit/themes/shared/popup.css`) | macOS only: arrow panels keep `-moz-window-opacity: 0` after `panel.js` clears `animate` at `popuphidden`, so the exit fade finishes with the native transform instead of being cancelled; on Big Sur+ the open transition is limited to `-moz-window-transform`, preserving toolkit's no-fade-in shadow workaround | — | ADR-095 |
+| 38 | `src/zen/library/ZenLibrary.mjs` | One statement in `openProgress` publishing the Library's existing content shift as `--zen-library-content-shift`, so Trance CSS can narrow the toolbar row instead of letting it slide past the window. Zen's own transform is unchanged | — | ADR-096 |
 
 ### Phase 0–6 activity migration
 

@@ -8,15 +8,7 @@
 import { TranceFeature } from "chrome://browser/content/trance-components/TranceFeature.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
 
-// Named `lazyAppConstants` only because the chrome window already has a global
-// `AppConstants`; this module is also loaded into the shared system global,
-// where that global does not exist, so it imports its own.
-const { AppConstants: lazyAppConstants } = ChromeUtils.importESModule(
-  "resource://gre/modules/AppConstants.sys.mjs"
-);
-
 const NS = "OnboardingSettings";
-const PREF_CHANNEL = "trance.onboarding.channel";
 const PREF_MODS_CHANNEL = "trance.mods.channel";
 const PREF_ARCH = "trance.perf.arch";
 
@@ -29,6 +21,11 @@ export class TranceOnboardingSettings extends TranceFeature {
   onEnable() {
     const { TranceOnboardingSettingsService } = ChromeUtils.importESModule(
       "chrome://browser/content/trance-components/TranceOnboardingSettings.mjs"
+    );
+    // Runtime default-branch values live only in memory, so the persisted
+    // answer is made the default again at every start.
+    TranceOnboardingSettingsService.applyArchDefaults(
+      Services.prefs.getStringPref(PREF_ARCH, "arm64")
     );
     this.addDisposer(TranceOnboardingSettingsService.acquire());
   }
@@ -56,8 +53,8 @@ function writeChoice(pref, value) {
 
 /** Shared actions also reapply a choice when its pref value is unchanged. */
 export const TranceOnboardingSettingsService = {
-  applyChannel,
   applyArch,
+  applyArchDefaults,
   applyModChannel,
 
   /** One observer set for all enabled windows; released by the last holder. */
@@ -65,7 +62,6 @@ export const TranceOnboardingSettingsService = {
     if (!holders) {
       try {
         for (const [pref, apply] of [
-          [PREF_CHANNEL, applyChannel],
           [PREF_ARCH, applyArch],
           [PREF_MODS_CHANNEL, applyModChannel],
         ]) {
@@ -128,124 +124,6 @@ async function applyModChannel(channel) {
 }
 
 /**
- * The `zen.*` prefs upstream gates on the build-time `@IS_TWILIGHT@` constant,
- * and the value each takes on the twilight side of it.
- *
- * Read out of `prefs/zen/{view,theme,sync}.yaml` rather than guessed. The
- * stable side is not listed because it is "whatever the pref file already set",
- * which is what a Trance build boots with — so choosing "stable" clears the
- * user branch instead of writing the same value back, and a later upstream
- * change to a default is inherited rather than frozen.
- *
- * `zen.theme.styled-status-panel` is deliberately absent. Its yaml has a second
- * entry, `value: true` under `defined(XP_MACOSX)`, so on macOS it is already
- * true on both channels and writing it here would be a no-op that looks like a
- * decision. On other platforms it follows the constant, which is what
- * `TWILIGHT_ONLY_PREFS` below covers.
- */
-const TWILIGHT_PREFS = Object.freeze([
-  { name: "zen.view.context-menu.refresh", twilight: true },
-  // `prefs/zen/sync.yaml` writes this one twice: `true` on the twilight side,
-  // and `false` *locked* on the other. A locked pref cannot be set from the
-  // user branch at all — `setBoolPref` throws — so this is the one entry where
-  // "write the twilight value" means unlock first, and where going back to
-  // stable means clearing *and* putting the lock back. Without the flag the
-  // page would silently fail on a third of what its copy promises.
-  { name: "services.sync.engine.spaces", twilight: true, locked: true },
-]);
-
-/** Same list, minus the ones another yaml entry already decides on this OS. */
-const TWILIGHT_ONLY_PREFS = Object.freeze([
-  { name: "zen.theme.styled-status-panel", twilight: true },
-]);
-
-/**
- * The surface prefs an Intel GPU wants different values for, and those values.
- *
- * These are the numbers the architecture page's own copy promises, and for a
- * while they were not: a performance pass flattened both columns to a
- * filter-free baseline, which left a page offering a choice between "full
- * frost" and "a 10px blur" that wrote the same four values either way
- * (ADR-072). A question whose two answers do the same thing is worse than no
- * question.
- *
- * Both columns are the shipped default from `prefs/trance/`, restated so
- * that switching back is a write rather than a clear — a user who edited the
- * radius by hand and then re-ran the flow should get the tuning they picked,
- * not their own old value silently kept.
- *
- * None of this is free on a platform that pays for blur, and on the three that
- * do not — macOS vibrancy, Windows Mica, transparent GTK — the radius is not
- * painted at all. See the Blur section of trance-surfaces.css.
- */
-const ARCH_TUNING = Object.freeze({
-  arm64: Object.freeze([
-    { name: "trance.surface.blur.radius", type: "int", value: 24 },
-    { name: "trance.surface.internal.blur", type: "bool", value: true },
-    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: true },
-    {
-      name: "trance.surface.suspend-when-unfocused",
-      type: "bool",
-      value: true,
-    },
-  ]),
-  x86_64: Object.freeze([
-    { name: "trance.surface.blur.radius", type: "int", value: 10 },
-    // The `about:` pages' own blur is a second full-viewport pass over content
-    // that is already opaque behind it. It is the cheapest thing to give up.
-    { name: "trance.surface.internal.blur", type: "bool", value: false },
-    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: false },
-    {
-      name: "trance.surface.suspend-when-unfocused",
-      type: "bool",
-      value: true,
-    },
-  ]),
-});
-
-/**
- * Writes the twilight-gated prefs, or clears them.
- *
- * Clearing rather than writing the stable value is deliberate: the stable
- * value *is* the default the pref file set, so clearing the user branch means
- * a later change to that default is inherited. Writing it would freeze
- * today's answer into the profile forever.
- *
- * @param {string} channel
- */
-function applyChannel(channel) {
-  const twilight = channel === "twilight";
-  writeChoice(PREF_CHANNEL, channel);
-
-  const entries = [
-    ...TWILIGHT_PREFS,
-    ...(lazyAppConstants.platform === "macosx" ? [] : TWILIGHT_ONLY_PREFS),
-  ];
-  for (const entry of entries) {
-    try {
-      if (Services.prefs.prefIsLocked(entry.name)) {
-        Services.prefs.unlockPref(entry.name);
-      }
-      if (twilight) {
-        Services.prefs.setBoolPref(entry.name, entry.twilight);
-      } else {
-        Services.prefs.clearUserPref(entry.name);
-        if (entry.locked) {
-          // Put upstream's lock back rather than leaving a pref that Zen
-          // means to be immovable on this channel merely *set* to the right
-          // value. The difference shows up in about:config and in anything
-          // that asks whether the user may change it.
-          Services.prefs.lockPref(entry.name);
-        }
-      }
-    } catch (error) {
-      TranceLog.error(NS, `could not set ${entry.name}`, error);
-    }
-  }
-  TranceLog.log(NS, "channel", channel);
-}
-
-/**
  * Switches the installed engine's channel by rewriting its own version.
  *
  * This is Sine's mechanism, not a workaround for it: the engine compares the
@@ -293,28 +171,71 @@ async function rewriteModChannel(channel) {
 }
 
 /**
- * Writes the arch-tuned blur prefs.
+ * The surface prefs an Intel GPU wants different values for, and those values.
  *
- * Both columns are written, always. Clearing the user branch would be the
- * `applyChannel` treatment, and it is wrong here: a user who moved the blur
- * radius by hand and then answered this question has asked for the tuning,
- * and inheriting their own old value instead would look like the question did
- * nothing.
+ * These are the numbers the architecture page's own copy promises (ADR-072):
+ * blur is the only Trance-drawn cost that scales with GPU class. They are
+ * written to the *default* branch, so they are what a person gets until they
+ * move one of these controls themselves; an explicit choice in Settings or the
+ * theme picker is a user value and outranks the tuning, including when the
+ * question is answered again.
+ *
+ * None of this is free on a platform that pays for blur, and on the three that
+ * do not — macOS vibrancy, Windows Mica, transparent GTK — the radius is not
+ * painted at all. See the Blur section of trance-surfaces.css.
+ */
+const ARCH_TUNING = Object.freeze({
+  arm64: Object.freeze([
+    { name: "trance.surface.blur.radius", type: "int", value: 24 },
+    { name: "trance.surface.internal.blur", type: "bool", value: true },
+    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: true },
+    {
+      name: "trance.surface.suspend-when-unfocused",
+      type: "bool",
+      value: true,
+    },
+  ]),
+  x86_64: Object.freeze([
+    { name: "trance.surface.blur.radius", type: "int", value: 10 },
+    // The `about:` pages' own blur is a second full-viewport pass over content
+    // that is already opaque behind it. It is the cheapest thing to give up.
+    { name: "trance.surface.internal.blur", type: "bool", value: false },
+    { name: "trance.chrome.urlbar.focus-blur", type: "bool", value: false },
+    {
+      name: "trance.surface.suspend-when-unfocused",
+      type: "bool",
+      value: true,
+    },
+  ]),
+});
+
+/**
+ * Records the architecture answer and makes its tuning the default.
  *
  * @param {string} arch
  */
 function applyArch(arch) {
   writeChoice(PREF_ARCH, arch);
+  applyArchDefaults(arch);
+  TranceLog.log(NS, "arch", arch);
+}
+
+/**
+ * Writes the arch-tuned blur prefs to the default branch (see ARCH_TUNING).
+ *
+ * @param {string} arch
+ */
+function applyArchDefaults(arch) {
+  const defaults = Services.prefs.getDefaultBranch(null);
   for (const entry of ARCH_TUNING[arch] ?? []) {
     try {
       if (entry.type === "int") {
-        Services.prefs.setIntPref(entry.name, entry.value);
+        defaults.setIntPref(entry.name, entry.value);
       } else {
-        Services.prefs.setBoolPref(entry.name, entry.value);
+        defaults.setBoolPref(entry.name, entry.value);
       }
     } catch (error) {
       TranceLog.error(NS, `could not set ${entry.name}`, error);
     }
   }
-  TranceLog.log(NS, "arch", arch);
 }

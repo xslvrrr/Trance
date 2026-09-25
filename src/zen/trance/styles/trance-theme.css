@@ -221,11 +221,10 @@
  * turns freely, so a ring is the honest picture of what it can do — dots drew
  * detents that no longer exist.
  *
- * The blur knob turns through 270° of it and holds at the ends, so the bottom
- * of its ring is track the handle never reaches. That is deliberate: the ring
- * is the shape of the control, the handle's own travel is what says where the
- * ends are, and a three-quarter arc drawn as an arc would make the two knobs
- * two different shapes in one column for a fact one drag teaches. */
+ * The blur knob uses the same full ring, with a small gap centred at the top
+ * to keep zero and maximum distinct. Its handle travels clockwise from just
+ * right of the top to just left of it; the ring stays whole so both knobs keep
+ * the same shape in one column. */
 .trance-theme-knob::before {
   content: "";
   position: absolute;

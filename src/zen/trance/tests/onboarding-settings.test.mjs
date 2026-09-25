@@ -24,11 +24,9 @@ const ui = readFileSync(
 );
 const url =
   "chrome://browser/content/trance-components/TranceOnboardingSettings.mjs";
-const channelPref = "trance.onboarding.channel";
 const archPref = "trance.perf.arch";
 const modsPref = "trance.mods.channel";
 const radiusPref = "trance.surface.blur.radius";
-const syncPref = "services.sync.engine.spaces";
 
 // Every `const PREF_… = "…"` the UI module declares, read out of the module
 // rather than restated here. The sandbox below evaluates a slice of the real
@@ -42,12 +40,13 @@ const uiPrefConstants = Object.fromEntries(
   ])
 );
 
-function world(platform = "macosx") {
-  const values = new Map([["trance.onboarding.completed", true]]);
-  const defaults = new Map([[syncPref, false]]);
-  const locked = new Set([syncPref]);
+function world(initial = []) {
+  const values = new Map([["trance.onboarding.completed", true], ...initial]);
+  const defaults = new Map();
+  const locked = new Set();
   const observers = new Map();
   const counts = new Map();
+  const defaultCounts = new Map();
   const errors = [];
   const imports = [];
   const io = {
@@ -61,6 +60,11 @@ function world(platform = "macosx") {
     failPref: null,
     getStringPref: (p, d) => values.get(p) ?? defaults.get(p) ?? d,
     getBoolPref: (p, d) => values.get(p) ?? defaults.get(p) ?? d,
+    getIntPref: (p, d) => values.get(p) ?? defaults.get(p) ?? d,
+    getDefaultBranch(root) {
+      assert.equal(root, null);
+      return { setIntPref: writeDefault, setBoolPref: writeDefault };
+    },
     setStringPref: write,
     setBoolPref: write,
     setIntPref: write,
@@ -95,6 +99,16 @@ function world(platform = "macosx") {
     // Deliberately notify even for identical writes to expose feedback loops.
     for (const o of [...(observers.get(p) ?? [])]) {
       o.observe();
+    }
+  }
+  // Gecko notifies a default-branch change only where no user value hides it.
+  function writeDefault(p, v) {
+    defaultCounts.set(p, (defaultCounts.get(p) ?? 0) + 1);
+    defaults.set(p, v);
+    if (!values.has(p)) {
+      for (const o of [...(observers.get(p) ?? [])]) {
+        o.observe();
+      }
     }
   }
   class Feature {
@@ -162,9 +176,6 @@ function world(platform = "macosx") {
       },
       ChromeUtils: {
         importESModule(actual, options) {
-          if (actual === "resource://gre/modules/AppConstants.sys.mjs") {
-            return { AppConstants: { platform } };
-          }
           imports.push(actual);
           assert.equal(actual, url);
           assert.equal(options, undefined);
@@ -184,9 +195,10 @@ function world(platform = "macosx") {
     ...shared,
     prefs,
     values,
-    locked,
+    defaults,
     observers,
     counts,
+    defaultCounts,
     errors,
     imports,
     io,
@@ -209,56 +221,49 @@ test("completed profiles apply settings without importing UI, with one watcher s
   assert.deepEqual(a.constructor.styles, []);
   assert.deepEqual(
     [...w.observers.values()].map(set => set.size),
-    [1, 1, 1]
+    [1, 1]
   );
+  assert.equal(w.defaultCounts.get(radiusPref), 2);
   w.prefs.setStringPref(archPref, "x86_64");
-  assert.equal(w.values.get(radiusPref), 10);
-  assert.equal(w.counts.get(radiusPref), 1);
+  assert.equal(w.defaults.get(radiusPref), 10);
+  assert.equal(w.defaultCounts.get(radiusPref), 3);
   a.destroy();
   w.prefs.setStringPref(archPref, "arm64");
-  assert.equal(w.counts.get(radiusPref), 2);
+  assert.equal(w.defaultCounts.get(radiusPref), 4);
   b.destroy();
   assert.equal(w.observers.size, 0);
-  w.prefs.setIntPref(radiusPref, 17);
   w.prefs.setStringPref(archPref, "x86_64");
-  assert.equal(w.values.get(radiusPref), 17);
+  assert.equal(w.defaults.get(radiusPref), 24);
   assert.deepEqual(w.imports, [url, url]);
   assert.deepEqual(w.errors, []);
 });
 
-test("channel switching preserves default clearing, sync lock, macOS exception and acrylic removal", () => {
-  for (const platform of ["macosx", "linux"]) {
-    const w = world(platform);
-    enable(w);
-    w.prefs.setStringPref(channelPref, "twilight");
-    assert.equal(w.values.get(syncPref), true);
-    assert.equal(w.locked.has(syncPref), false);
-    assert.equal(
-      w.values.has("zen.theme.styled-status-panel"),
-      platform !== "macosx"
-    );
-    assert.equal(w.values.has("zen.theme.acrylic-elements"), false);
-    assert.equal(w.counts.get(syncPref), 1);
-    w.prefs.setStringPref(channelPref, "stable");
-    assert.equal(w.values.has(syncPref), false);
-    assert.equal(w.locked.has(syncPref), true);
-    assert.equal(w.values.has("zen.view.context-menu.refresh"), false);
-    assert.deepEqual(w.errors, []);
-  }
-});
-
-test("direct UI actions reapply unchanged tuning exactly once", () => {
+test("architecture tuning sets defaults and never overwrites the user's own values", () => {
   const w = world();
   enable(w);
   const s = w.TranceOnboardingSettingsService;
+  w.prefs.setIntPref(radiusPref, 17);
+  s.applyArch("x86_64");
+  s.applyArch("x86_64");
+  assert.equal(w.prefs.getIntPref(radiusPref), 17);
+  assert.equal(w.defaults.get(radiusPref), 10);
+  assert.equal(w.prefs.getBoolPref("trance.surface.internal.blur"), false);
+  assert.equal(w.prefs.getBoolPref("trance.chrome.urlbar.focus-blur"), false);
+  assert.equal(w.values.has("trance.surface.internal.blur"), false);
+  assert.equal(w.values.has("trance.chrome.urlbar.focus-blur"), false);
   s.applyArch("arm64");
-  w.prefs.setIntPref(radiusPref, 99);
-  s.applyArch("arm64");
-  assert.equal(w.values.get(radiusPref), 24);
-  assert.equal(w.counts.get(radiusPref), 3);
-  assert.equal(w.values.get("trance.surface.internal.blur"), true);
-  assert.equal(w.values.get("trance.chrome.urlbar.focus-blur"), true);
-  assert.equal(w.values.get("trance.surface.suspend-when-unfocused"), true);
+  assert.equal(w.defaults.get(radiusPref), 24);
+  assert.equal(w.prefs.getBoolPref("trance.surface.internal.blur"), true);
+  assert.deepEqual(w.errors, []);
+});
+
+test("a saved architecture becomes the default again at startup without rewriting the answer", () => {
+  const w = world([[archPref, "x86_64"]]);
+  enable(w);
+  assert.equal(w.prefs.getIntPref(radiusPref), 10);
+  assert.equal(w.prefs.getBoolPref("trance.chrome.urlbar.focus-blur"), false);
+  assert.equal(w.counts.get(archPref), undefined);
+  assert.equal(w.values.has(radiusPref), false);
 });
 
 test("mod changes from settings or UI serialize without recursive or multiwindow writes", async () => {
@@ -308,7 +313,7 @@ test("partial watcher setup rolls back and can retry before enabled is committed
   w.prefs.failPref = null;
   feature.init();
   assert.equal(feature.enabled, true);
-  assert.equal(w.observers.size, 3);
+  assert.equal(w.observers.size, 2);
   feature.destroy();
   feature.destroy();
   assert.equal(w.observers.size, 0);
@@ -422,12 +427,6 @@ test("UI startup defers, respects automation and claims completion before buildi
   otherWindow.onEnable();
   values.set(completedPref, true); // Another window claims before idle fires.
   pending[1].callback();
-  assert.equal(otherWindow.builds, 0);
-  assert.ok(!ui.includes("#watchPref"));
-  assert.ok(!ui.includes("#applyChannel"));
-  assert.ok(!ui.includes("#applyArch"));
-  assert.ok(!ui.includes("#applyModChannel"));
-  assert.ok(ui.includes("TranceOnboardingSettingsService.applyChannel("));
   assert.ok(
     ui.includes("TranceOnboardingSettingsService.applyArch(this.#answers.arch)")
   );

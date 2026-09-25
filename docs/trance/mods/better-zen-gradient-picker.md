@@ -32,8 +32,8 @@ line into a sine wave as it rises, and a grain knob. What the mod adds on top:
 - [x] B4 — A **palette button** that switches between preset slider
       configurations — monochrome, dark, pastel, full and others.
 - [x] B5 — A **heart button** that saves the current theme; it turns red once
-      saved, and saved themes appear as an extra row of swatches at the start of
-      the preset pager.
+      saved, and saved themes occupy pages at the start of the preset pager,
+      eight per page.
 - [x] B6 — **Exact hex code entry**, rather than only the platform colour picker.
 - [x] B7 — A **message naming the gradient type** when the algorithm button is
       pressed, and naming the palette when the palette button is.
@@ -47,10 +47,10 @@ they named. Nothing is dropped; one thing is *not built*.
 |---|---|---|
 | B1 lightness slider | Keep | The one real gap in Zen's picker. See §5. |
 | B2 translucency slider | **Built, differently** | First answered by Zen's own slider: it already existed and already wrote this value, so a second one over it was the two-owners problem this project exists to remove. That answer was half right. Zen's slider writes an *alpha*, so it was simultaneously tint and transparency and could give neither on its own. Zen's now means tint strength only, and transparency is the master opacity slider in Trance's second row, writing `trance.surface.opacity` — the browser's one surface, not the space's. Still one owner per value; the value it was asking for turned out to be a different one (ADR-081). |
-| B8 master blur knob | Keep | Not in the mod, and not in the settings page either on a platform whose window is natively translucent, where the row is hidden. The blur radius belongs next to the opacity it composes with. Inert where the operating system owns the frost, and it says so (ADR-081). |
+| B8 master blur knob | Keep | The radius has a consumer on every platform (ADR-082). It controls the sidebar and toolbar regions, with a narrow splitter region closing their seam; the blur applies when Trance transparency is on (ADR-087). |
 | B3 angle knob | Keep | Zen hard-codes `-45deg` with a `TODO` next to it. |
 | B4 palettes | Keep | Widened to eight: full, vivid, pastel, muted, dark, light, neon, monochrome. |
-| B5 saved themes | Keep | Including the extra page at the start of the pager. |
+| B5 saved themes | Keep | Saved themes capture surface opacity and blur, and paginate eight per page at the start of the pager (ADR-089). |
 | B6 hex entry | Keep | As a front-end to Zen's own exact-colour path, not a second one. |
 | B7 naming what happened | Keep | Extended to the palette button and to saving. |
 
@@ -237,9 +237,9 @@ There is no `trance.theme.translucency`, and no per-space prefs — see §2 B2 a
 `onDisable()` cancels any queued repaint, restores the six wraps by deleting the
 own-properties, puts Zen's opacity spinner back where it came from, puts back the
 translucency slider's own `min`/`max`, removes the tooltips it filled in on Zen's
-unlabelled buttons, walks the pager
-back one page before removing the saved page so Zen's private index and the page
-it is showing agree again, removes every created node, gives
+unlabelled buttons, walks back over every saved page before removing them when
+the panel is open (while a closed panel's pager index is kept consistent with its
+restored position), removes every created node, gives
 `zen.theme.gradient.show-custom-colors` back to the user, and asks for one
 repaint so the unrotated gradient is on screen immediately rather than at the
 next click.

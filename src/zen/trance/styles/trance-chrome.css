@@ -28,6 +28,48 @@
  */
 
 :root[trance="true"][trance-chrome="true"] {
+  /* ── Library-safe toolbar row ────────────────────────────────────────────
+   *
+   * The Library shifts #zen-appcontent-wrapper by the signed amount exposed
+   * below by ZenLibrary. Keep the address-bar row inside the viewport by
+   * removing that shift's magnitude from its width. On a right-side Library
+   * the parent moves left; counter-shift only this toolbar row so its start
+   * stays at the left edge of the remaining page area.
+   */
+  &:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper {
+    max-width: calc(
+      100% -
+        max(
+          var(--zen-library-content-shift, 0px),
+          calc(-1 * var(--zen-library-content-shift, 0px))
+        )
+    );
+  }
+
+  /* The urlbar normally breaks out of its flex slot. While the Library is
+   * open, keep it in that slot so the shortened toolbar row also bounds its
+   * visual and hit-test area. Zen marks an open Library on the splitter,
+   * which is an earlier sibling of #zen-appcontent-wrapper; matching that
+   * avoids a document-wide `:has(zen-library[open])`. */
+  /* stylelint-disable-next-line trance/max-specificity -- Zen's only open-Library signal is an attribute on #zen-sidebar-splitter, reachable from the urlbar only through its id-matched sibling */
+  &:not([zen-single-toolbar="true"]) #zen-sidebar-splitter[zen-library-open="true"] ~ #zen-appcontent-wrapper #urlbar-container {
+    flex-shrink: 1;
+    min-width: 0;
+    position: relative;
+
+    /* stylelint-disable-next-line trance/max-specificity -- same id-matched splitter chain as above */
+    & #urlbar[breakout] {
+      position: absolute;
+      inset-inline: 0;
+      width: auto;
+    }
+  }
+
+  &[zen-right-side="true"]:not([zen-single-toolbar="true"])
+    #zen-appcontent-navbar-wrapper {
+    transform: translateX(calc(-1 * var(--zen-library-content-shift, 0px)));
+  }
+
   /* ── Icon size ───────────────────────────────────────────────────────────
    *
    * The one thing about icons that is a preference rather than a second
@@ -186,6 +228,21 @@
     mask-position: center;
     mask-repeat: no-repeat;
   }
+  /* Match the nav-bar overflow button's token-sized hit box. The native
+   * app-menu end-padding otherwise makes this button wider than its siblings. */
+  & #PanelUI-menu-button {
+    width: calc(
+      var(--zen-toolbar-button-size, 16px) +
+        2 * var(--toolbarbutton-padding-inner, 0px) +
+        2 * var(--toolbarbutton-padding-outer, 1px)
+    );
+    height: calc(
+      var(--zen-toolbar-button-size, 16px) +
+        2 * var(--toolbarbutton-padding-inner, 0px)
+    );
+    padding-inline-end: var(--toolbarbutton-padding-outer, 1px);
+  }
+
 
   /* ── The top of the sidebar ──────────────────────────────────────────────
    *
@@ -264,7 +321,7 @@
        * here, not an accident of how it was written. */
       /* stylelint-disable-next-line trance/no-layout-transition -- layout is the gesture */
       transition: margin-block-end var(--trance-dur-base)
-        var(--trance-ease-emphasis);
+        var(--trance-ease-standard);
     }
 
     /* trance-specificity: two IDs on the second selector, and they are the

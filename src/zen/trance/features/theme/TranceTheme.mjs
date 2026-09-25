@@ -104,17 +104,15 @@ const PREF_ZEN_CUSTOM_COLORS = "zen.theme.gradient.show-custom-colors";
 const ANGLE_STEP = 15;
 
 /**
- * The blur knob's ceiling, in pixels, and the arc it turns through.
+ * The blur knob's ceiling, pixels, and usable arc around its full ring.
  *
- * 60 is the settings page's own maximum, so the two controls for this pref
- * cannot disagree about what its top is. The sweep is 270° rather than a full
- * turn because a blur radius has ends: on a full circle 0px and 60px would
- * share a position and a drag past the maximum would wrap to nothing, which is
- * the one thing a bounded dial must not do. The gap sits at the bottom, so the
- * handle travels from the lower left round to the lower right.
+ * The small gap keeps the two ends distinct. It is centred at the top, where
+ * zero sits just clockwise of up and the maximum sits just counter-clockwise.
  */
 const MAX_BLUR = 60;
-const BLUR_SWEEP = 270;
+const BLUR_GAP = 10;
+const BLUR_SWEEP = 360 - BLUR_GAP;
+const BLUR_START = BLUR_GAP / 2;
 
 /** Pixels per press of an arrow key on the blur knob, and per haptic tick. */
 const BLUR_STEP = 2;
@@ -126,16 +124,18 @@ const BLUR_TITLE_INERT =
   "system has asked for reduced transparency";
 
 /**
- * How many slots the saved page draws.
+ * How many slots one saved page draws.
  *
  * Zen's own preset pages hold eight or nine swatches, so eight is the width of
- * one row in this panel. Every slot that has no saved theme in it is drawn as a
- * dashed outline: an empty page then says *where saved themes go* rather than
- * saying nothing, and the page does not change height when the first one lands.
+ * one row in this panel. More saved themes than that spill onto further saved
+ * pages rather than overflowing this one. Every slot on the last saved page
+ * that has no theme in it is drawn as a dashed outline: an empty page then says
+ * *where saved themes go* rather than saying nothing, and the page does not
+ * change height when the first one lands.
  */
 const SAVED_SLOTS = 8;
 
-/** How many saved themes the extra page holds before the oldest is dropped. */
+/** How many saved themes the saved pages hold before the oldest is dropped. */
 const MAX_SAVED = 24;
 
 // Palette definitions are owned by TranceThemeState so startup rendering and
@@ -316,7 +316,8 @@ export class TranceTheme extends TranceFeature {
         TranceLog.error(NS, "undo step threw", error);
       }
     }
-    for (const node of Object.values(this.#nodes)) {
+    // `.flat()`: the saved pages are one entry holding an array of nodes.
+    for (const node of Object.values(this.#nodes).flat()) {
       node?.remove();
     }
     this.#nodes = {};
@@ -515,7 +516,7 @@ export class TranceTheme extends TranceFeature {
 
     this.#buildToast(doc, panel);
     this.#buildActions(doc, panel);
-    this.#buildSavedPage(doc, panel);
+    this.#buildSavedPages(panel);
     this.#buildControls(doc, panel);
     this.#buildHexRow(doc, panel);
   }
@@ -948,45 +949,43 @@ export class TranceTheme extends TranceFeature {
   }
 
   /**
-   * The saved-themes page.
+   * The saved-themes pages.
    *
    * Zen's pager is a scroll container whose pages are its children and whose
-   * current index is private, so Trance cannot prepend a page and then tell Zen
-   * that the index moved. It does not have to: after prepending, one synthetic
-   * command on the right arrow walks Zen's own handler forward by exactly one
-   * page, which lands on the page that used to be first, enables the left arrow
-   * and leaves the index and the scroll position agreeing with each other.
+   * current index is private, so Trance cannot insert pages and then tell Zen
+   * that the index moved. It does not have to: `#resizeSavedPages` walks Zen's
+   * own arrow handlers, which keeps the index and the scroll position agreeing
+   * with each other. That is the requirement — saved themes first, the panel
+   * opening on the first saved page, "next" from the last saved page landing on
+   * Zen's first preset page, and a later save or forget leaving the pager on
+   * the page it was showing — expressed as clicks rather than as a
+   * reimplementation of the pager.
    *
-   * That is the requirement — saved themes at the start, opening on the
-   * original first page, with the arrows working in both directions — expressed
-   * as one click rather than as a reimplementation of the pager.
+   * The pages themselves are made by the first render, which knows how many
+   * saved themes there are; here there are only the listeners. They sit on
+   * Zen's pager rather than on each page because the number of pages changes
+   * every eighth save. Zen's own click listener on the same element ignores
+   * anything without a `data-position`, which a saved swatch never has.
    *
-   * @param {Document} doc
    * @param {Element} panel
    */
-  #buildSavedPage(doc, panel) {
+  #buildSavedPages(panel) {
     if (!Services.prefs.getBoolPref(PREF_SAVED, true)) {
       return;
     }
     const pages = panel.querySelector(
       "#PanelUI-zen-gradient-generator-color-pages"
     );
-    const right = panel.querySelector(
-      "#PanelUI-zen-gradient-generator-color-page-right"
-    );
-    if (!pages || !right) {
+    if (!pages) {
       return;
     }
-
-    const page = doc.createXULElement("hbox");
-    page.className = "trance-theme-saved-page";
-
-    pages.prepend(page);
-    this.#nodes.savedPage = page;
+    this.#nodes.savedPages = [];
 
     // `getAttribute`, not `dataset`: these are XUL boxes, matching the ones Zen
     // fills the other five pages with, and `dataset` is an HTML interface.
-    this.addListener(page, "click", event => {
+    // `data-index` is the theme's index in the whole saved list, not on its
+    // page, so it goes straight to `#applySaved` and `#forget`.
+    this.addListener(pages, "click", event => {
       const swatch = event.target.closest(".trance-theme-saved-swatch");
       if (!swatch) {
         return;
@@ -995,7 +994,7 @@ export class TranceTheme extends TranceFeature {
       event.stopPropagation();
       this.#applySaved(Number(swatch.getAttribute("data-index")));
     });
-    this.addListener(page, "contextmenu", event => {
+    this.addListener(pages, "contextmenu", event => {
       const swatch = event.target.closest(".trance-theme-saved-swatch");
       if (!swatch) {
         return;
@@ -1004,15 +1003,84 @@ export class TranceTheme extends TranceFeature {
       this.#forget(Number(swatch.getAttribute("data-index")));
     });
 
-    right.dispatchEvent(new this.context.window.Event("command"));
-    this.#undo.push(() => {
-      // Walking back is the same trick in reverse, so Zen's private index and
-      // the page it is showing agree again once the extra page is gone.
-      const left = panel.querySelector(
-        "#PanelUI-zen-gradient-generator-color-page-left"
-      );
-      left?.dispatchEvent(new this.context.window.Event("command"));
-    });
+    // Taking the pages away is the same walk, so Zen's private index and the
+    // page it is showing agree again once they are gone.
+    this.#undo.push(() => this.#resizeSavedPages(0));
+  }
+
+  /**
+   * Makes there be `count` saved pages, keeping Zen's pager on what it showed.
+   *
+   * Zen's index is private, but its left arrow is disabled exactly when the
+   * index is 0, so walking left until it is disabled both reads the index and
+   * parks it somewhere known. Pages then come and go at the end of the saved
+   * run, and walking right sets the index again.
+   *
+   * Where it walks to depends on whether the pager is laid out. While the panel
+   * is shut its scroll width is 0 and Zen's scroll writes are lost, and when it
+   * opens again Gecko puts back the scroll offset it last had, which is the page
+   * at the old index. So the walk goes back to the old index: moving it would
+   * leave the index off the page on screen and make "next" skip a page. With
+   * the pager laid out, the first pages leave it on index 0, the first saved
+   * page; later ones walk to the preset that was showing, or to the nearest
+   * saved page that still exists. Only a change in the page count gets here,
+   * which is once every eight saves.
+   *
+   * @param {number} count
+   */
+  #resizeSavedPages(count) {
+    const saved = this.#nodes.savedPages;
+    const panel = this.#picker?.panel;
+    if (!saved || !panel || saved.length === count) {
+      return;
+    }
+    const pages = panel.querySelector(
+      "#PanelUI-zen-gradient-generator-color-pages"
+    );
+    const left = panel.querySelector(
+      "#PanelUI-zen-gradient-generator-color-page-left"
+    );
+    const right = panel.querySelector(
+      "#PanelUI-zen-gradient-generator-color-page-right"
+    );
+    if (!pages || !left || !right) {
+      return;
+    }
+    const command = () => new this.context.window.Event("command");
+    const laidOut = pages.scrollWidth > 0;
+
+    let shown = 0;
+    while (!left.disabled && shown < pages.childElementCount) {
+      left.dispatchEvent(command());
+      shown++;
+    }
+
+    const before = saved.length;
+    while (saved.length < count) {
+      const page = this.context.document.createXULElement("hbox");
+      page.className = "trance-theme-saved-page";
+      if (saved.length) {
+        saved.at(-1).after(page);
+      } else {
+        pages.prepend(page);
+      }
+      saved.push(page);
+    }
+    while (saved.length > count) {
+      saved.pop().remove();
+    }
+
+    let target = Math.min(shown, pages.childElementCount - 1);
+    if (laidOut && !before) {
+      target = 0;
+    } else if (laidOut && shown < before) {
+      target = Math.min(shown, count - 1);
+    } else if (laidOut) {
+      target = shown - before + count;
+    }
+    for (let step = 0; step < target; step++) {
+      right.dispatchEvent(command());
+    }
   }
 
   // --- The knobs -------------------------------------------------------------
@@ -1131,18 +1199,21 @@ export class TranceTheme extends TranceFeature {
   }
 
   /**
-   * The blur knob's 270° arc, in pixels.
+   * Maps the full-ring bearing to the blur knob's bounded value.
    *
-   * Clamped rather than wrapped, which is the difference between a dial with
-   * ends and a dial without: dragging into the gap at the bottom holds at
-   * whichever end you came from instead of jumping to the other one.
+   * The top-centred gap separates the two ends. Bearings within it snap to
+   * the nearer end, so the knob never wraps from maximum back to zero.
    *
    * @param {number} degrees Bearing, clockwise from "up".
    */
   #setBlurFromBearing(degrees) {
-    const half = BLUR_SWEEP / 2;
-    const clamped = Math.max(-half, Math.min(half, degrees));
-    this.#setBlur(((clamped + half) / BLUR_SWEEP) * MAX_BLUR);
+    const theta = (((degrees - BLUR_START) % 360) + 360) % 360;
+    let clampedTheta = theta;
+    if (theta > BLUR_SWEEP) {
+      // Inside the gap: whichever end is nearer.
+      clampedTheta = theta - BLUR_SWEEP < 360 - theta ? BLUR_SWEEP : 0;
+    }
+    this.#setBlur((clampedTheta / BLUR_SWEEP) * MAX_BLUR);
   }
 
   /**
@@ -1260,8 +1331,9 @@ export class TranceTheme extends TranceFeature {
   /**
    * Identity for a theme, so the heart can know whether *this* one is saved.
    *
-   * Colours, translucency, grain and Trance's three fields — everything that
-   * makes a theme look the way it looks, and nothing that does not.
+   * Colours, translucency, grain, Trance's theme fields, and the captured
+   * surface opacity and blur — everything that makes a theme look the way it
+   * looks, and nothing that does not.
    *
    * @param {object} theme
    * @returns {string}
@@ -1274,6 +1346,10 @@ export class TranceTheme extends TranceFeature {
       theme?.tranceLightness ?? null,
       theme?.tranceAngle ?? 0,
       theme?.trancePalette ?? "full",
+      theme?.tranceSurfaceOpacity ??
+        Services.prefs.getIntPref(PREF_SURFACE_OPACITY, 20),
+      theme?.tranceSurfaceBlur ??
+        Services.prefs.getIntPref(PREF_SURFACE_BLUR, 24),
     ]);
   }
 
@@ -1284,10 +1360,19 @@ export class TranceTheme extends TranceFeature {
       return;
     }
     const themes = this.#savedThemes();
-    const key = this.#key(theme);
+    const opacity = Services.prefs.getIntPref(PREF_SURFACE_OPACITY, 20);
+    const blurRadius = Services.prefs.getIntPref(PREF_SURFACE_BLUR, 24);
+    const key = this.#key({
+      ...theme,
+      tranceSurfaceOpacity: opacity,
+      tranceSurfaceBlur: blurRadius,
+    });
     const index = themes.findIndex(entry => this.#key(entry) === key);
     if (index === -1) {
-      themes.push(JSON.parse(JSON.stringify(theme)));
+      const saved = JSON.parse(JSON.stringify(theme));
+      saved.tranceSurfaceOpacity = opacity;
+      saved.tranceSurfaceBlur = blurRadius;
+      themes.push(saved);
       this.#writeSavedThemes(themes);
       this.#notify("Saved to the first page");
     } else {
@@ -1376,6 +1461,15 @@ export class TranceTheme extends TranceFeature {
       return;
     }
     workspace.theme = JSON.parse(JSON.stringify(saved));
+    if (Number.isFinite(saved.tranceSurfaceOpacity)) {
+      Services.prefs.setIntPref(
+        PREF_SURFACE_OPACITY,
+        saved.tranceSurfaceOpacity
+      );
+    }
+    if (Number.isFinite(saved.tranceSurfaceBlur)) {
+      Services.prefs.setIntPref(PREF_SURFACE_BLUR, saved.tranceSurfaceBlur);
+    }
     this.context.window.gZenWorkspaces.saveWorkspace(workspace);
     this.#picker.onWorkspaceChange(workspace);
     this.#notify("Saved theme applied");
@@ -1584,7 +1678,7 @@ export class TranceTheme extends TranceFeature {
 
     this.#syncLive(isGradient, true);
     if (savedChanged) {
-      this.#renderSavedPage();
+      this.#renderSavedPages();
     }
   }
 
@@ -1742,29 +1836,29 @@ export class TranceTheme extends TranceFeature {
     this.#placeHandle(
       knob,
       this.#nodes.blurKnobHandle,
-      -BLUR_SWEEP / 2 + (pixels / MAX_BLUR) * BLUR_SWEEP
+      BLUR_START + (pixels / MAX_BLUR) * BLUR_SWEEP
     );
   }
 
   /**
-   * Rebuilds the saved page. Called only when the saved list actually changed,
-   * which `#refreshSavedKeys` is the judge of.
+   * Rebuilds the saved pages. Called only when the saved list actually
+   * changed, which `#refreshSavedKeys` is the judge of.
    *
    * `#sync()` runs on every gradient update, which includes every frame of a
    * dot drag. Rebuilding two dozen nodes on each of those would be the kind of
    * per-frame DOM work this project exists to delete.
+   *
+   * Eight swatches to a page, in saved order, so the pages fill left to right.
    */
-  #renderSavedPage() {
-    const page = this.#nodes.savedPage;
-    if (!page) {
+  #renderSavedPages() {
+    const pages = this.#nodes.savedPages;
+    if (!pages) {
       return;
     }
 
     const doc = this.context.document;
-    const themes = this.#savedThemes();
-    page.replaceChildren();
-
-    themes.forEach((theme, index) => {
+    const swatches = [];
+    this.#savedThemes().forEach((theme, index) => {
       const colors = (theme.gradientColors ?? [])
         .map(color =>
           color.isCustom
@@ -1785,18 +1879,28 @@ export class TranceTheme extends TranceFeature {
         "tooltiptext",
         "Click to apply · right-click to forget"
       );
-      page.appendChild(swatch);
+      swatches.push(swatch);
     });
 
-    // A dashed outline for every slot that is still free. An empty page then
-    // shows where saved themes will go, which a sentence saying the page is
-    // empty did not, and the row is the same height either way — the page does
-    // not resize under the pager the first time something is saved.
-    for (let slot = page.childElementCount; slot < SAVED_SLOTS; slot++) {
+    this.#resizeSavedPages(
+      Math.max(1, Math.ceil(swatches.length / SAVED_SLOTS))
+    );
+    pages.forEach((page, pageIndex) => {
+      const first = pageIndex * SAVED_SLOTS;
+      page.replaceChildren(...swatches.slice(first, first + SAVED_SLOTS));
+    });
+
+    // A dashed outline for every slot that is still free, which is only ever
+    // on the last page. An empty page then shows where saved themes will go,
+    // which a sentence saying the page is empty did not, and the row is the
+    // same height either way — the page does not resize under the pager the
+    // first time something is saved.
+    const last = pages.at(-1);
+    for (let slot = last.childElementCount; slot < SAVED_SLOTS; slot++) {
       const outline = doc.createXULElement("box");
       outline.className = "trance-theme-saved-slot";
       outline.setAttribute("tooltiptext", "An empty slot for a saved theme");
-      page.appendChild(outline);
+      last.appendChild(outline);
     }
   }
 }

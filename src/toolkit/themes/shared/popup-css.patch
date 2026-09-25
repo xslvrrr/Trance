@@ -1,0 +1,24 @@
+diff --git a/toolkit/themes/shared/popup.css b/toolkit/themes/shared/popup.css
+index 1163205446ca28a3a6cf1cbc746edd03d1bdaa90..1f508a514a03dac8222f81b97e692d347810e15c 100644
+--- a/toolkit/themes/shared/popup.css
++++ b/toolkit/themes/shared/popup.css
+@@ -190,3 +190,19 @@ panel[type="arrow"] {
+     pointer-events: none;
+   }
+ }
++/* >>> TRANCE */
++@media (-moz-platform: macos) {
++  /* popuphidden clears [animate] before the native window transition ends.
++   * Keep the closing opacity target after that cleanup. */
++  panel[type="arrow"]:not([animate]) {
++    -moz-window-opacity: 0;
++  }
++}
++
++@media (-moz-platform: macos) and (-moz-mac-big-sur-theme) {
++  /* Preserve Big Sur+'s existing no-fade-in shadow workaround. */
++  panel[type="arrow"][animate="open"] {
++    transition-property: -moz-window-transform;
++  }
++}
++/* <<< TRANCE */

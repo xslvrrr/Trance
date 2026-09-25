@@ -2344,7 +2344,7 @@ subdirectory — so a `source/` folder there would break `npm run import` rather
 ## ADR-051 — Trance's onboarding replaces Zen's welcome, and owns four decisions Zen's cannot ask about
 
 **Date:** 2026-08-27
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-088.
 
 **Context:**
 
@@ -2534,7 +2534,7 @@ startup" is a few seconds away rather than a thing the user has to be told to do
 ## ADR-054 — `@IS_TWILIGHT@` asks whether the brand is twilight, not whether it is unlike release
 
 **Date:** 2026-08-28
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-088.
 
 **Context:**
 
@@ -3307,7 +3307,7 @@ The decision is grounded in `scripts/trance-build-matrix.py:5-10`,
 ## ADR-072 — Architecture onboarding restores distinct blur choices
 
 **Date:** 2026-09-02
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-088.
 
 **Context:**
 
@@ -3804,7 +3804,7 @@ only surface was `about:preferences#trance` — two windows away from the colour
 ## ADR-082 — The blur gate was a fact about Gecko, and the fact changed
 
 **Date:** 2026-09-23
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-087.
 **Supersedes:** the blur half of ADR-081 and of ADR-040; amends ADR-022 and ADR-065
 
 **Context:**
@@ -4005,7 +4005,7 @@ that was checked across all eight Zen JS touchpoints against the fork point.
 ## ADR-086 — Zen Library is Zen's now, so Trance stops preinstalling the mod
 
 **Date:** 2026-09-23
-**Status:** Accepted
+**Status:** Accepted. Completed by ADR-090.
 **Supersedes:** the Zen Library half of ADR-030
 
 **Context:**
@@ -4037,3 +4037,303 @@ TRANCE.md §3.1 describes, arriving from upstream.
   artefact: the mod is switched off on first launch, every other mod is untouched, the native widget
   is registered by Zen alone, and a re-enable survives the next restart.
 - No upstream file is touched; the retirement lives in the provisioner Trance already owns.
+ 
+---
+
+## ADR-087 — The splitter closes the blur seam without changing the surface budget
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Amends:** ADR-082
+
+**Context:**
+
+ADR-082 moved blur from the wrapper to the sidebar and toolbar. In the live sidebar-and-toolbar
+layout those boxes ended at x=230 and began at x=236, leaving the 6px `#zen-sidebar-splitter`
+unblurred. The same probe found that the blur still ran when Trance transparency was off.
+
+**Decision:**
+
+Blur the splitter as a narrow third region in the sidebar-and-toolbar layout, and require
+`trance-surface-transparent="true"` for the blur rules. The address bar still takes the toolbar's
+place while extended. The idle budget is three regions (sidebar, toolbar and splitter), within
+ADR-019's three-region ceiling; the splitter covers the measured seam rather than adding a fourth
+full surface.
+
+**Consequences:**
+- At radii 0, 24 and 60px, the splitter and its bordering regions compute `none`, `blur(24px)
+  saturate(1.3)` and `blur(60px) saturate(1.3)` respectively; with transparency off, all three
+  compute `none`.
+- The sidebar/toolbar boundary is continuous at each tested radius, and disabling transparency
+  restores opaque, no-blur chrome.
+- The controls reach 0 and 100; with transparency off, opacity is inert by design. Settings copy
+  describes the two frosted regions and no longer attributes a blur change to Edgeless.
+
+---
+
+## ADR-088 — Onboarding asks only supported questions and applies choices at their real boundary
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Amends:** ADR-051 and ADR-072
+
+**Context:**
+
+ADR-051's ten-page flow included a stable/twilight choice despite Trance shipping one brand, and a
+Zen Internet status/link page that made no choice. The Sine/Cosine page only rewrote the engine
+version suffix; it did not install the selected release. Architecture tuning wrote user prefs,
+overwriting values a user had deliberately set. Several rebuilt pages also requested Fluent ids no
+longer present in Zen's English catalogue.
+
+**Decision:**
+
+Keep eight screens: four Trance-owned pages (mod manager, architecture, Edgeless, and the
+customized import page), followed by four Zen-derived pages (search, essentials, colours and
+finish). Remove the channel and Zen Internet questions; keep the legacy
+`trance.onboarding.channel` declaration without a UI reader or writer. Committing the mod-manager
+page resolves and installs the selected Sine release, skipping a download when it is already
+installed; Settings retains an explicit install/refresh action. Architecture tuning writes default
+branch values and reapplies the saved architecture at startup, leaving user values intact. Reuse
+existing Fluent ids, keep the Trance-owned import label in English, and place the borrowed theme
+picker at the content pane's vertical centre. Remove the finish toast whose Fluent id no longer
+exists.
+
+**Consequences:**
+- The single-brand product no longer offers a nonexistent channel or asks about a page that changes
+  no state; Zen Internet remains bundled but is not a setup step.
+- A channel selection now installs the release when the page is committed. The Settings channel
+  selector remains a choice; its adjacent install/refresh button performs the install.
+- Users who have not overridden tuned blur prefs receive architecture defaults; explicit user
+  values survive re-answering the question, and the saved defaults are reapplied at startup.
+- The finished flow has eight screens and four Trance-owned pages. Its remaining Zen-derived strings
+  continue to use Zen's locale catalogue.
+
+---
+
+## ADR-089 — The theme picker treats blur as a circular control and favourites as full snapshots
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+The blur knob used only 270° of its ring, leaving its dead zone at the bottom. Saved themes occupied
+one page despite the 24-theme limit, did not capture global surface opacity or blur, and used a
+synthetic pager advance that opened on a preset rather than the saved page. Resizing saved pages
+while the panel was closed could also desynchronise Zen's private page index from the restored
+scroll position.
+
+**Decision:**
+
+Use a 350° clockwise blur arc with a 10° dead zone centred at the top: 0px starts at 5° clockwise
+from top and 60px ends at 5° counter-clockwise. Saved themes capture surface opacity and blur,
+including both in identity, and restore those values when present. Paginate at eight themes per
+page, with no more than 24 saved; open on the first saved page and keep page index and rendered
+position aligned across live or closed-panel resizes.
+
+**Consequences:**
+- The knob maps the full usable ring monotonically; the dead-zone endpoints snap to the nearer
+  value. Arrow-key bounds remain unchanged.
+- Favourites distinguish and restore their surface settings; legacy entries without those fields
+  leave current prefs unchanged.
+- Saved swatches no longer overflow the picker: 12 themes occupy two pages, and dynamic growth,
+  shrinkage and teardown keep the pager usable without changing Zen's pager implementation.
+
+---
+
+## ADR-090 — Trance enables Zen's native Library for its single brand
+
+**Date:** 2026-09-23
+**Status:** Accepted
+**Completes:** ADR-086
+
+**Context:**
+
+ADR-086 retired the conflicting preinstalled Library mod in favour of Zen 1.23's native Library,
+but Zen's `zen.library.enabled` default is `@IS_TWILIGHT@`. That resolves false for Trance, so the
+native widget stayed disabled and the sidebar fell back to the downloads button.
+
+**Decision:**
+
+Set `zen.library.enabled: true` in `prefs/trance/overrides.yaml`; do not change Zen's upstream
+default.
+
+**Consequences:**
+- Fresh Trance profiles register `zen-library-button` in the sidebar footer without creating a
+  user-pref value.
+- Zen remains the sole owner of the Library widget and its sections; no upstream touchpoint is
+  added.
+
+---
+
+## ADR-091 — Workspace indicators collapse to dots until selected or hovered
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+Zen's workspace rail kept every inactive workspace icon visible and used a 3px gap (3.15px under
+the expanded-toolbox rule). The sidebar strip had no hover lift or neighbour response.
+
+**Decision:**
+
+In Trance's tabstrip sheet, use a 1.8px gap, show inactive icons as dots until hover, keep the active
+icon visible, and raise the hovered item 4px with adjacent items at half that distance.
+
+**Consequences:**
+- The narrower rail is still legible at rest and selection remains identifiable while a neighbour
+  is hovered.
+- The override follows Zen's expanded-toolbox selector specificity; the rule stays Trance-owned and
+  adds no upstream touchpoint.
+
+---
+
+## ADR-092 — Window-control reveal uses non-overshooting easing
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+The top-buttons strip used emphasis easing with a y-control point above 1. Sampling showed
+`margin-block-end` overshooting the visible endpoint by 0.6743px on reveal and by 0.6743px beyond
+the hidden endpoint, producing a reversal near completion. The shift token remained constant.
+
+**Decision:**
+
+Use the standard, non-overshooting easing for the strip's layout transition. Leave the child
+opacity/transform transitions and the shift token unchanged.
+
+**Consequences:**
+- First reveal remains animated; the measured margin stays within the -30px to 0px endpoints on
+  reveal and rapid retargeting.
+- The adjustment fixes the easing overshoot without changing the strip's layout or hover behavior.
+
+---
+
+## ADR-093 — The app-menu hit box matches adjacent toolbar buttons
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+The upstream trailing-toolbar padding made `#PanelUI-menu-button` measure 50×41px, while the
+adjacent overflow button measured 31×29px. The Trance-owned icon mask was already the intended
+29×29px and did not cause the oversized button.
+
+**Decision:**
+
+Constrain the app-menu button's outer box to 31×29px using existing toolbar tokens and restore
+normal outer padding. Leave the icon's dimensions, mask and content-box rules unchanged.
+
+**Consequences:**
+- The hit box matches the measured sibling. The glyph remains 29×29px; its horizontal position
+  follows the resized, right-aligned button.
+- No upstream file or touchpoint is needed.
+
+---
+
+## ADR-094 — Holding the new-tab mark applies a stronger bounded tilt
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+The empty-tab mark's tilt previously depended only on pointer position, so holding the primary
+button produced no additional response.
+
+**Decision:**
+
+While the pointer is over the mark, primary-button hold selects a 24° tilt instead of the normal
+14° tilt. Track press and release at the window because the mark is not hit-testable; attach those
+listeners only while the tilt effect is enabled.
+
+**Consequences:**
+- Pressing without moving strengthens the tilt, and release returns to the same pointer-driven
+  angle.
+- The pressed state is removed when the pointer leaves or the mark is torn down; other buttons do
+  not activate it.
+
+---
+
+## ADR-095 — macOS arrow panels keep their exit fade after `animate` is cleared
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+The application menu, downloads panel and every other arrow panel appeared without a visible
+entrance and lingered at full opacity before vanishing on close. No Trance CSS or JS animates panels,
+and the lifecycle was identical with `trance.enabled` true or false and with
+`widget.macos.native-popovers` true or false, so neither Trance nor the Cocoa patch (touchpoint 30)
+was the cause.
+
+Toolkit `popup.css` fades a macOS panel out by setting `-moz-window-opacity: 0` under
+`[animate="cancel"]`. `panel.js` removes `animate` at `popuphidden`, while the 180 ms
+`-moz-window-transform` close transition is still running. The opacity target then snaps back to
+its resting value of 1: measured on `#appMenu-popup`, the opacity transition was cancelled 8–11 ms
+after `popuphidden` while the transform ran another 175–181 ms — a full-opacity panel sliding for
+most of a fifth of a second and then disappearing. On Big Sur+ the resting value is 1 on purpose:
+toolkit skips the fade-in there to avoid missing window shadows (bug 1672091).
+
+**Decision:**
+
+One scoped rule block in `toolkit/themes/shared/popup.css` (touchpoint 37), macOS only:
+`panel[type="arrow"]:not([animate])` keeps `-moz-window-opacity: 0`, so the exit fade survives the
+cleanup, and on Big Sur+ `[animate="open"]` transitions only `-moz-window-transform`, so the panel
+still appears at full opacity without a fade-in and the shadow workaround is untouched. Not a Trance
+panel animation: toolkit stays the only owner (TRANCE.md §3.1).
+
+**Consequences:**
+- After the fix, `#appMenu-popup` and `#tabNotePanel` close with opacity and transform both
+  reaching `transitionend`, no `transitioncancel`, identical with Trance on and off.
+- The entrance keeps toolkit's transform slide.
+- One more upstream CSS patch to rebase when toolkit's popup styles change.
+
+---
+
+## ADR-096 — The toolbar row narrows while Zen's Library is open
+
+**Date:** 2026-09-23
+**Status:** Accepted
+
+**Context:**
+
+With the Library enabled (ADR-090), opening it (`cmd_zenToggleLibrary`, Cmd+Opt+B) slid the address
+bar across the whole right of the toolbar and past the window edge for the full enter animation,
+and it only came back after the exit animation finished. `ZenLibrary.openProgress` translates
+`#zen-appcontent-wrapper` by the Library's width minus the sidebar's. In Zen's single-toolbar
+layout that wrapper holds only the page; in Trance's sidebar-and-toolbar layout it also holds
+`#zen-appcontent-navbar-wrapper`, so the toolbar row moved with the page and overflowed. Measured
+before the fix in a 500px window: a 212px urlbar translated to x≈483–695.
+
+Translating only the page instead was tried and rejected: the anchored toolbar was then painted over
+the Library's own search and filter header. The user chose to keep the urlbar usable while the
+Library is open, which means narrowing the row rather than fading or clipping it.
+
+**Decision:**
+
+- `ZenLibrary.mjs` (touchpoint 38) publishes the shift it already computes as
+  `--zen-library-content-shift` on the wrapper, beside Zen's unchanged `transform`. One marked
+  statement.
+- `trance-chrome.css`, sidebar-and-toolbar layout only: the toolbar row's `max-width` loses the
+  shift's magnitude; with the Library on the right the row is counter-translated so it starts at
+  the page's left edge. While the Library is open the urlbar is held inside its flex slot so its
+  breakout cannot paint past the shortened row. The open signal is Zen's own
+  `#zen-sidebar-splitter[zen-library-open]`, an earlier sibling of the wrapper, rather than a
+  document-wide `:has(zen-library[open])`.
+- The row relayouts on each frame of the Library's open and close. Accepted: it happens only during
+  that gesture.
+
+**Consequences:**
+- Measured at 1280px: Library on the left ends at 418 and the open urlbar spans 566–1185; on the
+  right the Library starts at 862 and the urlbar spans 247–791. The urlbar never passes the window
+  edge in any sampled frame and is clickable while the Library is open. Closed geometry is
+  unchanged.
+- Single-toolbar layout is untouched; compact mode stays inside the window.
+- In a very narrow window the row can shrink to little usable width beside the 418px Library; it is
+  constrained rather than overflowing.

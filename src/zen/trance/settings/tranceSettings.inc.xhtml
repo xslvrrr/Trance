@@ -85,9 +85,7 @@
       <description>
         The page runs to the window edge, keeps one rounded corner beside the
         sidebar instead of four, drops its shadow, and takes the colour of what
-        surrounds it. Frosting becomes a single layer over the whole browser
-        rather than one per region, which also costs a third as many blur
-        passes.
+        surrounds it.
       </description>
     </html:div>
     <html:div class="trance-row-control">
@@ -141,11 +139,13 @@
   <html:div class="trance-card-header">
     <label><html:h2>Frosted surfaces</html:h2></label>
     <description>
-      One switch, one surface. The frost is a single layer spanning the whole
-      browser — the sidebar, the toolbar and the space around the page — with
-      the web view painting over it, rather than a separate pane of glass per
-      region with a seam between them. Blur is expensive, so this is the only
-      one Trance spends, and it is dropped entirely when the window is not
+      One switch for the frost, and it frosts two regions: the sidebar, and
+      the toolbar above the page when that toolbar is separate from the
+      sidebar. Each blurs what lies behind it — the space's gradient, and in
+      compact mode the page under the floating sidebar. The expanded address
+      bar is frosted on its own and takes the toolbar's place while it is
+      open, so two panes of glass never overlap. Blur is expensive, so that is
+      all the chrome spends, and it is dropped entirely when the window is not
       visible.
     </description>
   </html:div>
@@ -1248,9 +1248,9 @@
     <html:div class="trance-row-text">
       <label control="tranceThemeSaved">Saved themes</label>
       <description>
-        The heart saves the current theme to an extra page at the start of the
-        preset pager. The pager still opens where it did before; the left arrow
-        is what reaches the saved page.
+        The heart saves the current theme to the saved pages at the start of the
+        preset pager, eight to a page. The pager opens on the first saved page;
+        the right arrow goes on to the presets.
       </description>
     </html:div>
     <html:div class="trance-row-control">
@@ -1263,9 +1263,9 @@
       <label id="tranceThemeSavedCountLabel">Saved themes stored</label>
       <description>
         Where the heart puts them. Right-clicking a saved swatch in the picker
-        forgets that one. Both ask first: a saved theme is a set of colours that
-        cannot be derived again from anything the browser still holds, so
-        forgetting one is the only genuinely unrecoverable thing on this page.
+        forgets that one. Both ask first: a saved theme preserves its colours,
+        surface opacity and blur, which cannot be derived again from anything
+        the browser still holds, so forgetting one is the only genuinely unrecoverable thing on this page.
       </description>
     </html:div>
     <html:div class="trance-row-control">
@@ -1312,12 +1312,11 @@
   <html:div class="trance-card-header">
     <label><html:h2>Onboarding</html:h2></label>
     <description>
-      Ten screens on a fresh profile: five of Trance's own, then Zen's five
-      rebuilt against Zen's own strings so they stay translated. Trance's five
-      come first because four of them change how the browser is built rather
-      than how it looks, and the fifth is the one bundled extension that does
-      nothing until it has been opened. Three of the answers are the settings
-      immediately below, and they can be changed here at any time.
+      Eight screens on a fresh profile: three of Trance's own, then Zen's five
+      rebuilt against Zen's own strings so they stay translated. Trance's three
+      come first because they change how the browser is built rather than how
+      it looks. Two of the answers are the settings immediately below, and
+      they can be changed here at any time.
     </description>
   </html:div>
 
@@ -1366,37 +1365,14 @@
 
   <html:div class="trance-row">
     <html:div class="trance-row-text">
-      <label control="tranceOnboardingChannel">Zen feature set</label>
-      <description>
-        Upstream Zen ships two builds and decides this at compile time. Trance
-        ships one, so it is a setting. <html:strong>Twilight</html:strong> turns
-        on the features Zen has not finished — refreshed context menus, acrylic
-        panel materials, and syncing your spaces between devices.
-        <html:strong>Stable</html:strong> hands each of those prefs back to
-        whatever Zen's own default is, rather than writing the opposite value
-        over it.
-      </description>
-    </html:div>
-    <html:div class="trance-row-control">
-      <menulist id="tranceOnboardingChannel" preference="trance.onboarding.channel">
-        <menupopup>
-          <menuitem value="stable" label="Stable"/>
-          <menuitem value="twilight" label="Twilight"/>
-        </menupopup>
-      </menulist>
-    </html:div>
-  </html:div>
-
-  <html:div class="trance-row">
-    <html:div class="trance-row-text">
       <label control="tranceModsChannel">Mod manager channel</label>
       <description>
         Trance preinstalls the Sine mod manager on its pre-release channel,
         Cosine. Changing this rewrites the version in the engine's own
         <html:code>engine.json</html:code>, which is what it reads to decide
-        which channel to update itself along — so the change takes effect on its
-        next update check rather than immediately, and nothing is downloaded
-        here.
+        which channel to update itself along — so on its own the change takes
+        effect on its next update check rather than immediately. To switch now,
+        install the channel's newest release below.
       </description>
     </html:div>
     <html:div class="trance-row-control">
@@ -1409,6 +1385,22 @@
     </html:div>
   </html:div>
 
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceModsEngineLabel">Sine engine</label>
+      <description>
+        Downloads the newest release on the channel above and puts it in place
+        of the installed engine — the same install the first-run page makes. It
+        loads the next time Trance starts. It always reinstalls, so it is also
+        the repair for an engine that has stopped loading.
+      </description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <label id="tranceModsEngine" class="trance-range-value"/>
+      <button id="tranceModsInstall" label="Install or refresh Sine"/>
+    </html:div>
+  </html:div>
+
   <html:div class="trance-row">
     <html:div class="trance-row-text">
       <label control="tranceArch">Tune blur for</label>
@@ -1417,8 +1409,9 @@
         every machine. <html:strong>Apple Silicon</html:strong> is the full
         24px blur, blurred internal pages and a blurred address bar on focus;
         <html:strong>Intel</html:strong> drops that to 10px and turns the other
-        two off. Detected from the build on first run — change it only if that
-        was wrong.
+        two off. These are only the defaults: a blur setting you have changed
+        yourself stays as you set it. Detected from the build on first run —
+        change it only if that was wrong.
       </description>
     </html:div>
     <html:div class="trance-row-control">

@@ -21,17 +21,17 @@
 // for a completely static UI, and on macOS it stops the window server skipping
 // an occluded window entirely (TRANCE.md §3.3).
 //
-// This module replaces all four with **one** surface — a single layer over the
-// whole browser — and blur that switches off when the window cannot be seen.
+// This module replaces all four with a bounded set of regions. In the
+// sidebar-and-toolbar layout the sidebar and toolbar blur separately, with the
+// narrow splitter between them covering their measured seam; when the address
+// bar is extended, it takes the toolbar's place. The background sheen remains
+// a separate layer and is not a backdrop-filter surface.
 //
-// One, not three. The per-region switches are gone (ADR-041): "frost the
-// sidebar but not the toolbar" is two adjacent panes of glass with a seam
-// between them, which is the look this project exists to remove, and the
-// presets only ever moved two tokens the sliders already owned. There is no
-// `content` region either (ADR-042). What is left is a master switch for the
-// frost, a master switch for transparency, three sliders, the browser's own
-// pages, and two pictures: the chrome's background texture and the mark on an
-// empty tab.
+// Per-region controls stay gone (ADR-041): "frost the sidebar but not the
+// toolbar" is not a useful product choice, and presets only move tokens the
+// sliders already own. There is no `content` region either (ADR-042). The
+// budget remains three regions at most (ADR-019), and blur is gated on
+// transparency as well as visibility.
 //
 // The budget is a ceiling, not a target. On any platform whose window is
 // translucent in its own right — macOS vibrancy, Windows Mica, a transparent
@@ -119,6 +119,16 @@ const NEWTAB_POINTER_Y = "--trance-newtab-logo-py";
  * Trance sheet would re-resolve with it.
  */
 const ATTR_NEWTAB_POINTER_INSIDE = "trance-newtab-logo-hover";
+
+/**
+ * Whether the primary button is held while the pointer is inside the mark.
+ *
+ * Holding the mark leans it further — the stylesheet swaps the tilt token for
+ * `--trance-newtab-logo-tilt-pressed` while this is set. It is only ever set
+ * alongside `ATTR_NEWTAB_POINTER_INSIDE`, in the same frame-coalesced write,
+ * so "pressed" always means "pressed on the mark", never "pressed anywhere".
+ */
+const ATTR_NEWTAB_POINTER_PRESSED = "trance-newtab-logo-pressed";
 
 /**
  * What counts as an empty tab.
@@ -220,6 +230,10 @@ export class TranceSurfaces extends TranceFeature {
    * @type {{ x: number, y: number, inside: boolean }}
    */
   #pointer = { x: 0, y: 0, inside: false };
+  /** Whether the mark's press listeners are attached. */
+  #pressListening = false;
+  /** Whether the primary button is down, as the window last saw it. */
+  #pressed = false;
   /** The pending idle callback for the page-opacity sheet swap, or 0. */
   #alphaHandle = 0;
 
@@ -848,6 +862,12 @@ export class TranceSurfaces extends TranceFeature {
       (Services.prefs.getBoolPref(PREF_NEWTAB_TILT, true) ||
         Services.prefs.getBoolPref(PREF_NEWTAB_HOLOGRAPHIC, true));
 
+    // The press only strengthens the lean, so it listens only while the tilt
+    // is on: with the sheen alone there is nothing for a press to change.
+    this.#syncPressTracking(
+      wanted && Services.prefs.getBoolPref(PREF_NEWTAB_TILT, true)
+    );
+
     if (wanted === this.#pointerListening) {
       return;
     }
@@ -913,6 +933,53 @@ export class TranceSurfaces extends TranceFeature {
   };
 
   /**
+   * Attaches or detaches the window `mousedown`/`mouseup` pair that drives the
+   * held-press lean. From the window, for the same reason the move listener
+   * is: the mark is `pointer-events: none` and never receives its own events.
+   *
+   * @param {boolean} wanted
+   */
+  #syncPressTracking(wanted) {
+    if (wanted === this.#pressListening) {
+      return;
+    }
+    const win = this.context.window;
+    this.#pressListening = wanted;
+    if (wanted) {
+      win.addEventListener("mousedown", this.#onPointerDown);
+      win.addEventListener("mouseup", this.#onPointerUp);
+      return;
+    }
+    win.removeEventListener("mousedown", this.#onPointerDown);
+    win.removeEventListener("mouseup", this.#onPointerUp);
+    this.#pressed = false;
+    this.#newtabLogo?.removeAttribute(ATTR_NEWTAB_POINTER_PRESSED);
+  }
+
+  /**
+   * A press is written straight away, without waiting for a move, so holding
+   * the button still leans the mark further.
+   *
+   * @param {MouseEvent} event
+   */
+  #onPointerDown = event => {
+    if (event.button !== 0) {
+      return;
+    }
+    this.#pressed = true;
+    this.#queuePointerWrite();
+  };
+
+  /** @param {MouseEvent} event */
+  #onPointerUp = event => {
+    if (event.button !== 0) {
+      return;
+    }
+    this.#pressed = false;
+    this.#queuePointerWrite();
+  };
+
+  /**
    * One style write per frame, however many events arrived in it.
    *
    * `once` rather than a standing subscription: the frame loop should be awake
@@ -965,6 +1032,11 @@ export class TranceSurfaces extends TranceFeature {
     } else {
       logo.removeAttribute(ATTR_NEWTAB_POINTER_INSIDE);
     }
+    if (inside && this.#pressed) {
+      logo.setAttribute(ATTR_NEWTAB_POINTER_PRESSED, "true");
+    } else {
+      logo.removeAttribute(ATTR_NEWTAB_POINTER_PRESSED);
+    }
   }
 
   /**
@@ -979,6 +1051,7 @@ export class TranceSurfaces extends TranceFeature {
     this.#newtabLogo?.style.removeProperty(NEWTAB_POINTER_X);
     this.#newtabLogo?.style.removeProperty(NEWTAB_POINTER_Y);
     this.#newtabLogo?.removeAttribute(ATTR_NEWTAB_POINTER_INSIDE);
+    this.#newtabLogo?.removeAttribute(ATTR_NEWTAB_POINTER_PRESSED);
   }
 
   #teardownNewtabLogo() {
@@ -987,6 +1060,7 @@ export class TranceSurfaces extends TranceFeature {
     root.removeAttribute(ATTR_NEWTAB_HOLOGRAPHIC);
     root.removeAttribute(ATTR_NEWTAB_TILT);
     this.#cancelPointerFrame();
+    this.#syncPressTracking(false);
     if (this.#pointerListening) {
       this.#pointerListening = false;
       this.context.window.removeEventListener("mousemove", this.#onPointerMove);

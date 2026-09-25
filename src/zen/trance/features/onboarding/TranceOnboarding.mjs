@@ -4,47 +4,27 @@
 //
 // Trance: the first-run onboarding flow.
 //
-// Ten pages: five that are Trance's, then Zen's five rebuilt. It replaces Zen's
-// welcome rather than running before or after it, because two full-window
-// takeovers cannot share a window — `ZenWelcome` hides every child of
-// `#browser` on entry and restores them in `finish()`, so whichever one runs
-// second inherits a window the first has already torn down and rebuilt.
+// Eight pages: four owned by Trance, then four Zen-derived pages rebuilt with
+// Zen's own translated strings where available. It replaces Zen's welcome
+// rather than running before or after it, because two full-window takeovers
+// cannot share a window — `ZenWelcome` hides every child of `#browser` on entry
+// and restores them in `finish()`, so whichever one runs second inherits a
+// window the first has already torn down and rebuilt.
 //
-// ── Why five pages before Zen's ───────────────────────────────────────────
+// ── Why four Trance pages come first ────────────────────────────────────────
 //
-// Zen's welcome asks about data, search and appearance. All five of Trance's
-// questions come before those because four of them change what the browser
-// *is* rather than what it looks like, and the fifth is the one extension that
-// does nothing until it has been opened:
-//
-//   1. Zen feature set   Upstream resolves `@IS_TWILIGHT@` at build time and
-//                        ships two brands. ADR-006 left Trance with one, and
-//                        therefore with every twilight-gated pref pinned to its
-//                        stable value. This page is the way back.
-//   2. Mod manager       Cosine is Sine's pre-release channel and is what a
-//                        Trance build is provisioned with (ADR-018). Someone
-//                        who wants stable Sine should not have to re-run a
-//                        Python script to get it.
-//   3. Architecture      Blur is the one Trance effect whose cost is not the
-//                        same on an Intel Mac as on an Apple Silicon one
-//                        (TRANCE.md §3.3), and it is also the effect Trance
-//                        leans on hardest.
-//   4. Edgeless          The largest single change Trance makes to the shape of
-//                        the window (ADR-025, ADR-040), and the one most worth
-//                        seeing before it happens rather than after.
-//   5. Zen Internet      Ships with Trance, and does nothing at all until its
-//                        panel has been opened once. A bundled extension that
-//                        silently does nothing is worse than one that is not
-//                        bundled.
+// Zen's welcome asks about import, search and appearance. Trance's four pages
+// cover the mod manager, architecture, Edgeless and the customized import flow:
+// choices about how the browser is built or brought over, before its remaining
+// appearance choices.
 //
 // ── Localisation ──────────────────────────────────────────────────────────
 //
-// The five Zen-derived pages use Zen's own `browser/zen-welcome.ftl` strings,
-// so they stay translated in every locale Zen ships. The five Trance pages are
-// English in this file. That is a real gap and it is recorded as one: Trance
-// has no locale pipeline of its own yet, and inventing one for ten strings
-// would be a Phase 12 decision taken here by accident. Using Zen's strings for
-// the half that maps one-to-one costs nothing and loses nothing.
+// The four Zen-derived pages reuse Zen's own `browser/zen-welcome.ftl` strings,
+// so they stay translated in every locale Zen ships. Trance has no locale
+// pipeline of its own yet; inventing one for this flow would be a Phase 12
+// decision taken here by accident. Reusing Zen's strings where they map
+// directly costs nothing and loses nothing.
 //
 // ── Why every allocation goes through the base class ──────────────────────
 //
@@ -77,7 +57,6 @@ const { TranceOnboardingSettingsService } = ChromeUtils.importESModule(
 const NS = "Onboarding";
 
 const PREF_COMPLETED = "trance.onboarding.completed";
-const PREF_CHANNEL = "trance.onboarding.channel";
 const PREF_MODS_CHANNEL = "trance.mods.channel";
 const PREF_ARCH = "trance.perf.arch";
 const PREF_EDGELESS = "trance.surface.edgeless";
@@ -90,15 +69,13 @@ const ROOT_ID = "trance-onboarding";
 /** The import page's confirm button, which is the one button with a state. */
 const BUTTON_IMPORT_ID = "trance-onboarding-import-confirm";
 
-const ZEN_INTERNET_ID = "{91aa3897-2634-4a8a-9092-279db23a7689}";
-
 /**
  * Zen's own strings, reused by the five pages that map onto its own.
  *
  * Two files, not one. `zen-welcome.ftl` has the page copy; `zen-generic-next`
- * — the label on six of the ten buttons — lives in `zen-general.ftl`, which a
- * browser window has usually loaded already. "Usually" is not a contract, and
- * `insertFTLIfNeeded` is a no-op when it is already there.
+ * — the label on most pages' forward button — lives in `zen-general.ftl`,
+ * which a browser window has usually loaded already. "Usually" is not a
+ * contract, and `insertFTLIfNeeded` is a no-op when it is already there.
  */
 const ZEN_FTL = Object.freeze([
   "browser/zen-welcome.ftl",
@@ -157,7 +134,6 @@ export class TranceOnboarding extends TranceFeature {
 
   /** Answers, collected page by page and applied as each page is left. */
   #answers = {
-    channel: "stable",
     modsChannel: "cosine",
     arch: "arm64",
     edgeless: true,
@@ -234,10 +210,6 @@ export class TranceOnboarding extends TranceFeature {
     // back.
     Services.prefs.setBoolPref(PREF_COMPLETED, true);
 
-    this.#answers.channel = Services.prefs.getStringPref(
-      PREF_CHANNEL,
-      "stable"
-    );
     this.#answers.modsChannel = Services.prefs.getStringPref(
       PREF_MODS_CHANNEL,
       "cosine"
@@ -620,7 +592,7 @@ export class TranceOnboarding extends TranceFeature {
 
     try {
       // Both, together: the copy is a Fluent round-trip and the content pane is
-      // usually an `AddonManager` or `SearchService` read, and neither waits on
+      // often a `SearchService` or profile read, and neither waits on
       // the other. The entrance below animates what is actually there, so it
       // has to be after both rather than after either.
       await Promise.all([...labelled, page.render?.(content)]);
@@ -718,10 +690,9 @@ export class TranceOnboarding extends TranceFeature {
     this.context.window.gZenUIManager?.updateTabsToolbar?.();
     // The browser comes back rather than appearing. Everything in `revealed`
     // has just had `display: none` taken off it, and without this the whole
-    // window snaps in one frame after ten screens that did not.
+    // window snaps in one frame after eight screens that did not.
     await this.#animate(revealed, { opacity: [0, 1] }, { duration: 260 });
 
-    this.context.window.gZenUIManager?.showToast?.("zen-welcome-finished");
     TranceLog.log(NS, "finished");
 
     // The staged import can only be adopted by a startup, so this is the
@@ -797,7 +768,7 @@ export class TranceOnboarding extends TranceFeature {
   // --- Shared controls -------------------------------------------------------
 
   /**
-   * A row of exclusive cards. The one control four of the five Trance pages use.
+   * A row of exclusive cards. The control the three choice pages use.
    *
    * Radio inputs rather than buttons with an attribute, because a radio group is
    * what this is: arrow keys move between the options, the group is one tab
@@ -878,11 +849,9 @@ export class TranceOnboarding extends TranceFeature {
 
   #buildPages() {
     return [
-      this.#pageChannel(),
       this.#pageMods(),
       this.#pageArchitecture(),
       this.#pageEdgeless(),
-      this.#pageZenInternet(),
       this.#pageImport(),
       this.#pageSearch(),
       this.#pageEssentials(),
@@ -891,63 +860,7 @@ export class TranceOnboarding extends TranceFeature {
     ];
   }
 
-  // 1 ── Zen feature set ------------------------------------------------------
-
-  #pageChannel() {
-    return {
-      id: "channel",
-      title: { text: "Stable or Twilight" },
-      description: [
-        {
-          text:
-            "Zen ships two builds. Twilight is where its unfinished features " +
-            "live: the refreshed context menus, acrylic panel materials, and " +
-            "syncing your spaces between devices.",
-        },
-        {
-          text:
-            "Trance is one build, so this is a setting rather than a " +
-            "download. You can change it later in Settings.",
-        },
-      ],
-      buttons: [{ label: { l10n: "zen-generic-next" } }],
-      render: container => {
-        this.#choiceGroup(
-          container,
-          [
-            {
-              value: "stable",
-              title: "Stable",
-              detail:
-                "Only the features Zen considers finished. The default, and " +
-                "the one to pick if you want a browser rather than a preview.",
-            },
-            {
-              value: "twilight",
-              title: "Twilight",
-              detail:
-                "Everything above, plus refreshed context menus, acrylic " +
-                "panels and space syncing.",
-              note: "Unfinished by definition — expect rough edges.",
-            },
-          ],
-          this.#answers.channel,
-          value => {
-            this.#answers.channel = value;
-          }
-        );
-      },
-      commit: () =>
-        TranceOnboardingSettingsService.applyChannel(this.#answers.channel),
-    };
-  }
-
-  /**
-   * The channel page delegates its persistent side effects to the settings
-   * service.
-   */
-
-  // 2 ── Mod manager ----------------------------------------------------------
+  // 1 ── Mod manager ----------------------------------------------------------
 
   #pageMods() {
     return {
@@ -963,16 +876,10 @@ export class TranceOnboarding extends TranceFeature {
         {
           text:
             "Cosine is Sine's pre-release channel and is what Trance ships. " +
-            "Stable Sine moves more slowly.",
+            "Stable Sine moves more slowly. Next installs the channel you pick.",
         },
       ],
-      buttons: [
-        { label: { l10n: "zen-generic-next" } },
-        {
-          label: { text: "Install or refresh Sine" },
-          onClick: () => this.#provisionMods(),
-        },
-      ],
+      buttons: [{ label: { l10n: "zen-generic-next" } }],
       render: async container => {
         this.#choiceGroup(
           container,
@@ -1007,18 +914,22 @@ export class TranceOnboarding extends TranceFeature {
           this.#status(
             container,
             bootloader
-              ? "No mod manager found in this profile. Install Sine here, or " +
-                  "continue and record the choice for a later provision."
-              : "The Sine bootloader is not installed in this profile. " +
-                  "Continue to record the choice for a later provision.",
+              ? "No mod manager found in this profile. Next installs the " +
+                  "channel you pick."
+              : "The Sine bootloader is not installed in this profile, so " +
+                  "Next only records the choice.",
             "warn"
           );
         }
       },
-      commit: () =>
-        TranceOnboardingSettingsService.applyModChannel(
-          this.#answers.modsChannel
-        ),
+      commit: async () => {
+        const channel = this.#answers.modsChannel;
+        await this.#installModEngine(channel);
+        // After the install, not before: `engine.json` is then the release's
+        // own, the rewrite finds nothing to change, and only a failed install
+        // falls back to Sine's update-check channel switch.
+        await TranceOnboardingSettingsService.applyModChannel(channel);
+      },
     };
   }
 
@@ -1028,32 +939,50 @@ export class TranceOnboarding extends TranceFeature {
   }
 
   /**
-   * Installs the selected Sine channel and refreshes the shipped Zen-store
-   * mods. This is an explicit page action: a first-run flow must not start a
-   * network transfer merely because its page was rendered.
+   * Installs the newest engine on the chosen channel as part of committing the
+   * page. Pressing Next is the explicit action — a first-run flow must not
+   * start a network transfer merely because its page was rendered — and it is
+   * the only one: behind a separate install button, the choice itself changed
+   * nothing anyone could see.
    *
-   * @returns {Promise<boolean>} false to keep the user on this page
+   * Skipped without a bootloader, since nothing would load the engine, and
+   * when the profile already runs that release. A failure does not hold the
+   * flow: `applyModChannel` still records the choice.
+   *
+   * @param {string} channel - "cosine" | "sine"
    */
-  async #provisionMods() {
+  async #installModEngine(channel) {
+    const content = this.#element("trance-onboarding-content");
+    const report = (text, state) =>
+      content && this.#status(content, text, state);
     try {
       if (!(await TranceProvision.hasBootloader())) {
-        this.#status(
-          this.#element("trance-onboarding-content"),
-          "The Sine bootloader is not installed in this profile.",
-          "warn"
-        );
-        return false;
+        return;
       }
-      const release = await TranceProvision.resolveSineRelease({
-        channel: this.#answers.modsChannel,
-      });
-      await TranceProvision.installSineEngine(release);
-      await TranceProvision.installZenStoreMods();
-      TranceLog.log(NS, `installed Sine ${release.tag}`);
+      const label = channel === "sine" ? "Sine" : "Cosine";
+      report(`Finding the newest ${label} release…`, "busy");
+      const release = await TranceProvision.resolveSineRelease({ channel });
+      const installed = await TranceProvision.engineVersion();
+      // Tag `v2.3.3` ships an `engine.json` saying `2.3.3.0`; `v2.3.4.1c` says
+      // `2.3.4.1c`. Neither the `v` nor trailing zero parts are a difference.
+      const bare = value =>
+        String(value ?? "")
+          .replace(/^v/, "")
+          .replace(/(\.0)+(?=c?$)/, "");
+      if (bare(release.tag) === bare(installed)) {
+        report(`Engine ${installed} is already installed.`, "ok");
+        return;
+      }
+      report(`Installing Sine ${release.tag}…`, "busy");
+      const version = await TranceProvision.installSineEngine(release);
+      report(
+        `Installed engine ${version}. It loads the next time Trance starts.`,
+        "ok"
+      );
     } catch (error) {
-      TranceLog.error(NS, "could not provision Sine", error);
+      TranceLog.error(NS, `could not install the ${channel} engine`, error);
+      report("Could not install Sine. The choice is still recorded.", "error");
     }
-    return false;
   }
 
   // 3 ── Architecture ---------------------------------------------------------
@@ -1160,18 +1089,6 @@ export class TranceOnboarding extends TranceFeature {
     };
   }
 
-  /**
-   * Writes the arch-tuned blur prefs.
-   *
-   * Both columns are written, always. Clearing the user branch would be the
-   * The channel page's stable-side clearing is deliberately different here:
-   * radius by hand and then answered this question has asked for the tuning,
-   * and inheriting their own old value instead would look like the question did
-   * nothing.
-   *
-   * @param {string} arch
-   */
-
   // 4 ── Edgeless -------------------------------------------------------------
 
   #pageEdgeless() {
@@ -1250,123 +1167,13 @@ export class TranceOnboarding extends TranceFeature {
     preview.toggleAttribute("edgeless", this.#answers.edgeless);
   }
 
-  // 5 ── Zen Internet ---------------------------------------------------------
-
-  #pageZenInternet() {
-    return {
-      id: "zen-internet",
-      title: { text: "Set up Zen Internet" },
-      description: [
-        {
-          text:
-            "Zen Internet restyles the sites you visit to match your browser " +
-            "theme. Trance installs it, but it ships switched off and stays " +
-            "that way until you open it once and choose what it should do.",
-        },
-        {
-          text: "This is the one bundled extension that does nothing on its own.",
-        },
-      ],
-      buttons: [
-        // The primary action is opening it, and it deliberately does not
-        // advance — the point of the page is that this extension needs a visit,
-        // so sending the user onwards the moment they click would undo it. The
-        // second button is "Next" rather than "Skip": someone who has just
-        // opened the thing has not skipped anything.
-        {
-          label: { text: "Open Zen Internet" },
-          onClick: () => this.#openZenInternet(),
-        },
-        { label: { l10n: "zen-generic-next" } },
-      ],
-      render: container => this.#renderZenInternet(container),
-    };
-  }
-
-  /**
-   * @param {Element} container
-   */
-  async #renderZenInternet(container) {
-    const doc = this.context.document;
-    const list = doc.createElement("ul");
-    list.className = "trance-onboarding-list";
-    container.appendChild(list);
-
-    for (const step of [
-      "Open it from the toolbar or from the button here.",
-      "Pick a mode — match the browser theme, or a fixed palette.",
-      "Turn it on for the sites you want it on.",
-    ]) {
-      const item = doc.createElement("li");
-      item.textContent = step;
-      list.appendChild(item);
-    }
-
-    const addon = await this.#zenInternet();
-    if (!addon) {
-      this.#status(
-        container,
-        "Not installed yet. It arrives over the network on first run; the " +
-          "first-run panel after this flow can retry it.",
-        "warn"
-      );
-      return;
-    }
-    this.#status(
-      container,
-      addon.isActive
-        ? `${addon.name} is installed and switched on.`
-        : `${addon.name} is installed but turned off.`,
-      addon.isActive ? "ok" : "warn"
-    );
-  }
-
-  async #zenInternet() {
-    try {
-      const addons = ChromeUtils.importESModule(
-        "resource://gre/modules/AddonManager.sys.mjs"
-      ).AddonManager;
-      return await addons.getAddonByID(ZEN_INTERNET_ID);
-    } catch (error) {
-      TranceLog.error(NS, "could not read the Zen Internet add-on", error);
-      return null;
-    }
-  }
-
-  /**
-   * Opens the extension, and stays on the page.
-   *
-   * `optionsURL` first, because an extension that declares one is saying where
-   * its own settings live. Zen Internet's UI is a browser-action popup, and a
-   * popup cannot be opened while the toolbar is hidden behind this flow — so the
-   * fallback is its own page in `about:addons`, which is reachable, permanent,
-   * and has the enable switch on it.
-   *
-   * Returns false either way: the button opens something, it does not advance.
-   */
-  async #openZenInternet() {
-    const addon = await this.#zenInternet();
-    const target = addon?.optionsURL
-      ? addon.optionsURL
-      : `about:addons#detail/${encodeURIComponent(ZEN_INTERNET_ID)}`;
-    try {
-      this.context.window.openTrustedLinkIn(target, "tab");
-    } catch (error) {
-      TranceLog.error(NS, "could not open Zen Internet", error);
-    }
-    return false;
-  }
-
-  // 6 ── Import and default browser -------------------------------------------
+  // 5 ── Import and default browser -------------------------------------------
 
   #pageImport() {
     return {
       id: "import",
       title: { l10n: "zen-welcome-import-title" },
-      description: [
-        { l10n: "zen-welcome-import-description-1" },
-        { l10n: "zen-welcome-import-description-2" },
-      ],
+      description: [{ l10n: "zen-welcome-import-description" }],
       buttons: [
         // The confirm. Before this existed the page had two buttons — "import
         // from another browser", which opens a wizard and stays put, and
@@ -1382,7 +1189,9 @@ export class TranceOnboarding extends TranceFeature {
           label: { text: "Import" },
         },
         {
-          label: { l10n: "zen-welcome-import-button" },
+          // Zen's `.ftl` has no string for this button any more (its own
+          // import page asks yes/no instead), so the label is Trance's.
+          label: { text: "Import from another browser" },
           onClick: () => {
             this.context.window.MigrationUtils.showMigrationWizard(
               this.context.window,
@@ -1392,7 +1201,7 @@ export class TranceOnboarding extends TranceFeature {
           },
         },
         {
-          label: { l10n: "zen-welcome-skip-button" },
+          label: { l10n: "zen-welcome-skip" },
           onClick: () => {
             // Skip means skip. Whatever is selected above, leaving by this
             // button imports nothing.
@@ -1614,7 +1423,7 @@ export class TranceOnboarding extends TranceFeature {
     }
   }
 
-  // 7 ── Search engine --------------------------------------------------------
+  // 6 ── Search engine --------------------------------------------------------
 
   #pageSearch() {
     return {
@@ -1693,16 +1502,13 @@ export class TranceOnboarding extends TranceFeature {
     }
   }
 
-  // 8 ── Essentials -----------------------------------------------------------
+  // 7 ── Essentials -----------------------------------------------------------
 
   #pageEssentials() {
     return {
       id: "essentials",
-      title: { l10n: "zen-welcome-initial-essentials-title" },
-      description: [
-        { l10n: "zen-welcome-initial-essentials-description-1" },
-        { l10n: "zen-welcome-initial-essentials-description-2" },
-      ],
+      title: { l10n: "zen-welcome-essentials-title" },
+      description: [{ l10n: "zen-welcome-essentials-description" }],
       buttons: [{ label: { l10n: "zen-generic-next" } }],
       render: container => {
         const doc = this.context.document;
@@ -1820,7 +1626,7 @@ export class TranceOnboarding extends TranceFeature {
     }
   }
 
-  // 9 ── Workspace colours ----------------------------------------------------
+  // 8 ── Workspace colours ----------------------------------------------------
 
   #pageColours() {
     return {
@@ -1853,8 +1659,26 @@ export class TranceOnboarding extends TranceFeature {
             attribute === "consumeoutsideclicks" ? "false" : "true"
           );
         }
+        // The panel's left-middle point goes on the anchor's left-middle point.
+        // The anchor is an empty line the pane's flex layout centres, so that
+        // point is the pane's vertical centre whatever the panel's height —
+        // which is not settled until PanelMultiView has built the view and a
+        // popup that fits has been laid out. The width is known when the panel
+        // starts showing, and giving it to the anchor (which its own rule
+        // centres across) centres the panel across. `overlap`, the corner on
+        // the corner, left the top-left corner at the centre: the panel then
+        // ran off the bottom of the screen and Gecko flipped it above.
+        this.addListener(
+          picker.panel,
+          "popupshowing",
+          () => {
+            const { width } = picker.panel.getBoundingClientRect();
+            anchor.style.width = `${width}px`;
+          },
+          { once: true }
+        );
         this.context.window.PanelMultiView.openPopup(picker.panel, anchor, {
-          position: "overlap",
+          position: "leftcenter leftcenter",
         });
       },
       commit: () => {
@@ -1875,7 +1699,7 @@ export class TranceOnboarding extends TranceFeature {
     };
   }
 
-  // 10 ── Finish --------------------------------------------------------------
+  // 9 ── Finish ---------------------------------------------------------------
 
   #pageFinish() {
     return {

@@ -94,11 +94,13 @@
 - name: trance.theme.palettes.enabled
   value: true
 
-# The heart, and the extra page of saved themes at the start of the pager.
+# The heart, and the pages of saved themes at the start of the pager (eight to
+# a page).
 #
-# The pager still opens on the page it opened on before: Trance prepends its
-# page and then walks Zen's own arrow handler forward by one, so the index and
-# the scroll position agree and both arrows work.
+# The pager opens on the first saved page, and "next" from the last saved page
+# lands on Zen's first preset page. Trance only prepends pages, and moves Zen's
+# private page index only through Zen's own arrow handlers, so the index and the
+# scroll position agree and both arrows work.
 - name: trance.theme.saved.enabled
   value: true
 

@@ -7,26 +7,19 @@
 # Trance replaces Zen's welcome flow rather than running after it. The two
 # cannot both own the first window — Zen's is a full-window takeover that hides
 # every child of `#browser` and restores them in `finish()` — and Trance has
-# five decisions to take before Zen's five, four of which change how the browser
+# three decisions to take before Zen's five, all of which change how the browser
 # is built rather than how it looks (ADR-051).
 #
-# The five Trance pages, in order, and what each one actually writes:
+# The three Trance pages, in order, and what each one actually writes:
 #
-#   1. Zen feature set     `trance.onboarding.channel`, then the `zen.*` prefs
-#                          that upstream gates on the build-time `@IS_TWILIGHT@`
-#                          constant. Trance has one brand (ADR-006), so what
-#                          upstream decides at build time is a runtime choice
-#                          here.
-#   2. Mod manager         `trance.mods.channel`, and the engine's own
-#                          `engine.json` version, which is what Sine reads to
-#                          decide which channel to self-update along.
-#   3. Architecture        `trance.perf.arch`, then the surface prefs whose cost
+#
+#   1. Mod manager         `trance.mods.channel`, and the newest engine on that
+#                          channel, installed into `{profile}/chrome/JS` when
+#                          the page is committed (unless it is already there).
+#   2. Architecture        `trance.perf.arch`, then the surface prefs whose cost
 #                          is GPU blur — the one Trance setting where an Intel
 #                          Mac and an Apple Silicon Mac want different numbers.
-#   4. Edgeless            `trance.surface.edgeless`.
-#   5. Zen Internet        nothing. It reports the extension's state and opens
-#                          it, because it does nothing until it has been opened
-#                          once (TRANCE.md §9).
+#   3. Edgeless            `trance.surface.edgeless`.
 #
 # Then Zen's own five: import, search engine, essentials, workspace colours and
 # a finish page, rebuilt against Zen's `browser/zen-welcome.ftl` so they stay
@@ -56,16 +49,8 @@
 
 # === Mark: What the flow decides ===
 
-# Which Zen feature set this profile runs: `stable` or `twilight`.
-#
-# Upstream Zen ships two brands and resolves `@IS_TWILIGHT@` at build time.
-# ADR-006 reduced Trance to one brand, which left every twilight-gated pref
-# resolved to the stable value with no way back. This is that way back, and it
-# is a pref rather than a build flag because a single-brand browser has no build
-# to switch to.
-#
-# `TranceOnboarding` applies it; nothing reads it continuously, so changing it
-# outside the flow does nothing until the settings page's "Apply" does.
+# Legacy preference retained for profiles that already have it. Trance ships
+# one brand (ADR-006), so there is no longer a stable/twilight onboarding choice.
 - name: trance.onboarding.channel
   value: "stable"
 
@@ -73,9 +58,11 @@
 # pre-release channel, the shipped default — ADR-018) or `sine` (stable).
 #
 # `scripts/trance-cosine.py --channel` decides what a *build* is provisioned
-# with. This decides what the engine already in the profile updates itself to,
-# by rewriting the version in its own `engine.json` — which is the mechanism
-# Sine uses to pick a channel, not a workaround for it.
+# with. Onboarding installs the chosen channel's newest engine into the profile.
+# Changed later from Settings, it rewrites the version in the installed
+# engine's own `engine.json` instead — the mechanism Sine uses to pick a
+# channel, not a workaround for it — and the engine follows on its next update.
+# Settings' "Install or refresh Sine" button is the install that happens now.
 - name: trance.mods.channel
   value: "cosine"
 
@@ -91,5 +78,9 @@
 # same on both; `backdrop-filter` at a 24px radius over a full window is the one
 # effect where an integrated Intel GPU and an Apple Silicon one are not in the
 # same class (TRANCE.md §3.3).
+#
+# It sets the *defaults* of those blur prefs, never their user values: a blur a
+# user set themselves is kept whatever this says. Runtime defaults are not
+# saved, so `TranceOnboardingSettings` reapplies this answer at every start.
 - name: trance.perf.arch
   value: "arm64"

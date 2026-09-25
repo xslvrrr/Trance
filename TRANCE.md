@@ -1920,18 +1920,18 @@ round from the numbering: Phase 12 ships a build to other people, and the first 
 person sees is this flow.*
 
 **Deliverables**
-- [x] `TranceOnboarding` — a ten-page first-run flow that **replaces** Zen's welcome rather than
+- [x] `TranceOnboarding` — an eight-page first-run flow that **replaces** Zen's welcome rather than
       running before or after it. Two full-window takeovers cannot share a window (ADR-051)
-- [x] Five Trance pages, ahead of Zen's: Zen feature set (stable/twilight), mod-manager channel
-      (Cosine/Sine), processor (Apple Silicon/Intel), edgeless, and Zen Internet setup
-- [x] Five Zen pages rebuilt against Zen's own `browser/zen-welcome.ftl` — import and default
-      browser, search engine, essentials, workspace colours, finish — so they stay translated
-- [x] `prefs/trance/onboarding.yaml`: `enabled`, `completed`, `onboarding.channel`,
+- [x] Four Trance-owned pages: mod-manager channel (Cosine/Sine), processor (Apple Silicon/Intel),
+      Edgeless, and the customized import flow
+- [x] Four Zen-derived pages rebuilt against Zen's own `browser/zen-welcome.ftl` — search engine,
+      essentials, workspace colours, finish — so they stay translated
+- [x] `prefs/trance/onboarding.yaml`: `enabled`, `completed`, legacy `onboarding.channel`,
       `mods.channel`, `perf.arch`
 - [x] Touchpoint 23 — one `if` in `ZenStartup.#checkForWelcomePage`. Nothing else upstream
 - [x] `TranceFirstRun` waits on whichever flow is actually running, not on Zen's specifically
-- [x] Settings: a "First run" group with the three settings the flow asks about and a
-      "Run it again" button, so none of the five answers is a one-time-only decision
+- [x] Settings: a "First run" group with the two settings the flow asks about and a
+      "Run it again" button; Sine installation is available beside its channel selector
 - [x] `scripts/trance-env.sh` gains `TRANCE_ARCH`. `configs/macos/mozconfig` has always branched on
       `SURFER_COMPAT` and nothing has ever set it, so every build was arm64 whatever the machine
       was — the architecture page would otherwise have been asking a question the build could not
@@ -1962,8 +1962,8 @@ still reachable in Settings afterwards; turning the feature off restores Zen's w
 disabling it mid-flow leaves a whole browser window; and an installed Zen or Twilight is offered by
 name, with its spaces and folders arriving intact on the restart that follows.
 
-*Known gap: the five Trance pages are English. Trance has no locale pipeline of its own, and
-building one for ten strings is a Phase 12 decision — see §16.*
+*Known gap: Trance's four owned pages are English. Trance has no locale pipeline of its own, and
+building one for this flow is a Phase 12 decision — see §16.*
 
 *Fixed 2026-08-28, ADR-054: **every Trance build had been shipping the twilight defaults**, which is
 the opposite of what ADR-006 and the channel page above assume. `tools/ffprefs` resolved
@@ -2133,8 +2133,8 @@ Decide these with the user; record answers in `docs/trance/DECISIONS.md`.
 10. **Telemetry.** Zen inherits Firefox telemetry prefs. Trance default: off? (Recommend: off,
     and say so in the README.)
 11. **Localisation.** Trance ships no strings of its own in any language but English. The
-    onboarding flow made this visible for the first time — its five Zen-derived pages are
-    translated because they reuse `browser/zen-welcome.ftl`, and its five Trance pages are not
+    onboarding flow made this visible for the first time — four Zen-derived pages are
+    translated because they reuse `browser/zen-welcome.ftl`, and its four Trance-owned pages are not
     (ADR-051). The settings pane, the first-run panel and the mod guard have the same gap and
     always have. Does Trance grow a `.ftl` of its own and a locale pipeline in Phase 12, or ship
     English-only and say so?

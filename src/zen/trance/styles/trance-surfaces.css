@@ -361,6 +361,15 @@
     rotateY(calc(var(--trance-newtab-logo-px, 0) * var(--trance-newtab-logo-tilt)));
 }
 
+/* The held press: the same lean, further. `TranceSurfaces` sets the attribute
+ * only while the pointer is inside the mark with the primary button down, so
+ * this needs no gates of its own — it swaps the angle the rule above reads, and
+ * on its own it declares nothing that paints. The base rule's transition eases
+ * the mark between the two angles, both into the press and out of it. */
+#trance-newtab-logo[trance-newtab-logo-pressed="true"] {
+  --trance-newtab-logo-tilt: var(--trance-newtab-logo-tilt-pressed);
+}
+
 /* The sheen.
  *
  * A pseudo-element rather than a second background layer on the rule above,
@@ -758,9 +767,9 @@
  * JavaScript and loses the same term.
  *
  * What survives is the part that was never about the platform: a person who
- * has asked for reduced transparency is asking for fewer of these passes, not
- * more, and `flat` opts out of blur even where it works — translucency without
- * a single Gaussian pass. The budget is still three regions (ADR-019).
+ * has asked for reduced transparency — or turned Trance transparency off —
+ * is asking for fewer of these passes, not more, and `flat` opts out of blur
+ * even where it works. The budget is still three regions (ADR-019).
  *
  * The other half of the "blur does nothing" report was a plain bug:
  * `trance-surface-visible` was never set at startup, because `TranceSurfaces`
@@ -770,7 +779,7 @@
  */
 
 @media (prefers-reduced-transparency: no-preference) {
-  :root[trance="true"][trance-surface-visible="true"] {
+  :root[trance="true"][trance-surface-transparent="true"][trance-surface-visible="true"] {
     /* ── Why the regions, and not `#zen-main-app-wrapper` ──────────────────
      *
      * The surface used to be one declaration on the wrapper, on the grounds
@@ -793,6 +802,13 @@
      * One per region, never nested, which is the budget TRANCE.md §3.3 set
      * before the surface had been folded into one. */
     & #navigator-toolbox {
+      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+    /* The splitter's six-pixel gutter separates the toolbox from the toolbar
+     * row in sidebar-and-toolbar layout. Keep that exposed strip in the same
+     * frosted boundary so the independently blurred regions do not leave a
+     * sharp unblurred seam. */
+    &:not([zen-single-toolbar="true"]) #zen-sidebar-splitter {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
 

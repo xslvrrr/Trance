@@ -3,8 +3,8 @@
   "schema": 1,
   "generator": "scripts/trance-patches.py manifest",
   "counts": {
-    "patches": 257,
-    "patchedFiles": 271,
+    "patches": 258,
+    "patchedFiles": 272,
     "symlinkedFiles": 1448,
     "filesWithMultipleOwners": 4,
     "orderSensitiveFiles": 3,
@@ -2884,6 +2884,17 @@
           "path": "toolkit/themes/shared/pictureinpicture/player.css",
           "base": "2e502fb075546bab4349f3da97069e764528d763",
           "result": "4ff7f2ee47085c2d2131f54a647468fab81c7d88"
+        }
+      ]
+    },
+    {
+      "patch": "src/toolkit/themes/shared/popup-css.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "toolkit/themes/shared/popup.css",
+          "base": "1163205446ca28a3a6cf1cbc746edd03d1bdaa90",
+          "result": "1f508a514a03dac8222f81b97e692d347810e15c"
         }
       ]
     },

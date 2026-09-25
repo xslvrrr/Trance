@@ -3,7 +3,7 @@
 
 /* Trance: onboarding acceptance tests (TRANCE.md §13 Phase 13).
  *
- * The flow's visible half is ten screens of copy, and testing copy is testing
+ * The flow's visible half is eight screens of copy, and testing copy is testing
  * nothing. What is worth asserting is the half that survives the flow:
  *
  *   - the window is *given back*. This is the only Trance feature that hides
@@ -11,12 +11,8 @@
  *     test therefore builds the flow, tears it down through the pref, and
  *     checks the window is whole again — which is also the `disabled means
  *     zero` assertion every other Trance suite makes;
- *   - the three prefs the flow asks about are applied *by the feature*, for the
- *     whole session, not only while it is on screen. The settings page writes
- *     them and cannot act on them, so this is the contract that makes those
- *     rows real rather than decorative (ADR-051);
- *   - "stable" clears the twilight prefs rather than writing the opposite
- *     value, so a later change to Zen's own default is inherited;
+ *   - the architecture answer changes blur defaults, not explicit user values.
+ *     This keeps the tuning useful without replacing a choice made elsewhere;
  *   - the flow claims the first run when it starts, not when it ends.
  *
  * `start()` is called directly. `onEnable` refuses to schedule itself under
@@ -31,17 +27,9 @@ const ONBOARDING_SHEET =
   "chrome://browser/content/trance-styles/trance-onboarding.css";
 const PREF_ENABLED = "trance.onboarding.enabled";
 const PREF_COMPLETED = "trance.onboarding.completed";
-const PREF_CHANNEL = "trance.onboarding.channel";
 const PREF_ARCH = "trance.perf.arch";
 const ATTR_STAGE = "trance-onboarding-stage";
 const ROOT_ID = "trance-onboarding";
-
-/** The twilight-gated prefs the channel page owns. */
-const TWILIGHT_PREFS = [
-  "zen.view.context-menu.refresh",
-  "zen.theme.acrylic-elements",
-  "services.sync.engine.spaces",
-];
 
 function feature() {
   return window.gTrance.features.find(f => f.name === "Onboarding");
@@ -77,12 +65,7 @@ function end() {
 
 registerCleanupFunction(() => {
   end();
-  for (const pref of [
-    PREF_COMPLETED,
-    PREF_CHANNEL,
-    PREF_ARCH,
-    ...TWILIGHT_PREFS,
-  ]) {
+  for (const pref of [PREF_COMPLETED, PREF_ARCH]) {
     Services.prefs.clearUserPref(pref);
   }
   Services.prefs.clearUserPref("trance.surface.blur.radius");
@@ -133,6 +116,13 @@ add_task(async function test_starting_takes_the_window_and_claims_the_run() {
     node.querySelector("#trance-onboarding-splash"),
     "the splash is the first thing on screen"
   );
+  node.querySelector("#trance-onboarding-splash button").click();
+  await BrowserTestUtils.waitForCondition(
+    () =>
+      node.querySelector("#trance-onboarding-copy h1")?.textContent ===
+      "Cosine or Sine",
+    "the first page is the mods choice, with no removed channel question"
+  );
 
   const browser = document.getElementById("browser");
   const hidden = [...browser.children].filter(
@@ -175,52 +165,71 @@ add_task(async function test_disabling_gives_the_window_back() {
   );
 });
 
-add_task(async function test_twilight_writes_and_stable_clears() {
-  Services.prefs.setStringPref(PREF_CHANNEL, "twilight");
-  for (const pref of TWILIGHT_PREFS) {
-    ok(
-      Services.prefs.prefHasUserValue(pref),
-      `${pref} is written on the twilight channel`
+add_task(
+  async function test_architecture_tunes_defaults_without_overwriting_user_values() {
+    const tunedPrefs = [
+      "trance.surface.blur.radius",
+      "trance.surface.internal.blur",
+      "trance.chrome.urlbar.focus-blur",
+      "trance.surface.suspend-when-unfocused",
+    ];
+    for (const pref of tunedPrefs) {
+      Services.prefs.clearUserPref(pref);
+    }
+    const defaults = Services.prefs.getDefaultBranch(null);
+
+    Services.prefs.setStringPref(PREF_ARCH, "x86_64");
+    is(
+      defaults.getIntPref("trance.surface.blur.radius"),
+      10,
+      "Intel gets the lower blur default"
     );
-    ok(Services.prefs.getBoolPref(pref), `${pref} is on`);
-  }
-
-  Services.prefs.setStringPref(PREF_CHANNEL, "stable");
-  for (const pref of TWILIGHT_PREFS) {
     ok(
-      !Services.prefs.prefHasUserValue(pref),
-      `${pref} is handed back to Zen's own default rather than overwritten`
+      !defaults.getBoolPref("trance.surface.internal.blur"),
+      "Intel disables internal-page blur by default"
     );
+    ok(
+      !defaults.getBoolPref("trance.chrome.urlbar.focus-blur"),
+      "Intel disables URL-bar focus blur by default"
+    );
+    ok(
+      defaults.getBoolPref("trance.surface.suspend-when-unfocused"),
+      "unfocused-window suspension stays enabled by default"
+    );
+    for (const pref of tunedPrefs) {
+      ok(
+        !Services.prefs.prefHasUserValue(pref),
+        `${pref} remains on the default branch`
+      );
+    }
+
+    Services.prefs.setIntPref("trance.surface.blur.radius", 31);
+    Services.prefs.setStringPref(PREF_ARCH, "arm64");
+    is(
+      defaults.getIntPref("trance.surface.blur.radius"),
+      24,
+      "Apple Silicon updates the default"
+    );
+    is(
+      Services.prefs.getIntPref("trance.surface.blur.radius"),
+      31,
+      "re-answering architecture preserves the user's blur choice"
+    );
+    ok(
+      Services.prefs.prefHasUserValue("trance.surface.blur.radius"),
+      "the explicit blur choice remains a user value"
+    );
+    ok(
+      defaults.getBoolPref("trance.surface.internal.blur"),
+      "Apple Silicon enables internal blur"
+    );
+    ok(
+      defaults.getBoolPref("trance.chrome.urlbar.focus-blur"),
+      "Apple Silicon enables URL-bar blur"
+    );
+    Services.prefs.clearUserPref("trance.surface.blur.radius");
   }
-});
-
-add_task(async function test_architecture_tunes_blur_and_only_blur() {
-  Services.prefs.setStringPref(PREF_ARCH, "x86_64");
-  is(
-    Services.prefs.getIntPref("trance.surface.blur.radius"),
-    10,
-    "the Intel tuning lowers the surface blur"
-  );
-  ok(
-    !Services.prefs.getBoolPref("trance.surface.internal.blur"),
-    "and drops the second full-viewport pass over internal pages"
-  );
-  ok(
-    !Services.prefs.getBoolPref("trance.chrome.urlbar.focus-blur"),
-    "and the address bar's focus blur"
-  );
-
-  Services.prefs.setStringPref(PREF_ARCH, "arm64");
-  is(
-    Services.prefs.getIntPref("trance.surface.blur.radius"),
-    24,
-    "and switching back restores the full frost"
-  );
-  ok(
-    Services.prefs.getBoolPref("trance.surface.internal.blur"),
-    "including internal pages"
-  );
-});
+);
 
 add_task(async function test_the_prefs_are_applied_with_the_flow_over() {
   // The whole point of the observers: `trance.onboarding.completed` is true by
@@ -234,9 +243,11 @@ add_task(async function test_the_prefs_are_applied_with_the_flow_over() {
 
   Services.prefs.setStringPref(PREF_ARCH, "x86_64");
   is(
-    Services.prefs.getIntPref("trance.surface.blur.radius"),
+    Services.prefs
+      .getDefaultBranch(null)
+      .getIntPref("trance.surface.blur.radius"),
     10,
-    "the architecture setting still applies"
+    "the architecture setting still applies after onboarding"
   );
   Services.prefs.setStringPref(PREF_ARCH, "arm64");
 });

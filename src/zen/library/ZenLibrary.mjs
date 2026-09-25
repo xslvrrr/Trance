@@ -157,6 +157,14 @@ export class ZenLibrary extends MozLitElement {
         "transform",
         `translateX(calc(${leftAligned} * -100% * (1 - ${value})))`
       );
+      // >>> TRANCE
+      // The same shift, for trance-chrome.css to narrow the toolbar row with
+      // instead of letting it slide past the window (ADR-096).
+      lazy.appContentWrapper?.style.setProperty(
+        "--zen-library-content-shift",
+        `${value * webOffset}px`
+      );
+      // <<< TRANCE
       lazy.appContentWrapper?.style.setProperty(
         "transform",
         `translateX(${value * webOffset}px)`

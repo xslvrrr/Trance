@@ -6,25 +6,14 @@
 //
 // `scripts/trance-cosine.py` provisions a *build*: it fetches the Sine engine
 // and the mods Trance preinstalls and writes them into the app and into one
-// profile. That is the right place for it, and it is the wrong place for the
-// two questions the onboarding flow asks, because both of them are asked after
-// the build exists:
+// profile. That is the right place for it; the mod-manager page runs after the
+// build exists and installs the selected channel's newest engine into the
+// profile when committed.
 //
-//   - "Cosine or Sine" chose a channel and then wrote a pref and rewrote one
-//     version string in `engine.json`. That is Sine's own channel-switching
-//     mechanism and it does work — on the next update check, which may be days
-//     away and which silently does nothing at all if the profile has no engine
-//     in it. Someone who picked "Sine" on the first screen and opened the mod
-//     manager a minute later was still on Cosine, and nothing said so.
-//
-//   - "Stable or Twilight" wrote prefs and nothing else, so the Zen-store mods
-//     the browser ships with came from whenever the build was provisioned and
-//     could not be moved.
-//
-// This module is what those two pages call instead. It is the same work the
-// Python provisioner does, expressed against `IOUtils`, `fetch` and
-// `nsIZipReader`, and confined to the parts of the profile the provisioner
-// already owns:
+// This module is what the onboarding page and Settings call for that work. It
+// is the same work the Python provisioner does, expressed against `IOUtils`,
+// `fetch` and `nsIZipReader`, and confined to the parts of the profile the
+// provisioner already owns:
 //
 //   {profile}/chrome/JS/          the Sine engine
 //   {profile}/chrome/sine-mods/   the mods, and their `mods.json`
