@@ -1859,8 +1859,8 @@ tell which of them were decisions and which were defects.
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0 and 0.2.1 were built locally rather
-      than in CI; the current 0.2.1 artefact is a development build.
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1 and 0.3.0 were built locally
+      rather than in CI; the current 0.3.0 artefact is a development build.
 
 **Release history**
 
@@ -1874,10 +1874,15 @@ tell which of them were decisions and which were defects.
   controls, performance defaults, window-activity suspension, single-owner navigation/material
   paths, transactional lazy feature setup and import-integrity checks
   (`docs/trance/release-0.2.0.md:1-110`). It has no PGO/LTO and is not signed or notarised.
-- **0.2.1 (current, 2026-09-23):** rebased onto Zen `4c92731b2` (Firefox 156.0.1) and fixes four
+- **0.2.1 (2026-09-23):** rebased onto Zen `4c92731b2` (Firefox 156.0.1) and fixes four
   0.2.0 defects: the sidebar never initialising (ADR-085), the empty-tab mark over loading pages
   (ADR-084), the immovable and ineffective blur knob (ADR-082), and the white floor under 0%
   transparency (ADR-083) (`docs/trance/release-0.2.1.md`). Same build shape as 0.2.0.
+- **0.3.0 (current, 2026-09-26):** same base. Fixes Google sign-in and AI Overviews by replacing
+  ClearURLs with Firefox's own query stripping (ADR-097), and lands the ADR-087 to ADR-096 batch:
+  the splitter blur seam, the eight-page onboarding, the theme-picker ring and saved-theme pages,
+  Zen's native Library switched on, workspace dots, and the macOS panel exit fade
+  (`docs/trance/release-0.3.0.md`). Same build shape as 0.2.0.
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
