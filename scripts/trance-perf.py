@@ -12,7 +12,7 @@
 #
 # ── Why a real profile and not a mochitest ────────────────────────────────
 #
-# The mochitest profile has no enterprise policy, so it has none of the seven
+# The mochitest profile has no enterprise policy, so it has none of the six
 # extensions Trance preinstalls (§9), and no Cosine. Those are the largest
 # thing Trance adds to a Zen window, and a harness that cannot see them cannot
 # answer the question this phase exists to answer. So: the shipped binary, a
@@ -89,7 +89,7 @@ DEFAULT_OBJDIR_GLOB = "engine/obj-*"
 MARIONETTE_PORT = 2828
 
 # How long to wait for the browser to answer a Marionette handshake. A cold
-# first run installs seven extensions from AMO before it settles.
+# first run installs six extensions from AMO before it settles.
 CONNECT_TIMEOUT_S = 180
 COMMAND_TIMEOUT_S = 120
 
@@ -1146,7 +1146,7 @@ def run_workload(client, args, results):
     # --- settle -----------------------------------------------------------
     #
     # A browser that has just started is not idle: it is restoring a session,
-    # installing seven extensions from AMO, building its places database and
+    # installing six extensions from AMO, building its places database and
     # painting a first-run panel. The first version of this harness measured
     # that window and reported 74% of a core as the *idle* figure, which is a
     # true number about the wrong thing.

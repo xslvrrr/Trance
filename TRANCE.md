@@ -794,7 +794,14 @@ For each mod, before writing code, produce `docs/trance/mods/<id>.md` containing
 
 ## 9. Bundled Mozilla extensions
 
-All seven are non-negotiable and must be present on a fresh profile.
+All six are non-negotiable and must be present on a fresh profile.
+
+There were seven until 0.3.0. ClearURLs was dropped by ADR-097 because it broke Google: its rules
+strip `ei`/`sca_esv` from google.com XHRs, which kills AI Overviews, and its history-API listener
+breaks Google sign-in. It has no managed-storage settings, so a policy could not configure either
+behaviour away. Firefox's own query stripping (`privacy.query_stripping.enabled`, on by default in
+`prefs/trance/extensions.yaml`) does the job instead. `policies.json` uninstalls ClearURLs once
+from profiles an earlier Trance installed it into (`Extensions.Uninstall`).
 
 | Extension | AMO slug | GUID | License |
 |---|---|---|---|
@@ -802,13 +809,13 @@ All seven are non-negotiable and must be present on a fresh profile.
 | SponsorBlock | `sponsorblock` | `sponsorBlocker@ajay.app` | GPL-3.0 |
 | Privacy Badger | `privacy-badger17` | `jid1-MnnxcxisBPnSXQ@jetpack` | GPL-3.0 |
 | Dark Reader | `darkreader` | `addon@darkreader.org` | MIT |
-| ClearURLs | `clearurls` | `{74145f27-f039-47ce-a470-a662b129930a}` | LGPL-3.0 |
+| ~~ClearURLs~~ | ~~`clearurls`~~ | ~~`{74145f27-f039-47ce-a470-a662b129930a}`~~ | ~~LGPL-3.0~~ — removed in 0.3.0, ADR-097 |
 | Return YouTube Dislike | `return-youtube-dislikes` | `{762f9885-5a13-4abd-9c77-433dcd38b8fd}` | GPL-3.0 |
 | Zen Internet | `zen-internet` | `{91aa3897-2634-4a8a-9092-279db23a7689}` | MIT (`sameerasw/my-internet`) |
 
 ### 9.1 Chosen mechanism — enterprise policy, `normal_installed`
 
-**Do not vendor XPIs into the repo.** Five of seven are GPL-family; bundling their binaries in an
+**Do not vendor XPIs into the repo.** Four of six are GPL-family; bundling their binaries in an
 MPL-2.0 distribution creates the same licensing entanglement as §7.2, and it freezes their versions.
 
 Instead ship `distribution/policies.json`:
@@ -832,10 +839,6 @@ Instead ship `distribution/policies.json`:
       "addon@darkreader.org": {
         "installation_mode": "normal_installed",
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/darkreader/latest.xpi"
-      },
-      "{74145f27-f039-47ce-a470-a662b129930a}": {
-        "installation_mode": "normal_installed",
-        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/clearurls/latest.xpi"
       },
       "{762f9885-5a13-4abd-9c77-433dcd38b8fd}": {
         "installation_mode": "normal_installed",
@@ -861,6 +864,10 @@ Properties of this approach:
 - No redistribution of third-party binaries → no licensing entanglement.
 - Requires network on first run. Ship a first-run panel that reports install status and offers a
   retry, so a failed install is visible rather than silent.
+- Retiring one is `Extensions.Uninstall`, not only deleting its entry. Deleting the entry stops new
+  installs and nothing else, so existing profiles keep the add-on. `Uninstall` goes through
+  `runOncePerModification`: it runs once per profile, and a person who installs the add-on again
+  afterwards keeps it (ADR-097).
 
 `policies.json` locations per platform:
 - macOS: `Trance.app/Contents/Resources/distribution/policies.json`

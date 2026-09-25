@@ -4,7 +4,7 @@
 //
 // Trance: the first-run panel.
 //
-// Trance ships seven extensions, and it ships them the way TRANCE.md §9.1
+// Trance ships six extensions, and it ships them the way TRANCE.md §9.1
 // chose: an enterprise policy with `installation_mode: normal_installed` and an
 // AMO `install_url`. Nothing is vendored, nothing is frozen at a version, and
 // nothing about the arrangement is visible — which is the problem this file
@@ -28,7 +28,7 @@
 // asked its own name.
 //
 // A build whose `distribution/` directory never got installed has no active
-// policy at all, and the panel says so rather than showing seven empty rows.
+// policy at all, and the panel says so rather than showing six empty rows.
 // That is the single most useful thing it can say to whoever is building this.
 //
 // ── Retry is the policy's own code path ───────────────────────────────────
@@ -46,7 +46,7 @@
 // `zen-welcome-stage` attribute ZenWelcome puts on the document element and
 // removes in `finish()`. This waits for both: the pref true, the attribute gone.
 //
-// Refs: TRANCE.md §9, §13 Phase 9; ADR-032
+// Refs: TRANCE.md §9, §13 Phase 9; ADR-032, ADR-097
 
 import { TranceFeature } from "chrome://browser/content/trance-components/TranceFeature.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
@@ -75,11 +75,11 @@ const ATTR_TRANCE_ONBOARDING = "trance-onboarding-stage";
 const PANEL_ID = "trance-firstrun-panel";
 
 /**
- * Display names for the seven, keyed by add-on id.
+ * Display names for the six, keyed by add-on id.
  *
  * Only used for an extension that is not installed yet: once it is, the panel
  * asks the add-on for its own name, which is the localised one. An id that is
- * not in this map falls back to the id itself, so adding an eighth extension to
+ * not in this map falls back to the id itself, so adding a seventh extension to
  * `policies.json` and forgetting this map produces an ugly row, not a missing
  * one.
  */
@@ -88,7 +88,6 @@ const EXTENSION_NAMES = Object.freeze({
   "sponsorBlocker@ajay.app": "SponsorBlock",
   "jid1-MnnxcxisBPnSXQ@jetpack": "Privacy Badger",
   "addon@darkreader.org": "Dark Reader",
-  "{74145f27-f039-47ce-a470-a662b129930a}": "ClearURLs",
   "{762f9885-5a13-4abd-9c77-433dcd38b8fd}": "Return YouTube Dislike",
   "{91aa3897-2634-4a8a-9092-279db23a7689}": "Zen Internet",
 });
@@ -584,7 +583,7 @@ export class TranceFirstRun extends TranceFeature {
   }
 
   /**
-   * Which of the seven an install object belongs to.
+   * Which of the six an install object belongs to.
    *
    * `install.addon` is null for a download that never finished, which is
    * precisely the offline case, so the source URL is the fallback: it is the
@@ -617,7 +616,7 @@ export class TranceFirstRun extends TranceFeature {
   }
 
   /**
-   * Reads the current state of all seven and repaints the rows.
+   * Reads the current state of all six and repaints the rows.
    *
    * Asynchronous, and the panel may have been closed by the time it resolves —
    * every write below is guarded by `#rows` still holding the row.

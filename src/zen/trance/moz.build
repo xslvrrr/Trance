@@ -8,7 +8,7 @@
 # phases it did not: everything Trance ships is chrome-packaged through
 # `jar.inc.mn`, which `browser/base/jar.mn` already pulls in. Phase 9 ships the
 # first file that is not chrome content — the enterprise policy that installs
-# the seven bundled extensions. Gecko reads that from a real path on disk,
+# the bundled extensions. Gecko reads that from a real path on disk,
 # `<install>/distribution/policies.json`, before there is a profile or a window,
 # so it has to be installed by the build rather than packed into browser.jar.
 #

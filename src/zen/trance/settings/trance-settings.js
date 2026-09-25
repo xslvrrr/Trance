@@ -177,7 +177,7 @@ Preferences.addAll([
 
   // Extensions and first run (TRANCE.md §13 Phase 9)
   //
-  // The seven extensions themselves are not prefs and are not here: they are an
+  // The six extensions themselves are not prefs and are not here: they are an
   // enterprise policy, and about:addons is where an installed add-on is
   // configured (ADR-032). `completed` is state, surfaced as a button rather
   // than a checkbox for the same reason `trance.theme.saved.themes` is

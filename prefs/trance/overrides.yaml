@@ -26,10 +26,10 @@
 
 # `true`, not Firefox's `false` as Zen sets it. Search suggestions are the
 # address bar doing the job the address bar is for, and Trance's other privacy
-# defaults — the whole of prefs/privatefox/, plus uBlock Origin, Privacy Badger
-# and ClearURLs installed on first run — are about tracking rather than about
-# the search engine you deliberately chose seeing what you deliberately typed
-# into it.
+# defaults — the whole of prefs/privatefox/, Firefox's own query stripping, and
+# uBlock Origin and Privacy Badger installed on first run — are about tracking
+# rather than about the search engine you deliberately chose seeing what you
+# deliberately typed into it.
 #
 # The private-window switch (`browser.search.suggest.enabled.private`) stays
 # off, and is deliberately not overridden here. A private window's whole

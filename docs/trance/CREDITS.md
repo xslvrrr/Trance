@@ -81,10 +81,13 @@ Trance installs these from addons.mozilla.org via enterprise policy. It does not
 them and does not modify them.
 
 uBlock Origin (Raymond Hill) · SponsorBlock (Ajay Ramachandran) · Privacy Badger (EFF) ·
-Dark Reader (Alexander Shutau) · ClearURLs (Kevin Röbert) · Return YouTube Dislike ·
-Zen Internet (sameerasw)
+Dark Reader (Alexander Shutau) · Return YouTube Dislike · Zen Internet (sameerasw)
 
-The mechanism, as of Phase 9, is `src/zen/trance/distribution/policies.json`: seven
+ClearURLs (Kevin Röbert) was one of these until 0.3.0. Firefox's own query stripping replaces it,
+because its rules broke Google AI Overviews and Google sign-in, and no policy could configure that
+away (ADR-097).
+
+The mechanism, as of Phase 9, is `src/zen/trance/distribution/policies.json`: six
 `ExtensionSettings` entries in `normal_installed` mode, each naming the extension's own
 `addons.mozilla.org` download URL. Nothing is vendored, nothing is patched, nothing is frozen at a
 version, and none of them is configured on your behalf — no filter list, no theme, no category

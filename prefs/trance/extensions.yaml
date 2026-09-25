@@ -4,7 +4,7 @@
 #
 # Trance: bundled extensions and the first-run panel.
 #
-# The seven extensions themselves are not configured here. They are installed by
+# The six extensions themselves are not configured here. They are installed by
 # `src/zen/trance/distribution/policies.json`, which the build installs into the
 # application's `distribution/` directory (ADR-032), and their own settings are
 # their own business — TRANCE.md §9.3 is explicit that Trance ships no filter
@@ -22,18 +22,18 @@
 # which lands in the profile scope through the normal install path and is never
 # marked foreign, so it is enabled the moment it finishes.
 #
-# Setting it to 0 would therefore change nothing about our seven extensions, and
+# Setting it to 0 would therefore change nothing about our six extensions, and
 # would turn off the prompt that exists so a *different* program cannot drop an
 # XPI into the system add-ons directory and have it silently switch itself on.
 # That is a real protection paid for with nothing gained, so the pref is not
 # here. ADR-032 records the finding.
 #
-# Refs: TRANCE.md §9, §13 Phase 9; ADR-032, ADR-033
+# Refs: TRANCE.md §9, §13 Phase 9; ADR-032, ADR-033, ADR-097
 
 # === Mark: Install flow ===
 
 # Suppress the "you are downloading a third-party add-on" interstitial. All
-# seven install URLs are addons.mozilla.org's own `/latest.xpi` endpoints, so
+# six install URLs are addons.mozilla.org's own `/latest.xpi` endpoints, so
 # the interstitial has nothing to warn about; without this it can still appear
 # on a slow first run and read as an error.
 #
@@ -42,9 +42,43 @@
 - name: extensions.postDownloadThirdPartyPrompt
   value: false
 
+# === Mark: Tracking parameters ===
+
+# Firefox's own query stripping, which does the job ClearURLs was installed
+# for (ADR-097). Firefox only turns it on in Strict tracking protection; here
+# it is on in Standard as well.
+#
+# ClearURLs broke Google. It strips `ei` and `sca_esv` from every google.com
+# request, XHRs included, so the AI Overview request came back rejected ("Can't
+# generate an AI overview right now"). Its history-API listener also rewrote
+# URLs in the middle of the Google sign-in flow. It reads its settings from its
+# own `storage.local` and has no managed-storage schema, so no policy could turn
+# either behaviour off (ClearURLs Addon #522, #508, #272, #510).
+#
+# Firefox's stripper only touches top-level navigations and redirects. It never
+# sees a page's own requests. The list comes from Mozilla's `query-stripping`
+# Remote Settings collection (click identifiers such as `gclid`, `fbclid`,
+# `msclkid` and `mc_eid`), which is maintained so that stripping a parameter
+# does not break a site. That list is narrower than ClearURLs', and that is the
+# trade ADR-097 accepts.
+#
+# These are defaults, not user values. `ContentBlockingPrefs` treats the
+# Standard category as "every listed pref at its default", so a profile set to
+# Standard still shows Standard, and picking Standard again in Settings clears
+# user values back to these rather than to off.
+#
+# `privacy.query_stripping.strip_on_share.enabled` is already true in
+# firefox.js. That is the "Copy Clean Link" menu item, the other half of what
+# ClearURLs offered, so it is not declared again here.
+- name: privacy.query_stripping.enabled
+  value: true
+
+- name: privacy.query_stripping.enabled.pbmode
+  value: true
+
 # === Mark: First-run panel ===
 
-# The panel that reports, once, whether the seven extensions arrived.
+# The panel that reports, once, whether the six extensions arrived.
 #
 # Off, `TranceFirstRun` allocates nothing: no panel, no add-on listener, no
 # scheduler subscription, and the pref observer that every TranceFeature keeps.

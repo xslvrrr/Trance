@@ -9,7 +9,7 @@
  *
  *   - the extension list comes from the active policy, not from a list in the
  *     module (ADR-032) — asserted by comparing the rows against
- *     `Services.policies` rather than against seven hardcoded names;
+ *     `Services.policies` rather than against a hardcoded list of names;
  *   - a build with no policy says so, instead of showing empty rows;
  *   - the panel shows once, and `trance.firstrun.completed` is what makes that
  *     true;

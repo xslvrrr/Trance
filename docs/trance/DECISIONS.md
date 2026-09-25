@@ -4337,3 +4337,62 @@ Library is open, which means narrowing the row rather than fading or clipping it
 - Single-toolbar layout is untouched; compact mode stays inside the window.
 - In a very narrow window the row can shrink to little usable width beside the 418px Library; it is
   constrained rather than overflowing.
+
+---
+
+## ADR-097 — ClearURLs is replaced by Firefox's own query stripping
+
+**Date:** 2026-09-26
+**Status:** Accepted (user decision, 2026-09-26). Amends §9's "all seven are non-negotiable".
+
+**Context:**
+
+Google sign-in was being refused and Google's AI Overviews would not generate ("Can't generate an
+AI overview right now. Try again later."). Stock Zen and Firefox do neither, and nothing in Trance's
+prefs or patches touches the user agent, cookies, referrers or `navigator.webdriver`. The
+`MOZ_APP_UA_NAME` patch still yields a `Firefox/156.0` token. What Trance adds and stock builds lack
+is the preinstalled extension set, and one of those extensions matches both symptoms:
+
+- ClearURLs' `google` provider strips `ei`, `sca_esv`, `sei`, `ved` and ~40 other parameters from
+  every request to `*.google.*`. Its default request types include `xmlhttprequest`, so the
+  AI Overview fetch loses the parameters Google requires and is rejected. Upstream: ClearURLs Addon
+  #522, #508, #495, Rules #182, all open. The workaround the reporters confirm is removing
+  `xmlhttprequest` from the request types.
+- Its "prevent tracking injection over history API" listener (`historyListenerEnabled`, on by
+  default) rewrites URLs during Google's sign-in flow. Upstream: Addon #272, #510. The confirmed
+  workaround is turning that listener off.
+
+ClearURLs keeps every setting in its own `browser.storage.local` and has no managed-storage schema,
+so neither workaround can be applied through `policies.json`. Writing into another extension's
+storage would break §9.3 ("do not preconfigure other people's tools"), and it would depend on
+ClearURLs' private storage format. ClearURLs has no per-site allowlist either (Addon #93).
+
+**Decision:**
+
+- ClearURLs is removed from `ExtensionSettings`. Trance now installs six extensions.
+- `privacy.query_stripping.enabled` and `.pbmode` default to `true` in
+  `prefs/trance/extensions.yaml`. Firefox's stripper only acts on top-level navigations and
+  redirects, never on a page's own requests. Its list comes from Mozilla's `query-stripping` Remote
+  Settings collection (click identifiers: `gclid`, `fbclid`, `msclkid`, `mc_eid`, …), which is
+  maintained so that stripping a parameter does not break a site. `strip_on_share` ("Copy Clean
+  Link") is already on in firefox.js.
+- These are default values, not user values. `ContentBlockingPrefs.prefsMatch("standard")` expects
+  every listed pref to have no user value, so a profile on Standard stays on Standard and does not
+  fall into Custom.
+- Existing profiles lose ClearURLs through the policy engine's own one-shot mechanism,
+  `"Extensions": {"Uninstall": [id]}`. `Policies.sys.mjs` runs it under `runOncePerModification`,
+  so it happens once per profile, and someone who reinstalls ClearURLs afterwards keeps it. This is
+  an uninstall, not ADR-086's "disabled, not deleted". The policy engine has no disable-once
+  primitive, and building one would mean a new always-loaded startup module that owns another
+  extension's state. What is lost is ClearURLs' own settings and log, and reinstalling from AMO
+  gets it back.
+
+**Consequences:**
+- Google AI Overviews and Sign in with Google no longer fight a preinstalled extension.
+- Tracking-parameter coverage is narrower: click identifiers on navigation rather than ClearURLs'
+  full catalogue on every request. Privacy Badger already unwraps Google's `/url?` result links
+  (`js/firstparties/google.js`), and uBlock Origin and Privacy Badger still cover trackers.
+  Anyone who wants the full catalogue can install ClearURLs themselves, and the uninstall will not
+  come back for it.
+- `TranceFirstRun` needs no change beyond its name map: it reads the list from the policy.
+- `scripts/trance-inventory.py check` holds `mods-inventory.json` to six extensions.
