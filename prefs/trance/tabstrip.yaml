@@ -133,7 +133,8 @@
 
 # === Mark: Active tab glow ===
 
-# Nebula's glow behind the selected tab. Opt in.
+# Nebula's glow on the selected tab, inside that tab's own rounded background
+# (ADR-100). Opt in.
 #
 # `none` | `theme` | `icon`.
 #
@@ -152,15 +153,15 @@
 # Nebula is GPL-3.0, so this is the behaviour reimplemented from its description
 # and its screenshots and none of its code (TRANCE.md §7.2).
 #
-# Off by default: it is the one thing in the tab strip that paints outside a
-# tab's own box, and a browser whose default look has a glow behind one row is a
+# Off by default: a browser whose default look has a light on one row is a
 # stronger opinion than a default should hold.
 - name: trance.tabstrip.glow.mode
   value: "none"
 
-# Pixels. How far past the tab's own box the glow reaches. It is a semi-oval —
-# wider than it is tall, cropped along the bottom — so this is the reach at the
-# top and the sides, and the bottom edge stays where the tab's does.
+# Pixels. How far past the tab's own box the glow's edge sits. It is a
+# semi-oval anchored at the bottom centre and cropped by the tab's background,
+# so this is how much of the row it lights: 0 fades out exactly at the tab's
+# top and sides, and larger values carry the light further up and outwards.
 - name: trance.tabstrip.glow.spread
   value: 6
 

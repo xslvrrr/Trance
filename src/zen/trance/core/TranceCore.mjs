@@ -221,6 +221,12 @@ class nsTranceCore extends nsZenPreloadedFeature {
         prefName: "trance.firstrun.enabled", // TranceFirstRun.prefName
         completedPref: "trance.firstrun.completed",
       },
+      {
+        name: "Updates",
+        url: "chrome://browser/content/trance-components/TranceUpdates.mjs",
+        exportName: "TranceUpdates",
+        prefName: "trance.updates.enabled",
+      },
     ]);
     this.#registry.init();
 

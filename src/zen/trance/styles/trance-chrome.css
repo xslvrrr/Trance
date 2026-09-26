@@ -164,16 +164,22 @@
    * zero-sized box paints a zero-sized mark. Nothing in the rule was wrong; it
    * was drawing correctly, into no space.
    *
-   * ── Why the size is the toolbar's and not the menu's ──────────────────────
+   * ── Why the size is the glyph's, and not the padded box's (ADR-102) ───────
    *
-   * It was `--trance-menu-icon-size`, which is 16px times the icon-scale pref —
-   * the size a *menu row's* icon box is, and menu rows are not what this sits
-   * beside. `toolbar .toolbarbutton-1 > .toolbarbutton-icon` is
-   * `calc(2 * var(--toolbarbutton-padding-inner) + var(--zen-toolbar-button-size))`
-   * with `padding: var(--toolbarbutton-padding-inner)`, so a toolbar glyph is
-   * `--zen-toolbar-button-size` (17px on macOS) inside a larger box. Sixteen
-   * pixels with no padding against seventeen with padding is already a step
-   * down, and it was the smaller of the two problems.
+   * `#PanelUI-menu-button` is a *badged* button: its `<image>` sits inside a
+   * `.toolbarbutton-badge-stack`, and on a badged button it is the stack, not
+   * the image, that carries `padding: var(--toolbarbutton-padding-inner)` and
+   * the hover fill. The image inside is just the glyph —
+   * `--zen-toolbar-button-size`, 17px on macOS — which is what Firefox sizes
+   * it to as well.
+   *
+   * This rule used to give the image the *unbadged* size, the glyph plus the
+   * padding on both sides, with that padding on the image too. The stack then
+   * wrapped a 29px image in its own 6px of padding: a 41px square, drawn over
+   * a 31×29 button and past both of its edges, and hit-testable across all of
+   * it. That was the oversized hover fill and click target, and the reason
+   * constraining the *button* in ADR-093 did not shrink either — the stack
+   * overflows its button rather than being sized by it.
    *
    * ── Why the artwork is not the application icon ───────────────────────────
    *
@@ -188,42 +194,22 @@
    * margin: `scripts/trance-branding.py` traces it out of the source artwork
    * into a viewBox the glyph fills. That fixes both halves of the old problem
    * at once — the mask is the mark rather than the icon, and there is no inset
-   * left for `--trance-logo-mask-scale` to compensate for, which is why that
-   * token is now 100%.
+   * left for `--trance-logo-mask-scale` to compensate for. What the token does
+   * now is the opposite: it gives the mark the air the browser's own glyphs
+   * are drawn with.
    *
-   * So the box is the browser's own and the mask matches it. `mask-origin` and
-   * `background-clip` are pinned to the content box so that both the mask and
-   * the colour it cuts are measured against the 17px glyph area rather than
-   * against the padded box around it; without that the mark would be sized
-   * against one rectangle and its siblings against another.
+   * So the image is the glyph box and nothing else, and the mask fills it:
+   * the stack around it pads it to the same 29px square every other toolbar
+   * button paints its hover fill into.
    */
 
   &[trance-chrome-logo="true"] #PanelUI-menu-button .toolbarbutton-icon {
     list-style-image: none;
-    width: calc(
-      2 * var(--toolbarbutton-padding-inner, 0px) +
-        var(--zen-toolbar-button-size, 16px)
-    );
-    height: calc(
-      2 * var(--toolbarbutton-padding-inner, 0px) +
-        var(--zen-toolbar-button-size, 16px)
-    );
-    /* The half of the box the two `calc()`s above were already assuming, and
-     * leaving it out is what made the mark enormous rather than merely wrong.
-     * Firefox's own rule is `width/height: calc(2 * padding-inner + button-size)`
-     * *with* `padding: var(--toolbarbutton-padding-inner)`, and the elements are
-     * `border-box` — so upstream's content box is `--zen-toolbar-button-size` and
-     * the padding is what the outer size is padding out to. Without this
-     * declaration the content box was the whole padded box, and every
-     * content-box measurement below — the mask origin, the mask size, the clip —
-     * was taken against a rectangle a third larger than the glyph beside it.
-     * Then `--trance-logo-mask-scale` multiplied that. */
-    padding: var(--toolbarbutton-padding-inner, 0);
+    width: var(--zen-toolbar-button-size, 16px);
+    height: var(--zen-toolbar-button-size, 16px);
+    padding: 0;
     background-color: currentColor;
-    background-clip: content-box;
     mask-image: url("chrome://browser/content/trance-icons/trance-mark.svg");
-    mask-origin: content-box;
-    mask-clip: content-box;
     mask-size: var(--trance-logo-mask-scale);
     mask-position: center;
     mask-repeat: no-repeat;

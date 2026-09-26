@@ -21,24 +21,23 @@
 // for a completely static UI, and on macOS it stops the window server skipping
 // an occluded window entirely (TRANCE.md §3.3).
 //
-// This module replaces all four with a bounded set of regions. In the
-// sidebar-and-toolbar layout the sidebar and toolbar blur separately, with the
-// narrow splitter between them covering their measured seam; when the address
-// bar is extended, it takes the toolbar's place. The background sheen remains
-// a separate layer and is not a backdrop-filter surface.
+// This module replaces all four. The blur a person sees through the window is
+// the window server's on macOS, at `trance.surface.blur.radius`, published by
+// `TranceMaterial` (ADR-099); what is left in CSS are the surfaces that float
+// over something Gecko painted — the extended address bar, compact mode's
+// floating chrome and the browser's own pages. The sidebar, splitter and
+// toolbar regions ADR-082 and ADR-087 added are gone: over a transparent
+// window their backdrop resolved as an opaque fallback, which painted pale
+// slabs rather than frost. The background sheen remains a separate layer and
+// is not a backdrop-filter surface.
 //
 // Per-region controls stay gone (ADR-041): "frost the sidebar but not the
 // toolbar" is not a useful product choice, and presets only move tokens the
 // sliders already own. There is no `content` region either (ADR-042). The
-// budget remains three regions at most (ADR-019), and blur is gated on
+// budget remains three surfaces at most (ADR-019), and blur is gated on
 // transparency as well as visibility.
 //
-// The budget is a ceiling, not a target. On any platform whose window is
-// translucent in its own right — macOS vibrancy, Windows Mica, a transparent
-// GTK window — Trance spends none of it: there the frost is produced behind
-// Gecko by the compositor, and a `backdrop-filter` over it replaces it with
-// flat black instead of softening it. See the Blur section of
-// trance-surfaces.css; that one fact was behind three separate bug reports.
+// See the Blur section of trance-surfaces.css.
 //
 // Refs: TRANCE.md §3.3, §6, §8.1, §13 Phase 3; docs/trance/mods/nebula.md
 

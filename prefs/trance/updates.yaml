@@ -1,0 +1,24 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Trance: manual release notifications for Trance updates.
+#
+# The feature downloads nothing; it links to the GitHub release for the user to
+# install manually. Automated browser tests never fetch GitHub.
+# Refs: TRANCE.md §13 Phase 12; ADR-098
+
+- name: trance.updates.enabled
+  value: true
+
+# Include published GitHub prereleases as well as stable releases.
+- name: trance.updates.prereleases
+  value: true
+
+# Release tag the user explicitly chose to skip.
+- name: trance.updates.skipped
+  value: ""
+
+# Unix seconds of the last check attempt; internal scheduler state.
+- name: trance.updates.last-check
+  value: 0

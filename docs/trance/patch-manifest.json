@@ -5,7 +5,7 @@
   "counts": {
     "patches": 258,
     "patchedFiles": 272,
-    "symlinkedFiles": 1448,
+    "symlinkedFiles": 1452,
     "filesWithMultipleOwners": 4,
     "orderSensitiveFiles": 3,
     "deadPaths": 11
@@ -3103,7 +3103,7 @@
         {
           "path": "widget/cocoa/nsCocoaWindow.mm",
           "base": "5e02a34001f90c14a9c1d56e7f55ddaf7486c98a",
-          "result": "a1da5c2087db3b8b120ad46744f24c3c04878196"
+          "result": "ae7a9decd734bbccb1b8f8df24329195d0e5e35b"
         }
       ]
     },
@@ -8723,6 +8723,18 @@
       "engine": "zen/trance/features/theme/TranceThemeState.mjs"
     },
     {
+      "source": "src/zen/trance/features/updates/TranceUpdateChecker.mjs",
+      "engine": "zen/trance/features/updates/TranceUpdateChecker.mjs"
+    },
+    {
+      "source": "src/zen/trance/features/updates/TranceUpdateLogic.mjs",
+      "engine": "zen/trance/features/updates/TranceUpdateLogic.mjs"
+    },
+    {
+      "source": "src/zen/trance/features/updates/TranceUpdates.mjs",
+      "engine": "zen/trance/features/updates/TranceUpdates.mjs"
+    },
+    {
       "source": "src/zen/trance/icons/heart-filled.svg",
       "engine": "zen/trance/icons/heart-filled.svg"
     },
@@ -8845,6 +8857,10 @@
     {
       "source": "src/zen/trance/tests/theme-state.test.mjs",
       "engine": "zen/trance/tests/theme-state.test.mjs"
+    },
+    {
+      "source": "src/zen/trance/tests/updates.test.mjs",
+      "engine": "zen/trance/tests/updates.test.mjs"
     },
     {
       "source": "src/zen/urlbar/ZenSiteDataPanel.sys.mjs",

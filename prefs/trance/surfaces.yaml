@@ -48,9 +48,30 @@
 
 # === Mark: Surface tuning ===
 
-# Mirrored into --trance-surface-blur by TranceTokens.
+# Pixels. Mirrored into --trance-surface-blur by TranceTokens, which the
+# overlay surfaces read — the extended address bar, the browser's own pages and
+# the floating compact-mode chrome — and, on macOS, into the window's own
+# background blur below. That second reader is the one that matters: it is the
+# blur of the desktop behind the window, which no stylesheet can reach.
 - name: trance.surface.blur.radius
   value: 24
+
+# Derived, never set by hand: the macOS window-server blur radius (ADR-099).
+# `TranceMaterial` holds it on the default branch at `trance.surface.blur.radius`
+# while Trance owns the window's material, and gives it back on release.
+#
+# -1 means "no radius": the window keeps Zen's `NSVisualEffectView` material,
+# whose blur AppKit fixes per material. Any other value replaces that material
+# with a plain view and asks the window server to blur the window's background
+# by exactly this many points — `ZenWindowBlurView` in
+# src/widget/cocoa/nsCocoaWindow-mm.patch. 0 is a clear window.
+#
+# `zen.*` rather than `trance.*` because the widget reads it beside
+# `zen.widget.macos.window-material`, and because it is not a setting: the
+# setting is the radius above, and TRANCE.md §6.6 keeps `trance.*` for those.
+- name: zen.widget.macos.window-blur-radius
+  value: -1
+  condition: "defined(XP_MACOSX)"
 
 # Percentage. Mirrored into --trance-surface-alpha, which is applied as an
 # `opacity` on Zen's own background elements — NOT as an alpha channel on a

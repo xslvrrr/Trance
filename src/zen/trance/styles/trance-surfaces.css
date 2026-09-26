@@ -41,17 +41,15 @@
  *
  * ── The blur budget ────────────────────────────────────────────────────────
  *
- * At most three `backdrop-filter` surfaces, one per region, never nested. See
- * the Blur section below; that is the single most consequential thing in this
- * file.
+ * At most three `backdrop-filter` surfaces, never nested, and none at idle in
+ * the default layout. See the Blur section below; that is the single most
+ * consequential thing in this file.
  *
- *   sidebar  → #navigator-toolbox                (always; in compact mode it
- *              floats over the page, which is where the frost shows most)
- *   toolbar  → #zen-appcontent-navbar-wrapper    (sidebar-and-toolbar layout
- *              only — in single-toolbar layout the nav bar lives inside the
- *              toolbox — and not while the address bar is extended, because
- *              the extended bar is its descendant and nesting is the one case
- *              strictly worse than either surface alone)
+ *   window   → not a `backdrop-filter` at all. The desktop behind the window
+ *              is blurred by the window server on macOS, at the same radius
+ *              (`zen.widget.macos.window-blur-radius`, ADR-099)
+ *   compact  → #navigator-toolbox / #zen-appcontent-navbar-wrapper, only
+ *              while compact mode floats them over the page
  *   overlay  → #urlbar[breakout-extend]          (it floats over the page, so
  *              the page is what it frosts)
  *   internal → browser[trance-internal-page]     (opt-in, and not a chrome
@@ -731,105 +729,43 @@
 
 /* ── Blur ───────────────────────────────────────────────────────────────────
  *
- * One declaration block per region, each gated on its own attribute plus the
+ * One declaration block per surface, each gated on its own condition plus the
  * shared visibility attribute.
  *
- * ── What this gate used to be, and why it is gone ─────────────────────────
+ * ── Where the blur a person actually sees comes from ─────────────────────
  *
- * Until Firefox 156 this whole section was also gated on the window *not*
- * being translucent in its own right — macOS vibrancy, Windows Mica, a
- * transparent GTK window. The reason was real and measured: a
- * `backdrop-filter` there established a backdrop root, snapshotted the region
- * behind the element, and found nothing in it, because the desktop showing
- * through a transparent window is not something Gecko painted. Filtering that
- * and compositing the result replaced the operating system's frost with a flat
- * black rectangle. With `backdrop-filter` on `#navigator-toolbox` the sidebar
- * rendered solid black; with the identical translucency and no
- * `backdrop-filter` it rendered as glass.
+ * Not from here. The window is transparent, and what shows through it is the
+ * desktop; a `backdrop-filter` can only read what Gecko painted, and the
+ * desktop is not something Gecko painted. On macOS the radius therefore goes
+ * to the window server instead — `TranceMaterial` publishes
+ * `trance.surface.blur.radius` as `zen.widget.macos.window-blur-radius`, and
+ * the widget blurs the window's background by exactly that much (ADR-099).
  *
- * That is no longer how WebRender resolves a backdrop. Zen's gh-15513 replaced
- * `allow_backdrop_to_work_on_transparency.patch` with
- * `backdrop_filter_reads_web_content.patch`, which threads
- * `backdrop_reads_lower_slices` through the tiled command buffer so a
- * backdrop-filter on a chrome surface reads back the slices *below* it — the
- * web content — instead of only its own; and
- * `gfx.webrender.opaque-backdrop-fallback` resolves what is left as opaque
- * rather than as transparent black. Upstream then applied the conclusion to
- * its own sheets: `zen-compact-mode.css` and `zen-omnibox.css` now carry
- * `backdrop-filter` with no platform term at all, only
- * `:not(:-moz-window-inactive)`.
+ * ── Why the sidebar, splitter and toolbar regions are gone ────────────────
  *
- * So the premise the gate was built on is false in this tree, and keeping it
- * cost the one thing a gate should never cost: `trance.surface.blur.radius`
- * had no consumer in Trance's own default configuration, which is macOS with
- * vibrancy on. The master blur knob read that as "inert" and could not be
- * moved at all. `TranceTheme#blurHasConsumer` is the same question in
- * JavaScript and loses the same term.
+ * ADR-082 moved the blur onto `#navigator-toolbox`, the splitter and
+ * `#zen-appcontent-navbar-wrapper`, on the ground that they sit over the
+ * texture and the gradient. They do, and that is all they ever blurred: the
+ * chrome's own texture, which has its own blur slider. Everything else behind
+ * them is the transparent window, which `gfx.webrender.opaque-backdrop-fallback`
+ * resolves as *opaque* — so each region painted a pale slab where the desktop
+ * should have shown through, with a hard edge at the region's border. That is
+ * the "white floating backgrounds on the sidebar and toolbar", and it happened
+ * at 0px as much as at 60px, because `saturate()` keeps the backdrop pass alive
+ * at any radius.
  *
- * What survives is the part that was never about the platform: a person who
- * has asked for reduced transparency — or turned Trance transparency off —
- * is asking for fewer of these passes, not more, and `flat` opts out of blur
- * even where it works. The budget is still three regions (ADR-019).
- *
- * The other half of the "blur does nothing" report was a plain bug:
- * `trance-surface-visible` was never set at startup, because `TranceSurfaces`
- * only listened for `focus` and a window that is already focused when the
- * feature initialises never fires one. Every rule below was dead for the whole
- * session. See `TranceSurfaces#observeVisibility`.
+ * What is left is every surface that floats over something Gecko *did* paint:
+ * the extended address bar and compact mode's floating sidebar and toolbar
+ * over the page, and the browser's own pages over the chrome. Those read a real
+ * backdrop, so the radius is a real control there too. Still at most three at
+ * once and never nested (ADR-019), and none at all at idle in the default
+ * layout.
  */
 
 @media (prefers-reduced-transparency: no-preference) {
   :root[trance="true"][trance-surface-transparent="true"][trance-surface-visible="true"] {
-    /* ── Why the regions, and not `#zen-main-app-wrapper` ──────────────────
-     *
-     * The surface used to be one declaration on the wrapper, on the grounds
-     * that it spans the sidebar, the toolbar and the space around the page at
-     * once. It did, and it blurred nothing. A `backdrop-filter` softens what
-     * is painted *behind* its element, and everything this sheet paints — the
-     * workspace gradient, the texture on `::before`, the sheen — is painted
-     * by the wrapper or inside it. Its backdrop was the window background:
-     * transparent on a translucent window, a flat colour on an opaque one.
-     * Measured on a vibrancy window, the sidebar was byte-identical at 0px and
-     * at 60px, so the radius had no visible reader on any platform, and the
-     * master blur knob was a control with no effect even once it could move.
-     *
-     * One level in, the regions do have something behind them: the texture
-     * and the gradient under the sidebar and the toolbar, and — in compact
-     * mode — the page under the floating sidebar, which is where glass
-     * matters most. With Firefox 156's backdrop patch none of them resolves
-     * to a black slab over native translucency.
-     *
-     * One per region, never nested, which is the budget TRANCE.md §3.3 set
-     * before the surface had been folded into one. */
-    & #navigator-toolbox {
-      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
-    }
-    /* The splitter's six-pixel gutter separates the toolbox from the toolbar
-     * row in sidebar-and-toolbar layout. Keep that exposed strip in the same
-     * frosted boundary so the independently blurred regions do not leave a
-     * sharp unblurred seam. */
-    &:not([zen-single-toolbar="true"]) #zen-sidebar-splitter {
-      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
-    }
-
-    /* The toolbar row above the page, in the sidebar-and-toolbar layout only:
-     * in single-toolbar layout the nav bar lives inside the toolbox, which is
-     * already a surface.
-     *
-     * It steps aside while the address bar is extended. The extended bar is a
-     * descendant of this row, so leaving both on would nest two surfaces —
-     * the one arrangement strictly worse than either alone — and the bar
-     * covers the row while it is open anyway. */
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
-     * One id-matched element, and an attribute the browser already
-     * invalidates on. The alternative is a second attribute mirrored from JS
-     * on every focus and blur of the address bar. */
-    &:not([zen-single-toolbar="true"]) #zen-appcontent-navbar-wrapper:not(:has(#urlbar[breakout-extend])) {
-      backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
-    }
-
-    /* The expanded address bar keeps its own surface: it floats over the page
-     * rather than over the chrome. */
+    /* The expanded address bar floats over the page, so the page is what it
+     * frosts. */
     & #urlbar[breakout-extend] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
     }
@@ -837,7 +773,7 @@
     /* The browser's own pages, frosted rather than merely translucent.
      *
      * This is the surface behind `about:preferences` and friends. It is not a
-     * fourth *chrome* region — it is the same page-transparency feature the
+     * chrome region — it is the same page-transparency feature the
      * internal-pages switch already ships, with the blur that makes a
      * translucent page read as glass instead of as a washed-out slab
      * (ADR-026).
@@ -846,14 +782,38 @@
      * panes of a split view. `[trance-internal-page]` marks every browser
      * showing an `about:` page, background tabs included, and a declaration on
      * each of those is a surface on each of them the moment it is shown — the
-     * budget counts what is declared, not what happens to be visible now.
-     *
-     * It is also mutually exclusive with the edgeless surface in practice: the
-     * page paints over that layer, so the two never sample each other. */
+     * budget counts what is declared, not what happens to be visible now. */
     &[trance-surface-internal-blur="true"]
       .browserSidebarContainer:is(.deck-selected, [zen-split="true"])
       browser[trance-internal-page="true"] {
       backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+    }
+
+    /* Compact mode's floating chrome, and only while it floats: then it is
+     * over the page rather than over the transparent window, which is the one
+     * place a chrome region has a backdrop worth reading. The gates are Zen's
+     * own — the `-moz-pref()` conditions zen-compact-mode.css uses to decide
+     * which of the two floats — so neither region blurs while it is docked. */
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media -moz-pref("zen.view.compact.hide-tabbar") or -moz-pref("zen.view.use-single-toolbar") {
+      &[zen-compact-mode="true"] #navigator-toolbox {
+        backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+      }
+    }
+
+    /* The toolbar row steps aside while the address bar is extended: the
+     * extended bar is its descendant, and nesting two surfaces is the one
+     * arrangement strictly worse than either alone. */
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media -moz-pref("zen.view.compact.hide-toolbar") {
+      /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
+       * One id-matched element, and an attribute the browser already
+       * invalidates on. The alternative is a second attribute mirrored from
+       * JS on every focus and blur of the address bar. */
+      &[zen-compact-mode="true"]:not([zen-single-toolbar="true"])
+        #zen-appcontent-navbar-wrapper:not(:has(#urlbar[breakout-extend])) {
+        backdrop-filter: blur(var(--trance-surface-blur)) saturate(var(--trance-surface-saturate));
+      }
     }
   }
 }

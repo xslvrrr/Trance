@@ -3804,7 +3804,7 @@ only surface was `about:preferences#trance` — two windows away from the colour
 ## ADR-082 — The blur gate was a fact about Gecko, and the fact changed
 
 **Date:** 2026-09-23
-**Status:** Accepted. Amended by ADR-087.
+**Status:** Accepted. Amended by ADR-087; the region blur superseded by ADR-099.
 **Supersedes:** the blur half of ADR-081 and of ADR-040; amends ADR-022 and ADR-065
 
 **Context:**
@@ -4043,7 +4043,7 @@ TRANCE.md §3.1 describes, arriving from upstream.
 ## ADR-087 — The splitter closes the blur seam without changing the surface budget
 
 **Date:** 2026-09-23
-**Status:** Accepted
+**Status:** Accepted. Superseded by ADR-099 (the regions it closed the seam between are gone).
 **Amends:** ADR-082
 
 **Context:**
@@ -4169,7 +4169,7 @@ default.
 ## ADR-091 — Workspace indicators collapse to dots until selected or hovered
 
 **Date:** 2026-09-23
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-101.
 
 **Context:**
 
@@ -4215,7 +4215,7 @@ opacity/transform transitions and the shift token unchanged.
 ## ADR-093 — The app-menu hit box matches adjacent toolbar buttons
 
 **Date:** 2026-09-23
-**Status:** Accepted
+**Status:** Accepted. Amended by ADR-102.
 
 **Context:**
 
@@ -4396,3 +4396,216 @@ ClearURLs' private storage format. ClearURLs has no per-site allowlist either (A
   come back for it.
 - `TranceFirstRun` needs no change beyond its name map: it reads the list from the policy.
 - `scripts/trance-inventory.py check` holds `mods-inventory.json` to six extensions.
+
+---
+
+## ADR-098 — Trance checks GitHub releases and links manual updates
+
+**Date:** 2026-09-26
+**Status:** Accepted. Amends ADR-009 (the updater stays off; a notice is added beside it).
+
+**Context:**
+
+Trance disables the built-in application updater by policy (ADR-009), so nothing in the product told
+anyone that a newer build existed. Releases are published at `xslvrrr/Trance` with bare tags
+(`0.3.0`), and every one so far is marked pre-release. Downloading or installing a build would cross
+the manual-update boundary and need update infrastructure (MAR hosting, signing) Trance does not
+have.
+
+**Decision:**
+
+- `TranceUpdateChecker` (`features/updates/`) is a process-wide module, loaded without a `global`
+  option for the reason `TranceGlobalPrefs.mjs` gives. It fetches
+  `https://api.github.com/repos/xslvrrr/Trance/releases?per_page=20`, ignores drafts, ignores
+  pre-releases when `trance.updates.prereleases` is off, and selects the highest tag newer than
+  `Services.appinfo.version`. The ordering is `TranceUpdateLogic.mjs`: numeric dotted components, an
+  optional leading `v`, and a pre-release suffix sorting below the same final version. It is pure,
+  and `src/zen/trance/tests/updates.test.mjs` covers it.
+- One request per six hours for the whole process (`trance.updates.last-check`), with concurrent
+  asks folded into one in-flight promise. Failures go to `TranceLog` and never to the UI.
+- `TranceUpdates` is the per-window feature. It asks once when the window first goes idle and again
+  whenever the window comes back to the front. It uses no timer. An hourly wall-clock tick was the
+  first draft, and TRANCE.md §12.1 budgets zero Trance timers at idle. An hourly wake-up that only
+  finds the six hours have not passed is exactly what that budget exists to refuse.
+- The prompt is the window-wide notification bar (`gNotificationBox`), shown once per version in the
+  most recent browser window: "Trance 0.4.0 is available (pre-release)". **Download** opens the
+  release page in a tab, **Skip this version** writes `trance.updates.skipped`, and closing the bar
+  means "remind me later". Nothing is installed.
+- Automation never reaches the network. Mochitest and Marionette kill the browser on the first
+  non-local connection, so `Cu.isInAutomation`, `MOZ_AUTOMATION` and `marionette.enabled` stop the
+  scheduled asks. The checker's `fetchReleases` injection seam still works there.
+- An **Updates** card in `about:preferences#trance` has the two switches, **Check now** (which
+  bypasses the interval and the skipped tag), and the last result.
+
+**Consequences:**
+
+- Every published release or pre-release is announced without any change to update policy.
+- GitHub's anonymous API limit is 60 requests an hour per address. One request per six hours per
+  browser is far below it, and a refusal is logged like any other failure.
+- A window that is never left and never restarted does not re-check. That is the price of having no
+  timer, and the next launch checks.
+
+---
+
+## ADR-099 — The blur knob is the window's own blur, and the docked chrome regions are gone
+
+**Date:** 2026-09-26
+**Status:** Accepted
+**Supersedes:** the region half of ADR-082 and ADR-087
+
+**Context:**
+
+Two reports, one cause. "The blur knob doesn't really do anything" and "it creates white floating
+backgrounds on the sidebar and toolbar".
+
+The blur a person sees through a transparent Trance window is the desktop's. On macOS Zen puts an
+`NSVisualEffectView` (`ZenWindowMaterialView`) behind the window, and AppKit fixes a material's blur.
+There is no radius to set. `trance.surface.blur.radius` therefore went only to the `backdrop-filter`
+regions ADR-082 and ADR-087 put on `#navigator-toolbox`, `#zen-sidebar-splitter` and
+`#zen-appcontent-navbar-wrapper`, and a `backdrop-filter` reads only what Gecko painted. Behind a
+docked region that is the chrome's own texture and a transparent window. Measured on the dev build,
+the knob softened the texture under the sidebar and left the desktop exactly as NSVisualEffectView
+drew it.
+
+The rest of the backdrop is the transparent window, and `gfx.webrender.opaque-backdrop-fallback`
+resolves it as opaque. Each region painted a pale slab with a hard edge at its border. That happened
+at 0px as much as at 60px, because `saturate(1.3)` keeps the backdrop pass alive at any radius.
+
+**Decision:**
+
+- The window server blurs a window's background by a radius (`CGSSetWindowBackgroundBlurRadius`,
+  the call terminals use for the same control). Touchpoint 30 adds `ZenWindowBlurView` to Zen's
+  Cocoa window patch. When `zen.widget.macos.window-blur-radius` is 0 or more,
+  `UpdateWindowMaterial` puts this plain wrapper in place of the material. The wrapper applies the
+  radius, makes the window non-opaque with a clear background, and restores both when it leaves.
+  At -1, the declared default, Zen's material is back exactly as before. The symbol is looked up
+  with `dlsym`, like the Spaces functions already in that file, so a missing symbol means an
+  unblurred window rather than a crash. `SetTransparencyMode` leaves such a window alone.
+  `nsCocoaWindow::Show` re-sends the radius once the window has a window device, and occlusion
+  changes re-send it after a move between Spaces. Low Power Mode sends 0, for the same reason it
+  already stopped the material.
+- `TranceMaterial` holds that pref on the default branch at `trance.surface.blur.radius` on macOS,
+  through `TranceGlobalPrefs`. Releasing the material restores -1. The value is derived state, never
+  a user value, so a session with Trance off gets Zen's material back.
+- The docked sidebar, splitter and toolbar regions lose `backdrop-filter`. What is left is every
+  surface that floats over something Gecko painted: the extended address bar, compact mode's
+  floating sidebar and toolbar (gated on Zen's own `-moz-pref()` conditions for which of them
+  floats), and the opt-in internal-page frost.
+
+**Consequences:**
+
+- Composited on the dev build over the desktop, with the window server's own capture: at 0 the
+  wallpaper shows sharp through the window, at 20 it is visibly softened, at 60 it is a wash. The
+  sidebar and toolbar are the same material as the rest of the window at every radius. Transparency
+  off gives an opaque window, and `trance.surface.enabled=false` puts the pref back to -1.
+- The idle `backdrop-filter` count in the default layout goes from three to zero.
+- The window-server blur is macOS-only. On Windows and Linux the knob still drives the floating
+  surfaces, and Mica and a transparent GTK window keep their fixed platform frost.
+- A private window-server call. It is guarded, it is what the terminals on this machine already use,
+  and it is recorded here so a macOS release that drops it is diagnosed from this entry rather than
+  rediscovered.
+- `browser_trance_surfaces.js`: `test_the_chrome_surface_is_blurred_on_this_platform` asserted the
+  removed regions and is replaced by `test_docked_chrome_is_not_a_backdrop_surface` and
+  `test_the_blur_radius_reaches_the_macos_window`.
+
+---
+
+## ADR-100 — The active tab glow is masked by the tab it lights
+
+**Date:** 2026-09-26
+**Status:** Accepted
+
+**Context:**
+
+The glow was a `::after` on the tab, let out past the tab's box with `overflow: clip` and an
+`overflow-clip-margin`, held inside the list by `overflow: clip` on `#tabbrowser-tabs`, with the
+selected tab raised to `z-index: 2` so its neighbours did not paint over the overflow. The report:
+it "exits the bounds of the tab background, it should be masked within it."
+
+**Decision:**
+
+The glow is a `background-image` layer on the selected tab's own `.tab-background`. Zen gives that
+element `overflow: hidden` and the tab radius, and a background layer is painted inside that border
+box and cut by that radius. It sits over the fill and under the favicon and label. The shape is the
+same dome, anchored at the bottom centre, with radii of half the width and the full height plus
+`--trance-tab-glow-spread`. So the spread still means "how much of the row is lit". Its alpha is the
+colour's (`color-mix`), because a layer has no opacity of its own. The three clipping and stacking
+rules are deleted.
+
+Gecko rejects an explicit `radial-gradient` size whose first radius is a `calc()` unless the
+`ellipse` keyword precedes it, and the whole layer then computes to `none`. The keyword is there on
+purpose.
+
+**Consequences:**
+
+- The glow never reaches a neighbouring row, the pinned separator or the essentials grid, because it
+  cannot leave its own background.
+- The two tests that asserted the escape mechanism by reading the sheet's text are replaced by one
+  that reads the computed layer.
+
+---
+
+## ADR-101 — The workspace rail is tighter, and its hover rise has room
+
+**Date:** 2026-09-26
+**Status:** Accepted
+**Amends:** ADR-091
+
+**Context:**
+
+Zen sizes each space button at 32px on macOS, so the dots of ADR-091 sat 34px apart. The hover
+rise existed, a 140ms transition on the standard curve, but it was not visible as a rise. The rail
+is Zen's `overflow-x: auto` scroller, which clips vertically too, so the lifted button's hover fill
+was cut off flat along its top. The fill looked as if it shrank rather than rose. The standard curve
+put most of the 4px in the first frame or two.
+
+**Decision:**
+
+- In the expanded sidebar each button is `--trance-workspace-button-inline` (22px, the 16px icon
+  with 3px either side) by `--trance-workspace-button-block` (28px), `--trance-workspace-gap` apart.
+  The collapsed rail keeps Zen's 36px column.
+- The rail keeps `--trance-workspace-rise` of padding above its buttons and hands it back with an
+  equal negative margin. The lifted fill stays inside the scrollport and the footer does not grow.
+- The lift is `--trance-dur-base` on the emphasis curve. Zen's own filter, opacity and background
+  fades are restated in the same `transition` list, since the declaration replaces it.
+- A `::after` strip the height of the rise keeps the lifted button hit-testable where it used to be.
+  Without it, a pointer resting near the bottom edge un-hovers the button, the button drops back
+  under the pointer, and the hover restarts.
+
+**Consequences:**
+
+- Four spaces measure 24px apart instead of 34px.
+- `browser_trance_tabstrip.js` gains `test_the_workspace_rise_stays_inside_the_rail`, which fails on
+  the old rail.
+
+---
+
+## ADR-102 — The app-menu mark sizes the glyph, not the padded box
+
+**Date:** 2026-09-26
+**Status:** Accepted
+**Amends:** ADR-093
+
+**Context:**
+
+ADR-093 constrained `#PanelUI-menu-button` to 31×29px and recorded the icon as "already the intended
+29×29px". The button is badged, though. Its `<image>` sits inside a `.toolbarbutton-badge-stack`,
+and on a badged button the stack carries the inner padding and the hover fill. Trance gave the image
+the unbadged size, glyph plus padding, with that padding on the image too. The stack wrapped it in
+its own padding again and came out at 41×41px, hanging past both edges of the 31×29 button. That was
+the oversized hover fill and click target, and constraining the button could not reach it.
+
+**Decision:**
+
+The image is `--zen-toolbar-button-size` square with no padding, and the stack pads it the way it
+pads every badged toolbar button. `--trance-logo-mask-scale` goes from 100% to 82%. The mark is
+traced edge to edge, while the browser's glyphs carry a unit of air on a 16-unit grid, so at 100% it
+was a size larger than its neighbours.
+
+**Consequences:**
+
+- Measured on the dev build: the stack is 29×29, the same as the reload button's hover box. The
+  glyph box is 17×17 and the mark's ink is about 14px.
+- `browser_trance_chrome.js`: the mark test asserted `about-logo.svg` and `mask-size: contain`,
+  neither of them true since ADR-050, and now asserts the shipped mark. A new
+  `test_the_app_menu_hover_box_matches_its_neighbours` fails on the 41px stack.

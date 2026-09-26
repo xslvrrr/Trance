@@ -137,7 +137,8 @@ It is deliberately not a "theme pack". It is a browser.
   workflows are also retargeted to `--brand trance` (for example
   `.github/workflows/macos-release-build.yml:81-82`); the matrix has not been measured here.
 - No signing certificates or notarisation credentials exist, and no update server is configured
-  (updates are off, ADR-009).
+  (updates are off, ADR-009). Trance does *notice* updates: it checks the GitHub releases for
+  `xslvrrr/Trance`, pre-releases included, and links to the release page (ADR-098).
 - `npm run lc` currently fails on **524** paths. Every failure is inherited Zen/Firefox content:
   copied mochitest suites under `src/zen/tests/mochitests/**`, Gecko declaration stubs under
   `src/zen/@types/lib.gecko.*.d.ts`, and binary assets including `welcome-background.mp4`.
@@ -1856,6 +1857,9 @@ tell which of them were decisions and which were defects.
       unsigned, non-notarised DMG (`.github/workflows/macos-universal-release-build.yml:162-180`).
 - [x] Update server / `updateHostname`, or explicitly disabled auto-update via policy — disabled,
       in `src/zen/trance/distribution/policies.json` (Phase 9)
+- [x] Update *detection* without an updater — `TranceUpdates`/`TranceUpdateChecker` check GitHub
+      releases (pre-releases included by default) at most every six hours, with no timer, and show a
+      notification bar that links to the release page. Nothing is downloaded or installed (ADR-098)
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
@@ -1883,6 +1887,13 @@ tell which of them were decisions and which were defects.
   the splitter blur seam, the eight-page onboarding, the theme-picker ring and saved-theme pages,
   Zen's native Library switched on, workspace dots, and the macOS panel exit fade
   (`docs/trance/release-0.3.0.md`). Same build shape as 0.2.0.
+- **Unreleased (2026-09-26), after 0.3.0:** the blur knob drives the macOS window's own
+  background blur through the window server, and the docked sidebar, splitter and toolbar lose the
+  `backdrop-filter` regions that painted pale slabs over the transparent window (ADR-099, touchpoint
+  30, a full `npm run build`). The active-tab glow is masked by the tab's own background
+  (ADR-100). The workspace rail is tighter and its hover rise is no longer cropped (ADR-101). The
+  app-menu mark's hover box is the same 29px as its neighbours' (ADR-102). GitHub release
+  detection lands (ADR-098).
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
@@ -2126,7 +2137,8 @@ Decide these with the user; record answers in `docs/trance/DECISIONS.md`.
    **Answered (ADR-006):** one `trance` brand. A second channel is a cheap later addition.
 3. **Updates.** Run an update server (`updateHostname`), use GitHub releases + a MAR feed, or
    disable auto-update and ship manual downloads?
-   *Provisionally off (ADR-009). Must be decided for real in Phase 12.*
+   *Provisionally off (ADR-009). Must be decided for real in Phase 12.* Detection without
+   installation is in place (ADR-098); the updater itself is still off.
 4. **Signing.** Apple Developer ID for notarisation? Windows code-signing cert? Without these,
    macOS and Windows installs need Gatekeeper/SmartScreen overrides.
 5. **Zen's native mods system** — keep enabled, keep but point at a Trance store, or remove?

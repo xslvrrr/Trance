@@ -231,6 +231,19 @@ const TRANCE_CUSTOM_CONTROL_PREFS = {
     readout: "tranceImportSource",
     action: "tranceImportForget",
   },
+  // The update checker's two pieces of state (ADR-098). Neither is a setting:
+  // `last-check` is when the six-hour interval started and `skipped` is the tag
+  // somebody declined from the notification bar. Both are shown by the Updates
+  // card's last-result line, and "Check now" acts on both — it ignores the
+  // interval and the skipped tag.
+  "trance.updates.last-check": {
+    readout: "tranceUpdatesStatus",
+    action: "tranceUpdatesCheckNow",
+  },
+  "trance.updates.skipped": {
+    readout: "tranceUpdatesStatus",
+    action: "tranceUpdatesCheckNow",
+  },
 };
 
 add_task(async function test_prefs_with_a_custom_control_have_one() {

@@ -185,6 +185,12 @@ Preferences.addAll([
   { id: "trance.firstrun.enabled", type: "bool", default: true },
   { id: "trance.firstrun.completed", type: "bool", default: false },
 
+  // Updates (TRANCE.md §13 Phase 12)
+  { id: "trance.updates.enabled", type: "bool", default: true },
+  { id: "trance.updates.prereleases", type: "bool", default: true },
+  { id: "trance.updates.skipped", type: "string", default: "" },
+  { id: "trance.updates.last-check", type: "int", default: 0 },
+
   // Onboarding (TRANCE.md §13 Phase 13)
   //
   // `completed` is state, surfaced as a button for the same reason
@@ -366,6 +372,7 @@ var gTranceSettings = {
 
     this.initSavedThemes();
     this.initFirstRun();
+    this.initUpdates();
     this.initOnboarding();
     this.initModEngine();
     this.initImport();
@@ -544,6 +551,61 @@ var gTranceSettings = {
     });
     preference.on("change", show);
     show();
+  },
+
+  initUpdates() {
+    const status = document.getElementById("tranceUpdatesStatus");
+    const button = document.getElementById("tranceUpdatesCheckNow");
+    const enabled = Preferences.get("trance.updates.enabled");
+    if (!status || !button || !enabled) {
+      return;
+    }
+    const showResult = result => {
+      switch (result?.status) {
+        case "available":
+          status.value = `${result.version} is available`;
+          break;
+        case "current":
+          status.value = `Up to date — ${result.version}`;
+          break;
+        case "skipped":
+          status.value = `Skipped — ${result.version}`;
+          break;
+        case "error":
+          status.value = "Could not reach GitHub";
+          break;
+        case "disabled":
+          status.value = "Updates are off";
+          break;
+        default:
+          status.value = "Not checked yet";
+      }
+    };
+    const refresh = () => {
+      button.disabled = !enabled.value;
+      if (!enabled.value) {
+        status.value = "Updates are off";
+        return;
+      }
+      const { TranceUpdateChecker } = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
+      );
+      showResult(TranceUpdateChecker.latestResult);
+    };
+    button.addEventListener("command", async () => {
+      button.disabled = true;
+      status.value = "Checking GitHub…";
+      try {
+        const { TranceUpdateChecker } = ChromeUtils.importESModule(
+          "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
+        );
+        showResult(await TranceUpdateChecker.check({ force: true }));
+      } finally {
+        button.disabled = !enabled.value;
+      }
+    });
+    enabled.on("change", refresh);
+    refresh();
   },
 
   /**

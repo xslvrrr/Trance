@@ -139,14 +139,13 @@
   <html:div class="trance-card-header">
     <label><html:h2>Frosted surfaces</html:h2></label>
     <description>
-      One switch for the frost, and it frosts two regions: the sidebar, and
-      the toolbar above the page when that toolbar is separate from the
-      sidebar. Each blurs what lies behind it — the space's gradient, and in
-      compact mode the page under the floating sidebar. The expanded address
-      bar is frosted on its own and takes the toolbar's place while it is
-      open, so two panes of glass never overlap. Blur is expensive, so that is
-      all the chrome spends, and it is dropped entirely when the window is not
-      visible.
+      One switch for the frost. The blur radius is the blur of whatever is
+      behind the window — on macOS the window itself is blurred by exactly
+      this much, and 0 is clear glass. The expanded address bar, compact
+      mode's floating sidebar and toolbar, and the browser's own pages are
+      frosted at the same radius over the page beneath them. Blur is
+      expensive, so the in-browser surfaces are dropped entirely when the
+      window is not visible.
     </description>
   </html:div>
 
@@ -510,9 +509,8 @@
   <html:div class="trance-card-header">
     <label><html:h2>Active tab glow</html:h2></label>
     <description>
-      A soft half-oval behind the tab you are on, reaching a little past its top
-      and sides. Off by default: it is the one thing in the sidebar that paints
-      outside a tab's own box.
+      A soft half-oval of light rising from the bottom of the tab you are on,
+      inside its own rounded background. Off by default.
     </description>
   </html:div>
 
@@ -541,7 +539,7 @@
   <html:div class="trance-row trance-row-child">
     <html:div class="trance-row-text">
       <label id="tranceGlowSpreadLabel" control="tranceGlowSpread">Reach</label>
-      <description>How far past the tab it goes, at the top and the two sides.</description>
+      <description>How much of the tab it lights: larger values carry it further up and out towards the sides.</description>
     </html:div>
     <html:div class="trance-row-control">
       <html:input id="tranceGlowSpread"
@@ -1221,8 +1219,8 @@
         <html:strong>Frosting → Surface opacity</html:strong> and
         <html:strong>Blur radius</html:strong> on this page, so a theme can be
         taken from flat and solid to fully transparent without leaving the
-        panel. The blur knob goes inert where the operating system produces the
-        frost itself, and says so.
+        panel. The blur knob is the window's own blur on macOS, so turning it
+        changes what you see of the desktop behind the browser.
       </description>
     </html:div>
     <html:div class="trance-row-control">
@@ -1421,6 +1419,52 @@
           <menuitem value="x86_64" label="Intel"/>
         </menupopup>
       </menulist>
+    </html:div>
+  </html:div>
+</groupbox>
+
+<hbox id="tranceUpdatesCategory" class="subcategory" hidden="true" data-category="paneTrance">
+  <html:h1>Updates</html:h1>
+</hbox>
+
+<groupbox id="tranceUpdatesGroup" data-category="paneTrance" hidden="true" class="trance-card">
+  <html:div class="trance-card-header">
+    <label><html:h2>Updates</html:h2></label>
+    <description>
+      Check the Trance GitHub release page for newer stable or pre-release
+      builds. Trance never installs an update; Download opens the release page
+      so you can choose and install it yourself.
+    </description>
+  </html:div>
+
+  <html:div class="trance-row">
+    <html:div class="trance-row-text">
+      <label control="tranceUpdatesEnabled">Check for Trance updates</label>
+      <description>Checks once the browser has settled after startup, and again when you come back to the window — never more often than every six hours.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceUpdatesEnabled" class="trance-switch" preference="trance.updates.enabled"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label control="tranceUpdatesPrereleases">Include pre-releases</label>
+      <description>Include published pre-release builds when looking for a newer version.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <checkbox id="tranceUpdatesPrereleases" class="trance-switch" preference="trance.updates.prereleases"/>
+    </html:div>
+  </html:div>
+
+  <html:div class="trance-row trance-row-child">
+    <html:div class="trance-row-text">
+      <label id="tranceUpdatesStatusLabel">Last check</label>
+      <description>The most recent result. Check now bypasses the six-hour wait and any skipped-version choice.</description>
+    </html:div>
+    <html:div class="trance-row-control">
+      <label id="tranceUpdatesStatus" class="trance-range-value"/>
+      <button id="tranceUpdatesCheckNow" label="Check now"/>
     </html:div>
   </html:div>
 </groupbox>

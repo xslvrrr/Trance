@@ -558,14 +558,19 @@
    * The mark the chrome uses now is `trance-icons/trance-mark.svg`, which
    * `scripts/trance-branding.py` traces with no margin at all and no plate
    * behind it — a 24-unit viewBox the glyph fills edge to edge, in
-   * `currentColor`. There is nothing left to compensate for, so the scale is
-   * 100% and the mark is exactly the size of the box it is given.
+   * `currentColor`.
+   *
+   * That is exactly why it is not 100%. The browser's own toolbar glyphs are
+   * drawn on a 16-unit grid with a unit of air on every side, so their ink is
+   * about 14 of the 17px box they are given; an edge-to-edge mark at 100% was
+   * the one glyph on the toolbar a size larger than its neighbours (ADR-102).
+   * 82% puts its ink at the same ~14px.
    *
    * Kept as a token rather than inlined because it is a fact about the
    * *artwork*: redraw the mark with margin and this is the one place that has
    * to change, and the rule that consumes it says why it exists
    * (trance-chrome.css). */
-  --trance-logo-mask-scale: 100%;
+  --trance-logo-mask-scale: 82%;
 
   /* Chrome scrollbars sit on frosted surfaces now, where Firefox's default
    * track reads as an opaque stripe. Thumb only, no custom-drawn scrollbar. */
@@ -706,7 +711,7 @@
    * (GPL-3.0 — TRANCE.md §7.2). Both are written at runtime by TranceTokens
    * from `trance.tabstrip.glow.spread` / `.opacity`; the mode itself is an
    * attribute, because a mode that resolved to a value would still cost the
-   * pseudo-element it draws into.
+   * gradient layer it paints into the selected tab's background (ADR-100).
    *
    * `--trance-tab-glow-color` is per-element state rather than a token: in
    * `icon` mode TranceTabStrip samples the selected tab's favicon once and
@@ -718,6 +723,23 @@
   --trance-tab-glow-spread: 6px;
   --trance-tab-glow-alpha: 0.8;
   --trance-tab-glow-color: var(--trance-accent-vivid);
+
+  /* ---- Workspace rail ------------------------------------------------------ */
+  /*
+   * The sidebar's space switcher, in the expanded sidebar (ADR-091, ADR-101).
+   * Zen sizes each button at 32px square on macOS, so four spaces were four
+   * dots 34px apart — a rail wider than the thing it indicates. 22px is the
+   * 16px space icon with 3px either side, which is the smallest box its hover
+   * fill can wrap without touching the glyph.
+   *
+   * The rise is how far a hovered button lifts; its neighbours lift half as
+   * far. It is also the room the rail keeps above itself, because the rail
+   * scrolls sideways and a sideways scroller clips vertically too.
+   */
+  --trance-workspace-button-inline: 22px;
+  --trance-workspace-button-block: 28px;
+  --trance-workspace-gap: var(--trance-gap-xs);
+  --trance-workspace-rise: var(--trance-gap-sm);
 
   /* The collapsed icon rail. All five are written at runtime by TranceTokens
    * from `trance.tabstrip.rail.*`; the values here are the fallbacks that apply

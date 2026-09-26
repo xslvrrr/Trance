@@ -15,13 +15,12 @@ const SURFACE_SHEET =
   "chrome://browser/content/trance-styles/trance-surfaces.css";
 
 /**
- * Every element that may carry a `backdrop-filter`: one per region.
- *
- * The frost was briefly one layer on `#zen-main-app-wrapper` (ADR-040). That
- * layer's backdrop is the empty window — everything it could soften is its own
- * descendant — so it blurred nothing at any radius (ADR-082). The regions sit
- * over the texture and the gradient, and the expanded address bar floats over
- * the page.
+ * Every element that has ever carried a Trance `backdrop-filter` in the
+ * chrome. The docked sidebar and toolbar no longer do (ADR-099): over a
+ * transparent window their backdrop resolved as an opaque fallback and painted
+ * pale slabs. They stay in this list so the budget and the nesting checks keep
+ * covering them — compact mode still frosts them while they float over the
+ * page — and the expanded address bar floats over the page by construction.
  */
 const SURFACES = [
   { id: "sidebar", selector: "#navigator-toolbox" },
@@ -149,56 +148,79 @@ add_task(async function test_blur_budget_is_respected() {
   }
 });
 
-add_task(async function test_the_chrome_surface_is_blurred_on_this_platform() {
-  // The Blur section used to be gated on the window *not* being translucent in
-  // its own right: a `backdrop-filter` there snapshotted an empty backdrop and
-  // painted a flat rectangle over the operating system's frost. Firefox 156
-  // and Zen's gh-15513 thread `backdrop_reads_lower_slices` through the tiled
-  // command buffer, so a chrome backdrop-filter reads the web content beneath
-  // it, and upstream's own compact-mode and omnibox sheets now carry one with
-  // no platform term.
-  //
-  // The regression this guards is the one that made the whole chain visible:
-  // with that gate in place `trance.surface.blur.radius` had no consumer in
-  // Trance's default configuration — macOS with vibrancy on — so the picker's
-  // knob was permanently disabled and the settings row was not rendered.
-  //
-  // `prefers-reduced-transparency` is the one condition that still removes the
-  // pass, and it is a platform setting rather than a pref, so it is honoured
-  // rather than driven.
-  //
-  // The radius has to reach a region, not the wrapper: the wrapper's backdrop
-  // is the empty window, so a surface there blurred nothing at any radius.
+add_task(async function test_docked_chrome_is_not_a_backdrop_surface() {
+  // The regression this guards is "white floating backgrounds on the sidebar
+  // and toolbar". The sidebar, the splitter and the toolbar row each carried
+  // `backdrop-filter` (ADR-082, ADR-087), and behind a docked region there is
+  // nothing Gecko painted but the chrome's own texture — the rest is the
+  // transparent window, which WebRender's opaque-backdrop fallback resolves as
+  // opaque. Each region therefore painted a pale slab with a hard edge, at any
+  // radius, 0 included, because `saturate()` keeps the pass alive.
   await SimpleTest.promiseFocus(window);
-  const toolbox = document.getElementById("navigator-toolbox");
-  ok(toolbox, "the sidebar region exists");
-  if (
-    !toolbox ||
-    window.matchMedia("(prefers-reduced-transparency: reduce)").matches
-  ) {
-    ok(true, "no chrome surface to blur on this configuration");
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.surface.blur.radius", 37]],
+  });
+  for (const selector of [
+    "#navigator-toolbox",
+    "#zen-sidebar-splitter",
+    "#zen-appcontent-navbar-wrapper",
+  ]) {
+    const element = document.querySelector(selector);
+    if (!element) {
+      continue;
+    }
+    const value = window.getComputedStyle(element).backdropFilter;
+    ok(
+      !value || value === "none",
+      `${selector} is not a backdrop surface while docked (${value})`
+    );
+  }
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_the_blur_radius_reaches_the_macos_window() {
+  // The blur a person sees through a transparent window is the desktop's, and
+  // no stylesheet can reach it. On macOS the material publishes the radius to
+  // the widget, which blurs the window's background by exactly that much
+  // (ZenWindowBlurView, ADR-099); -1 hands the window back to Zen's material.
+  if (AppConstants.platform !== "macosx") {
+    ok(true, "the window-server radius is a macOS mechanism");
     return;
   }
+  const PREF = "zen.widget.macos.window-blur-radius";
+  const defaults = Services.prefs.getDefaultBranch("");
 
   await SpecialPowers.pushPrefEnv({
     set: [["trance.surface.blur.radius", 37]],
   });
+  is(
+    defaults.getIntPref(PREF),
+    37,
+    "the window is blurred at the knob's radius"
+  );
+  await SpecialPowers.pushPrefEnv({
+    set: [["trance.surface.blur.radius", 0]],
+  });
+  is(defaults.getIntPref(PREF), 0, "and 0 is clear glass, not Zen's material");
   ok(
-    window.getComputedStyle(toolbox).backdropFilter.includes("blur(37px)"),
-    "the sidebar carries Gecko's blur at the configured radius, whatever the " +
-      "window is made of"
+    !Services.prefs.prefHasUserValue(PREF),
+    "the radius is derived state on the default branch, never a user value"
   );
   await SpecialPowers.popPrefEnv();
+  await SpecialPowers.popPrefEnv();
 
-  // The same question the picker's knob asks, so the two cannot disagree about
-  // whether the radius has a reader.
   const original = Services.prefs.getBoolPref("trance.surface.enabled", true);
   try {
     Services.prefs.setBoolPref("trance.surface.enabled", false);
     await window.promiseDocumentFlushed(() => {});
+    is(
+      defaults.getIntPref(PREF),
+      -1,
+      "switching the surface off gives the window back to Zen's material"
+    );
     ok(
       !document.documentElement.hasAttribute("trance-surface-visible"),
-      "and the switch that does remove it still removes it"
+      "and removes the in-browser frost with it"
     );
   } finally {
     Services.prefs.setBoolPref("trance.surface.enabled", original);

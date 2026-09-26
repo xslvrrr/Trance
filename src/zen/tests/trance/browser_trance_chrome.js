@@ -293,15 +293,8 @@ add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
   // itself, and Trance may not answer an !important with one of its own
   // (TRANCE.md §6.2 rule 1). It does not have to: the `<image
   // class="toolbarbutton-icon">` inside is what paints the glyph, and a normal
-  // declaration on the child beats a value it merely inherited.
-  //
-  // It is a mask rather than a `list-style-image`, and that is the fix for "the
-  // logo is tiny". `about-logo.svg` is a 1024×1024 branding canvas with the
-  // mark inset well inside it, so as a list-style-image the whole canvas scales
-  // into the 16px box and the mark lands at whatever fraction of 1024 it
-  // occupies. `mask-size: contain` fits the *drawing* to the box instead, and
-  // `background-color: currentColor` makes it the same colour as every glyph
-  // beside it in either theme.
+  // declaration on the child beats a value it merely inherited. The mark is a
+  // mask in `currentColor`, so it is the same ink as every glyph beside it.
   const button = document.getElementById("PanelUI-menu-button");
   ok(button, "#PanelUI-menu-button exists");
   if (!button) {
@@ -316,29 +309,17 @@ add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
   const mask = () => style().maskImage;
 
   ok(
-    mask().includes("about-logo.svg"),
+    mask().includes("trance-mark.svg"),
     `the app menu wears the Trance mark by default (${mask()})`
   );
-  is(
-    style().maskSize,
-    "contain",
-    "sized to the icon box rather than to the artwork's own canvas"
-  );
-  // And the icon box has to be given a size, which is the whole of "the mark
-  // disappeared". `.toolbarbutton-icon` is a XUL `<image>`, and a XUL `<image>`
-  // with no image has no intrinsic size — so `list-style-image: none` collapsed
-  // it to 0×0 and the mask painted a zero-sized mark. Nothing about the rule
-  // was wrong; it was drawing correctly into no space.
+  // A XUL `<image>` with no image has no intrinsic size, so the box has to be
+  // given one or the mask paints into 0×0.
   Assert.greater(
     parseFloat(style().width),
     0,
     `the icon box has a size of its own to draw into (${style().width})`
   );
-  is(
-    style().width,
-    style().height,
-    "and it is square, so `contain` fits the artwork rather than letterboxing it"
-  );
+  is(style().width, style().height, "and it is square");
   is(
     style().backgroundColor,
     style().color,
@@ -349,12 +330,51 @@ add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
     set: [["trance.chrome.logo-menu-button", false]],
   });
   ok(
-    !mask().includes("about-logo.svg"),
+    !mask().includes("trance-mark.svg"),
     "and opting out gives the browser's own glyph straight back"
   );
   await SpecialPowers.popPrefEnv();
 
-  ok(mask().includes("about-logo.svg"), "reversibly");
+  ok(mask().includes("trance-mark.svg"), "reversibly");
+});
+
+add_task(async function test_the_app_menu_hover_box_matches_its_neighbours() {
+  // The regression: the mark's image was given an unbadged button's padded
+  // size inside a *badged* button's stack, which pads it again. The stack —
+  // the element a toolbar button paints its hover fill on and is hit-tested
+  // through — came out 41px square around a 31×29 button (ADR-102).
+  const menuStack = document
+    .getElementById("PanelUI-menu-button")
+    ?.querySelector(".toolbarbutton-badge-stack");
+  // The reload button is on the toolbar in every layout; the overflow button
+  // is hidden whenever nothing overflows.
+  const reloadIcon = document
+    .getElementById("reload-button")
+    ?.querySelector(".toolbarbutton-icon");
+  ok(menuStack && reloadIcon, "both hover boxes exist");
+  if (!menuStack || !reloadIcon) {
+    return;
+  }
+  const menu = menuStack.getBoundingClientRect();
+  const neighbour = reloadIcon.getBoundingClientRect();
+  Assert.lessOrEqual(
+    Math.abs(menu.width - neighbour.width),
+    1,
+    `the app menu's hover box is as wide as its neighbour's (${menu.width} vs ${neighbour.width})`
+  );
+  Assert.lessOrEqual(
+    Math.abs(menu.height - neighbour.height),
+    1,
+    `and as tall (${menu.height} vs ${neighbour.height})`
+  );
+  const buttonBox = document
+    .getElementById("PanelUI-menu-button")
+    .getBoundingClientRect();
+  Assert.lessOrEqual(
+    menu.width,
+    buttonBox.width,
+    "and it fits inside its own button rather than spilling past it"
+  );
 });
 
 add_task(async function test_the_sidebar_is_laid_out_expanded() {

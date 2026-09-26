@@ -211,117 +211,70 @@
    *
    * Nebula's, reimplemented from its description and screenshots — the mod is
    * GPL-3.0 and none of its rules may be copied (TRANCE.md §7.2). Opt in, and
-   * absent entirely at `none`: the attribute is not set, so neither of the two
-   * blocks below matches and the pseudo-element is never generated.
+   * absent entirely at `none`: the attribute is not set, so neither rule below
+   * matches and no layer is painted.
    *
-   * ── Why it is drawn on the tab and not on `.tab-background` ───────────────
+   * ── Inside the tab, not around it (ADR-100) ───────────────────────────────
    *
-   * Zen declares `overflow: hidden` on `.tab-background` (vertical-tabs.css), so
-   * a glow drawn there is clipped to exactly the box it is supposed to escape.
-   * The tab becomes an `overflow: clip` box with an `overflow-clip-margin`,
-   * which is the same clipping with a dial on it — so the glow goes on the tab
-   * and the dial is opened exactly far enough to let it out.
+   * It used to be a pseudo-element on the tab, let out past the tab's own box
+   * with an `overflow-clip-margin` and held inside the list by an
+   * `overflow: clip` on the tab container, with the selected tab raised over
+   * its neighbours so the part that reached them was not painted over. Three
+   * rules to let a glow escape a box, and the result was a light that did not
+   * belong to any shape on screen: it spilled past the selected row's rounded
+   * background into the rows around it.
    *
-   * `z-index: -1` and no stacking context of Trance's own: the tab is already
-   * `position: relative` (Zen), so the pseudo-element lands behind the tab's
-   * in-flow content — the fill, the favicon and the label — and in front of the
-   * chrome behind it, which is where a glow belongs. Nothing else in the tab
-   * needs a stacking order for that to hold.
+   * Now it is a background layer on `.tab-background` itself — the element
+   * Zen gives the selected row's rounded fill, with `overflow: hidden` and the
+   * tab radius. A background layer is painted inside that border box and cut
+   * by that radius, so the glow is masked by exactly the shape it lights, with
+   * no clipping rule of Trance's own and no stacking order to arrange. It sits
+   * over the fill and under the favicon and label, which is where a glow
+   * inside a surface belongs.
    *
-   * ── Two things that were wrong about where it landed ──────────────────────
+   * ── The shape ─────────────────────────────────────────────────────────────
    *
-   *   1. It escaped the tab strip. The tab's `overflow-clip-margin` is opened
-   *      to the spread so the glow can leave the tab's own box, and there
-   *      was nothing further out to stop it: on a selected tab near the top or
-   *      the bottom of the list the glow spilled over the essentials grid, over
-   *      the pinned separator, and out of the sidebar entirely. `overflow: clip`
-   *      on the tab container is the outer bound — the glow may leave its tab,
-   *      it may not leave the list. `overflow-clip-margin` there is zero on
-   *      purpose: the container *is* the boundary being asked for.
-   *   2. It went under the neighbouring rows. Every tab is its own
-   *      `position: relative` box at the same stacking order, so a glow drawn
-   *      at `z-index: -1` inside tab N is painted before tab N+1's background
-   *      and the part of it that reaches the row below was covered by that
-   *      row. Raising the *tab* — not the pseudo-element — fixes it in the only
-   *      place it can be fixed: the two boxes are siblings, so the order between
-   *      them is decided between them, and the pseudo-element keeps its
-   *      `z-index: -1` inside its own tab so it stays behind its own label.
-   */
+   * The same dome it always was — anchored at the bottom centre, reaching
+   * `--trance-tab-glow-spread` past the top and both sides — now cropped by the
+   * tab instead of drawn beyond it. The ellipse's radii are the tab's half
+   * width and full height plus the spread, which is where the old dome's edge
+   * was, so a larger spread still means more of the row is lit and 0 lights it
+   * to its own edges and no further. The `ellipse` keyword is not optional:
+   * Gecko rejects an explicit size whose first radius is a `calc()` without
+   * it, and the whole layer then computes to `none`.
+   *
+   * `--trance-tab-glow-alpha` is the colour's alpha rather than an `opacity`,
+   * because a layer has no opacity of its own and the fill under it must stay
+   * exactly as it is. */
 
-  &:is([trance-tabstrip-glow="theme"], [trance-tabstrip-glow="icon"]) {
-    & #tabbrowser-tabs {
-      overflow: clip;
-      overflow-clip-margin: 0;
-    }
-
-    /* trance-specificity: the toolbox and the tab container, both by id. Zen's
-       Firefox 156 sync added `:is(#navigator-toolbox, …)[zen-sidebar-expanded]
-       #tabbrowser-tabs .tabbrowser-tab { overflow: visible }` — two ids — and
-       a rule without them loses to it the moment the sidebar is expanded,
-       which put the glow back inside the selected row. Naming the same two
-       ids is matching Zen's selector, not outbidding it: Trance's root
-       attributes are what decide between them. */
-    & #navigator-toolbox #tabbrowser-tabs .tabbrowser-tab[visuallyselected] {
-      /* The clip margin only works on a clipping box. Zen does not declare
-         one on tabs, so the old margin was inert and the glow stayed inside
-         the selected row. */
-      overflow: clip;
-      overflow-clip-margin: var(--trance-tab-glow-spread);
-      /* Above its neighbours, so the part of the glow that reaches past the
-         row is not painted over by the row it reaches into. */
-      z-index: 2;
-    }
-
-    /* trance-specificity: two attributes on the root, one class and one
-       attribute on the tab. The attribute is the state the whole feature is
-       about, and the class is what separates a tab from the folder rows and
-       group labels that share its container.
-
-       ── Why `::after` and not `::before` ──────────────────────────────────
-
-       zen-folders.css carries `zen-folder > .tab-group-container > tab::before
-       { background: none !important }`. A glow drawn into `::before` is
-       therefore erased on exactly the tabs that live inside a folder, and
-       nowhere else — which is "tab glow does not work in folders" in one
-       declaration, in a sheet that is not this one. Trance may not answer an
-       `!important` with one of its own (TRANCE.md §6.2 rule 1), and it does not
-       need to: `tab::after` is unclaimed by Firefox and by Zen alike, so moving
-       the glow one pseudo-element over gives it back its own surface. */
-    & .tabbrowser-tab[visuallyselected]::after {
-      content: "";
-      position: absolute;
-      z-index: -1;
-      /* Out past the top and the two sides, flush along the bottom: the tab
-         sits on the row below it, and a glow that reached under the tab would
-         read as the gap between two rows lighting up rather than as this row
-         being the active one. */
-      inset: calc(-1 * var(--trance-tab-glow-spread))
-        calc(-1 * var(--trance-tab-glow-spread)) 0;
-      /* A dome rather than a pill: the top corners are half the box wide and
-         the whole box tall, so the outline is one continuous half-ellipse rather
-         than two arcs with a straight run between them. */
-      border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-      opacity: var(--trance-tab-glow-alpha);
-      pointer-events: none;
-    }
-  }
-
-  /* The space's own accent, lifted until it is visible against the chrome —
-     see `--trance-accent-vivid`. The gradient is anchored at the bottom centre
-     so the brightest part of the glow is where the tab is. */
-  &[trance-tabstrip-glow="theme"] .tabbrowser-tab[visuallyselected]::after {
+  /* trance-specificity: the root's glow mode, the selected tab and the path to
+     its own fill. The child combinators are what keep the layer off the
+     nested glance tab's `.tab-background` inside the same row. The space's own
+     accent, lifted until it is visible against the chrome — see
+     `--trance-accent-vivid`. */
+  &[trance-tabstrip-glow="theme"]
+    .tabbrowser-tab[visuallyselected]
+    > .tab-stack
+    > .tab-background {
     background-image: radial-gradient(
-      ellipse at 50% 100%,
-      var(--trance-accent-vivid),
-      transparent 70%
+      ellipse calc(50% + var(--trance-tab-glow-spread))
+        calc(100% + var(--trance-tab-glow-spread)) at 50% 100%,
+      color-mix(
+        in srgb,
+        var(--trance-accent-vivid) calc(var(--trance-tab-glow-alpha) * 100%),
+        transparent
+      ),
+      transparent
     );
   }
 
-  /* The tab's own colour: the dominant hue of its favicon, drawn as exactly the
-     shape `theme` draws above. `TranceTabStrip` samples the icon once per
+  /* trance-specificity: as above. The tab's own colour: the dominant hue of
+     its favicon, drawn as exactly the shape `theme` draws above.
+     `TranceTabStrip` samples the icon once per
      favicon and writes the result onto the selected tab; a tab whose icon has
-     not been read yet — and every tab in `theme` mode — resolves the token's
-     own value, which is the accent, so there is never a frame with no colour.
+     not been read yet resolves the token's own value, which is the accent, so
+     there is never a frame with no colour. The custom property is inherited
+     from the tab, which is where it is written.
 
      It used to be the favicon *itself*, scaled to cover the box and put behind
      a `blur()` as wide as the spread. That was wrong twice. A blur wide enough
@@ -333,11 +286,19 @@
      image" was a Gaussian pass on the busiest element in the sidebar. Sampling
      is once, cached by favicon URL, and produces the number a person means when
      they say "the colour of that site" (ADR-047). */
-  &[trance-tabstrip-glow="icon"] .tabbrowser-tab[visuallyselected]::after {
+  &[trance-tabstrip-glow="icon"]
+    .tabbrowser-tab[visuallyselected]
+    > .tab-stack
+    > .tab-background {
     background-image: radial-gradient(
-      ellipse at 50% 100%,
-      var(--trance-tab-glow-color),
-      transparent 70%
+      ellipse calc(50% + var(--trance-tab-glow-spread))
+        calc(100% + var(--trance-tab-glow-spread)) at 50% 100%,
+      color-mix(
+        in srgb,
+        var(--trance-tab-glow-color) calc(var(--trance-tab-glow-alpha) * 100%),
+        transparent
+      ),
+      transparent
     );
   }
 
@@ -517,17 +478,48 @@
       --zen-toolbar-element-bg: var(--trance-essentials-bg-unloaded);
     }
   }
+
   /* ── Minimal workspace indicators ────────────────────────────────────────
    *
    * Keep the sidebar's workspace rail quiet until it is selected or hovered.
    * The active icon is always retained, including while a neighbouring button
-   * is hovered. Neighbour selectors stay scoped to this small strip. */
+   * is hovered. Neighbour selectors stay scoped to this small strip.
+   *
+   * ── The rise, and the room it needs (ADR-101) ────────────────────────────
+   *
+   * A hovered button lifts by `--trance-workspace-rise` and its neighbours by
+   * half that. The rail is Zen's `overflow-x: auto` scroller, and a box that
+   * scrolls on one axis clips on the other, so the lifted button's hover fill
+   * used to be cut off flat along its top edge — the fill looked as if it
+   * shrank rather than rose, which is also why the motion read as no motion
+   * at all. The rail now keeps exactly the rise as padding above its buttons
+   * and hands the same amount back with a negative margin, so the lifted fill
+   * stays inside the scrollport and the footer does not grow by a pixel.
+   *
+   * And the same below, for the hit strip each button carries under itself
+   * (`::after`, see there). Without room for it the strip is scrollable
+   * overflow, and Zen scrolls the active space into view on every switch —
+   * which scrolled the rail *down* by the strip's height and put the buttons
+   * flush against the clip again. With padding on both edges the content is
+   * exactly the rail's height, so there is nothing to scroll vertically.
+   *
+   * The lift is `--trance-dur-base` on the emphasis curve, a small settle past
+   * the target, rather than 140ms on the standard curve, which put nearly the
+   * whole 4px in the first frame or two. */
   & #zen-workspaces-button {
-    gap: 1.8px;
+    gap: var(--trance-workspace-gap);
+    padding-block: var(--trance-workspace-rise);
+    margin-block: calc(-1 * var(--trance-workspace-rise));
 
     & > toolbarbutton[zen-workspace-id] {
       transform: translateY(0);
-      transition: transform var(--trance-dur-fast) var(--trance-ease-standard);
+      /* Zen's own filter and opacity fades are restated because this
+         declaration replaces its `transition` list rather than adding to it. */
+      transition:
+        transform var(--trance-dur-base) var(--trance-ease-emphasis),
+        filter var(--trance-hover-dur) var(--trance-ease-standard),
+        opacity var(--trance-hover-dur) var(--trance-ease-standard),
+        background-color var(--trance-hover-dur) var(--trance-ease-standard);
 
       &::before {
         content: "";
@@ -538,6 +530,19 @@
         background: currentColor;
         opacity: 1;
         transition: opacity var(--trance-hover-dur) var(--trance-ease-standard);
+      }
+
+      /* The strip a lifted button leaves behind it, still part of the button.
+       * Without it the lift moves the button's bottom edge off a pointer
+       * resting near it, the hover ends, the button drops back under the
+       * pointer and the hover starts again — a jitter at the one edge people
+       * approach from, since the rail is at the bottom of the sidebar. */
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        inset-block-start: 100%;
+        block-size: var(--trance-workspace-rise);
       }
 
       & .zen-workspace-icon {
@@ -560,7 +565,7 @@
       }
 
       &:hover {
-        transform: translateY(calc(-1 * var(--trance-gap-sm)));
+        transform: translateY(calc(-1 * var(--trance-workspace-rise)));
       }
 
       /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector --
@@ -569,15 +574,24 @@
        * pointer listener on the strip mirroring hover into an attribute. */
       &:has(+ toolbarbutton[zen-workspace-id]:hover),
       &:hover + toolbarbutton[zen-workspace-id] {
-        transform: translateY(calc(-0.5 * var(--trance-gap-sm)));
+        transform: translateY(calc(-0.5 * var(--trance-workspace-rise)));
       }
     }
   }
 
+  /* Closer together: each button is only as wide as its icon's hover fill
+   * needs. Expanded sidebar only — the collapsed rail stacks the spaces in a
+   * column at Zen's own 36px, which is the rail's width and not a spacing. */
+  &[zen-sidebar-expanded="true"] #zen-workspaces-button > toolbarbutton[zen-workspace-id] {
+    min-width: var(--trance-workspace-button-inline);
+    max-width: var(--trance-workspace-button-inline);
+    height: var(--trance-workspace-button-block);
+  }
+
   /* Zen's expanded-toolbox gap rule is two IDs, which outranks the one-ID
-   * rule above; this matches it so its 0.5ch cannot undo the 1.8px spacing. */
+   * rule above; this matches it so its 0.5ch cannot undo the rail's gap. */
   /* stylelint-disable-next-line trance/max-specificity -- matches Zen's own #navigator-toolbox #zen-workspaces-button gap rule */
   & #navigator-toolbox #zen-workspaces-button {
-    gap: 1.8px;
+    gap: var(--trance-workspace-gap);
   }
 }

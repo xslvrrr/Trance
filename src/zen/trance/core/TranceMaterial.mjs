@@ -67,6 +67,23 @@ const PREF_ZEN_ACRYLIC = "zen.theme.acrylic-elements";
 const PREF_ZEN_GREY_INACTIVE = "zen.view.grey-out-inactive-windows";
 
 /**
+ * The macOS window's own background blur, in points (ADR-099). Read by
+ * `ZenWindowBlurView` in nsCocoaWindow.mm: -1 — its default, and what a
+ * release restores — is Zen's `NSVisualEffectView` material; any other value
+ * replaces that material with a window-server blur of exactly this radius.
+ *
+ * This is what makes the blur control reach the desktop behind the window.
+ * A material's blur is fixed by AppKit and a `backdrop-filter` can only read
+ * what Gecko painted, so before this the radius softened the chrome's own
+ * texture and nothing a person was actually looking through.
+ *
+ * Held on the default branch: it is derived from `trance.surface.blur.radius`
+ * every time the intent is applied, so a user value would only be a stale
+ * copy of that pref surviving into a session where Trance is off.
+ */
+const PREF_MACOS_BLUR_RADIUS = "zen.widget.macos.window-blur-radius";
+
+/**
  * Firefox's own switch for building content browsers with an alpha-composited
  * canvas. It is what makes internal-page translucency a real page-transparency
  * feature rather than a colour behind an opaque canvas — and it is also the
@@ -125,6 +142,8 @@ export class TranceMaterial {
   #intent = OPAQUE;
   /** Platform prefs that apply on this platform, resolved once. */
   #platformPrefs;
+  /** Whether this window's blur radius is the window server's (macOS). */
+  #nativeBlur = false;
   /** Whether the content-transparency claim is currently held. */
   #ownsContentTransparency = false;
 
@@ -141,6 +160,7 @@ export class TranceMaterial {
     this.#platformPrefs = PLATFORM_TRANSPARENCY.filter(
       ({ media }) => win.matchMedia(media).matches
     ).map(({ pref }) => pref);
+    this.#nativeBlur = win.matchMedia("(-moz-platform: macos)").matches;
 
     // The frost is dropped whenever the window cannot actually be seen. This is
     // the rule a stylesheet cannot express: CSS cannot know the window is
@@ -218,6 +238,21 @@ export class TranceMaterial {
     // browser that has been told it is not.
     for (const pref of this.#platformPrefs) {
       this.#prefs.claim(pref, Boolean(intent.transparent));
+    }
+
+    // The window's own blur radius, on the platform whose window server takes
+    // one. It is held whether or not the window is translucent: with
+    // translucency off the window is not see-through and the radius has nothing
+    // to blur, and holding it anyway means switching translucency back on never
+    // shows one frame of Zen's material first. Deliberately not suspended with
+    // focus or occlusion: the window server skips an occluded window by itself,
+    // and dropping the blur on every focus change would flash the desktop.
+    if (this.#nativeBlur) {
+      this.#prefs.claim(
+        PREF_MACOS_BLUR_RADIUS,
+        Math.max(0, Math.round(intent.blurRadius)),
+        { branch: "default", type: "int" }
+      );
     }
 
     // Zen's compact-mode sheet carries `backdrop-filter: blur(42px) …

@@ -458,71 +458,91 @@ add_task(
   }
 );
 
-add_task(async function test_the_glow_reaches_past_the_tab_it_belongs_to() {
-  // The glow is drawn on the tab and not on `.tab-background`, because Zen
-  // declares `overflow: hidden` on the latter — a glow drawn there is clipped
-  // to exactly the box it exists to escape. The tab's own clipping is
-  // `overflow: clip` with a margin, which is the same clipping with a dial on
-  // it, so the dial is what has to be opened.
-  const text = await sheetText(TABSTRIP_SHEET);
+add_task(async function test_the_glow_is_painted_inside_the_tab_background() {
+  // The glow used to be a pseudo-element let out past the tab with an opened
+  // clip margin, and it spilled over the rows around the selected one. It is a
+  // background layer of the selected row's own `.tab-background` now, so it is
+  // cut by that element's box and radius and can reach nothing else (ADR-100).
+  const background = () =>
+    gBrowser.selectedTab.querySelector(":scope > .tab-stack > .tab-background");
+  ok(background(), "the selected tab has a background to paint into");
+  if (!background()) {
+    return;
+  }
+
+  for (const mode of ["theme", "icon"]) {
+    await SpecialPowers.pushPrefEnv({
+      set: [["trance.tabstrip.glow.mode", mode]],
+    });
+    ok(
+      window
+        .getComputedStyle(background())
+        .backgroundImage.includes("radial-gradient"),
+      `${mode}: the glow is a layer of the selected tab's own background`
+    );
+    is(
+      window.getComputedStyle(gBrowser.selectedTab, "::after").content,
+      "none",
+      `${mode}: and nothing is drawn on the tab outside that background`
+    );
+    await SpecialPowers.popPrefEnv();
+  }
+
   ok(
-    text.includes("overflow-clip-margin: var(--trance-tab-glow-spread)"),
-    "the selected tab's clip margin is opened to the glow's reach"
-  );
-  ok(
-    text.includes("overflow: clip"),
-    "the selected tab creates a clipping box so its clip margin can apply"
-  );
-  ok(
-    text.includes("border-radius: 50% 50% 0 0 / 100% 100% 0 0"),
-    "and the shape is a half-ellipse: out past the top and sides, flush at " +
-      "the bottom where the tab sits on the row below it"
+    !window
+      .getComputedStyle(background())
+      .backgroundImage.includes("radial-gradient"),
+    "with the glow off the background carries no layer at all"
   );
 });
 
-add_task(async function test_the_glow_stops_at_the_tab_container() {
-  // "Reaches past the tab" and "reaches out of the sidebar" are two different
-  // things, and the clip margin above only bounds the first. Without an outer
-  // bound the glow on a tab near either end of the list spilled over the
-  // essentials grid and out of the strip entirely.
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.tabstrip.glow.mode", "theme"]],
-  });
+add_task(async function test_the_workspace_rise_stays_inside_the_rail() {
+  // The regression: a hovered space button lifts by `--trance-workspace-rise`,
+  // and the rail is Zen's `overflow-x: auto` scroller, which clips vertically
+  // too. With no room above its buttons the lifted hover fill was cut off flat
+  // along its top (ADR-101).
+  // The rail is only shown with more than one space.
+  const created = await gZenWorkspaces.createAndSaveWorkspace("Trance rail");
+  try {
+    const rail = document.getElementById("zen-workspaces-button");
+    const first = () =>
+      rail?.querySelector(":scope > toolbarbutton[zen-workspace-id]");
+    await TestUtils.waitForCondition(
+      () => first()?.getBoundingClientRect().height > 0,
+      "the space switcher is laid out"
+    );
+    const button = first();
+    const rise = parseFloat(tokenValue("--trance-workspace-rise"));
+    Assert.greater(rise, 0, "the rise is a real distance");
+    // Zen scrolls the active space into view on every switch, and that scroll
+    // is not only horizontal: any vertical overflow in the rail is taken up by
+    // it, which puts the buttons flush against the clip whatever the padding
+    // says.
+    is(rail.scrollTopMax, 0, "the rail has nothing to scroll vertically");
+    const resting = button.getBoundingClientRect().top;
 
-  const container = document.getElementById("tabbrowser-tabs");
-  ok(container, "#tabbrowser-tabs exists");
-  if (!container) {
-    await SpecialPowers.popPrefEnv();
-    return;
+    InspectorUtils.addPseudoClassLock(button, ":hover");
+    try {
+      // Flush so the transition exists, then jump it to its end.
+      window.getComputedStyle(button).transform;
+      for (const animation of button.getAnimations()) {
+        animation.finish();
+      }
+      const lifted = button.getBoundingClientRect().top;
+      Assert.less(lifted, resting, "the hovered button lifts");
+      // No border on the rail, so its box top is the top of the padding box
+      // its overflow clips to.
+      Assert.greaterOrEqual(
+        lifted + 0.5,
+        rail.getBoundingClientRect().top,
+        "and the whole lifted button, hover fill included, is inside the rail"
+      );
+    } finally {
+      InspectorUtils.removePseudoClassLock(button, ":hover");
+    }
+  } finally {
+    await gZenWorkspaces.removeWorkspace(created.uuid);
   }
-  const style = window.getComputedStyle(container);
-  is(style.overflowX, "clip", "the container clips while the glow is on");
-  is(
-    style.overflowClipMargin,
-    "0px",
-    "with no margin: the container is the boundary being asked for"
-  );
-
-  // And the selected tab is raised above its neighbours, or the part of the
-  // glow that reaches into the row below is painted over by that row.
-  const selected = gBrowser.selectedTab;
-  is(
-    window.getComputedStyle(selected).overflowX,
-    "clip",
-    "the selected tab creates the clipping box its reach depends on"
-  );
-  Assert.greater(
-    parseInt(window.getComputedStyle(selected).zIndex, 10) || 0,
-    0,
-    "the selected tab stacks above the rows its glow reaches into"
-  );
-
-  await SpecialPowers.popPrefEnv();
-  isnot(
-    window.getComputedStyle(container).overflowX,
-    "clip",
-    "and the clip goes away with the glow — a switched-off feature costs nothing"
-  );
 });
 
 add_task(async function test_the_collapsed_rail_keeps_tab_overlays_visible() {

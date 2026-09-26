@@ -186,7 +186,9 @@ check("app-menu and reload hover-painted boxes match within 1px", () => {
   const buttons = ["PanelUI-menu-button", "reload-button"].map(id => document.getElementById(id));
   const painted = buttons.map(button => {
     InspectorUtils.addPseudoClassLock(button, ":hover");
-    const icon = button.querySelector(".toolbarbutton-icon");
+    // A badged button (the app menu) paints its hover on the badge stack, not
+    // on the image inside it (ADR-102).
+    const icon = button.querySelector(".toolbarbutton-badge-stack") || button.querySelector(".toolbarbutton-icon");
     const buttonStyle = getComputedStyle(button);
     const iconStyle = getComputedStyle(icon);
     const buttonColor = buttonStyle.backgroundColor;
