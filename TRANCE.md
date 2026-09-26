@@ -1863,8 +1863,8 @@ tell which of them were decisions and which were defects.
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1 and 0.3.0 were built locally
-      rather than in CI; the current 0.3.0 artefact is a development build.
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1, 0.3.0 and 0.3.1 were built
+      locally rather than in CI; the current 0.3.1 artefact is a development build.
 
 **Release history**
 
@@ -1882,18 +1882,21 @@ tell which of them were decisions and which were defects.
   0.2.0 defects: the sidebar never initialising (ADR-085), the empty-tab mark over loading pages
   (ADR-084), the immovable and ineffective blur knob (ADR-082), and the white floor under 0%
   transparency (ADR-083) (`docs/trance/release-0.2.1.md`). Same build shape as 0.2.0.
-- **0.3.0 (current, 2026-09-26):** same base. Fixes Google sign-in and AI Overviews by replacing
+- **0.3.0 (2026-09-26):** same base. Fixes Google sign-in and AI Overviews by replacing
   ClearURLs with Firefox's own query stripping (ADR-097), and lands the ADR-087 to ADR-096 batch:
   the splitter blur seam, the eight-page onboarding, the theme-picker ring and saved-theme pages,
   Zen's native Library switched on, workspace dots, and the macOS panel exit fade
   (`docs/trance/release-0.3.0.md`). Same build shape as 0.2.0.
-- **Unreleased (2026-09-26), after 0.3.0:** the blur knob drives the macOS window's own
+- **0.3.1 (current, 2026-09-28):** merged Zen `3d874409e` (Firefox 157.0, release-candidate
+  build 1, which the `trance` brand builds from because it is not `release`), re-applying
+  touchpoints 8, 28, 29 and 30 on the new tree. The blur knob drives the macOS window's own
   background blur through the window server, and the docked sidebar, splitter and toolbar lose the
   `backdrop-filter` regions that painted pale slabs over the transparent window (ADR-099, touchpoint
   30, a full `npm run build`). The active-tab glow is masked by the tab's own background
   (ADR-100). The workspace rail is tighter and its hover rise is no longer cropped (ADR-101). The
-  app-menu mark's hover box is the same 29px as its neighbours' (ADR-102). GitHub release
-  detection lands (ADR-098).
+  app-menu mark's hover box is the same 29px as its neighbours' (ADR-102). The top strip's slide
+  survives a stylesheet that overrides `transition` (ADR-103). GitHub release detection lands
+  (ADR-098) (`docs/trance/release-0.3.1.md`). Same build shape as 0.2.0.
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user

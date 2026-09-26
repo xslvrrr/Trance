@@ -17,12 +17,14 @@ loader or the conflicts, with invisible-window work suspended instead of left ru
 
 ## Download
 
-[**Trance 0.3.0 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.0)
+[**Trance 0.3.1 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.1)
 
-The [0.3.0 release notes](./docs/trance/release-0.3.0.md) cover the Google sign-in and AI Overview
-fix (ClearURLs is replaced by Firefox's own query stripping), the eight-page onboarding, the theme
-picker changes, and Zen's native Library. The [0.2.1 notes](./docs/trance/release-0.2.1.md) cover
-the Firefox 156 base.
+The [0.3.1 release notes](./docs/trance/release-0.3.1.md) cover the blur knob now blurring the
+window itself, the end of the white panels on the sidebar and toolbar, the tab glow, workspace
+icons and app-menu button fixes, the sidebar's top strip sliding again, update notices, and the
+Firefox 157 base. The
+[0.3.0 notes](./docs/trance/release-0.3.0.md) cover the Google sign-in and AI Overview fix and the
+eight-page onboarding.
 
 A development build: no PGO, no LTO, **not signed and not notarised**. Gatekeeper will refuse to
 open it until you clear the quarantine attribute yourself:
