@@ -514,26 +514,6 @@ window.gZenUIManager = {
     return this._urlbarOwner === closeSeq;
   },
 
-  // Check if browser elements are in a valid state for tab operations
-  _validateBrowserState() {
-    // Check if browser window is still open
-    if (window.closed) {
-      return false;
-    }
-
-    // Check if gBrowser is available
-    if (!gBrowser || !gBrowser.tabContainer) {
-      return false;
-    }
-
-    // Check if URL bar is available
-    if (!gURLBar) {
-      return false;
-    }
-
-    return true;
-  },
-
   handleNewTab(
     werePassedURL,
     searchClipboard,
@@ -546,12 +526,6 @@ window.gZenUIManager = {
     // to increment it in one of the early returns.
     const closeSeq = ++this._urlbarSessionCounter;
     closeToken.id = closeSeq;
-
-    // Validate browser state first
-    if (!this._validateBrowserState()) {
-      console.warn("Browser state invalid for new tab operation");
-      return false;
-    }
 
     if (this.testingEnabled && !overridePreferance) {
       return false;
@@ -649,12 +623,6 @@ window.gZenUIManager = {
   },
 
   handleUrlbarClose(closeSeq, onSwitch = false, onElementPicked = false) {
-    // Validate browser state first
-    if (!this._validateBrowserState()) {
-      console.warn("Browser state invalid for URL bar close operation");
-      return;
-    }
-
     // Reset URL bar state
     if (gURLBar._zenHandleUrlbarClose) {
       gURLBar._zenHandleUrlbarClose = null;
@@ -1007,12 +975,6 @@ window.gZenVerticalTabsManager = {
       return document.documentElement.hasAttribute("popup-window");
     });
 
-    XPCOMUtils.defineLazyPreferenceGetter(
-      this,
-      "_canReplaceNewTab",
-      "zen.urlbar.replace-newtab",
-      true
-    );
     var updateEvent = this._updateEvent.bind(this);
     var onPrefChange = this._onPrefChange.bind(this);
 
@@ -1081,6 +1043,40 @@ window.gZenVerticalTabsManager = {
     return this.__topButtonsSeparatorElement;
   },
 
+  /**
+   * The strip items that sit below aItem and therefore have to move when its
+   * space appears or collapses.
+   *
+   * @param {Element} aItem
+   * @returns {Element[]} The elements carrying those items' space.
+   */
+  _itemsBelowInStrip(aItem) {
+    const items = gBrowser.tabContainer.ariaFocusableItems;
+    const index = items.findIndex(
+      item =>
+        !aItem.contains(item) &&
+        !!(
+          aItem.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING
+        )
+    );
+    if (index < 0) {
+      return [];
+    }
+    const elements = [];
+    for (const item of items.slice(index)) {
+      let element;
+      try {
+        element = ZenDragAndDrop.elementToMove(item);
+      } catch {
+        continue;
+      }
+      if (element && !elements.includes(element)) {
+        elements.push(element);
+      }
+    }
+    return elements;
+  },
+
   animateItemOpen(aItem) {
     if (
       gReduceMotion ||
@@ -1096,23 +1092,33 @@ window.gZenVerticalTabsManager = {
     ) {
       return;
     }
-    // get next visible tab
-    const isLastItem = () => {
-      const visibleItems = gBrowser.tabContainer.ariaFocusableItems;
-      return visibleItems[visibleItems.length - 1] === aItem;
-    };
-
     try {
       const itemSize =
         window.windowUtils.getBoundsWithoutFlushing(aItem).height;
-      const transform = `-${itemSize}px`;
+      const itemsBelow = this._itemsBelowInStrip(aItem);
+      for (const item of itemsBelow) {
+        item.style.transform = `translateY(-${itemSize}px)`;
+      }
+      for (const item of itemsBelow) {
+        gZenUIManager
+          .elementAnimate(
+            item,
+            { y: [-itemSize, 0] },
+            { duration: 120, easing: "ease-out" }
+          )
+          .catch(err => {
+            console.error(err);
+          })
+          .finally(() => {
+            item.style.removeProperty("transform");
+          });
+      }
       gZenUIManager.motion
         .animate(
           aItem,
           {
             opacity: [0, 1],
             transform: ["scale(0.95)", "scale(1)"],
-            marginBottom: isLastItem() ? ["0px", "0px"] : [transform, "0px"],
           },
           {
             duration: 0.12,
@@ -1124,7 +1130,6 @@ window.gZenVerticalTabsManager = {
           console.error(err);
         })
         .finally(() => {
-          aItem.style.removeProperty("margin-bottom");
           aItem.style.removeProperty("transform");
           aItem.style.removeProperty("opacity");
         });
@@ -1823,3 +1828,10 @@ window.gZenVerticalTabsManager = {
     this._tabEdited = null;
   },
 };
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  gZenVerticalTabsManager,
+  "_canReplaceNewTab",
+  "zen.urlbar.replace-newtab",
+  true
+);

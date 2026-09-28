@@ -57,6 +57,7 @@ library-media-menu-open =
     .label = Open
 library-media-menu-copy =
     .label = Copy
+library-history-opened-in-background = Opened tab in a new tab
 library-history-forget-button =
     .title = Remove from history
 library-history-reopen-button =
@@ -78,6 +79,7 @@ library-downloads-opening-in = { PLATFORM() ->
     [windows] Opening in File Explorer…
    *[other] Opening in file manager…
 }
+library-downloads-open-when-done = Opens when finished
 library-downloads-cancel-button =
     .title = Cancel download
 library-downloads-filter-title = Filter Downloads…

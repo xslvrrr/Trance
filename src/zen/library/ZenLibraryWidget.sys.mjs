@@ -77,9 +77,10 @@ class ZenLibraryDownloadStack {
     return this.#list.parentElement;
   }
 
-  /** The tab strip, once the window has it. */
-  get #tabs() {
-    return this.#window.gBrowser?.tabContainer ?? null;
+  get #downloadsListWrapper() {
+    return this.#window.document.getElementById(
+      "TabsToolbar-customization-target"
+    );
   }
 
   #parse(markup) {
@@ -114,9 +115,9 @@ class ZenLibraryDownloadStack {
       return;
     }
     this.#aimBadge();
-    this.#tabs?.removeAttribute("zen-library-stack-closing");
-    for (const host of [this.#footButtons, this.#tabs]) {
-      host?.setAttribute("zen-library-stack-open", "true");
+    this.#downloadsListWrapper.removeAttribute("zen-library-stack-closing");
+    for (const host of [this.#footButtons, this.#downloadsListWrapper]) {
+      host.setAttribute("zen-library-stack-open", "true");
     }
   }
 
@@ -126,19 +127,16 @@ class ZenLibraryDownloadStack {
     }
     this.#recentNewDownload = false;
     this.#updateBadgeShowing();
-    for (const host of [this.#footButtons, this.#tabs]) {
-      host?.removeAttribute("zen-library-stack-open");
+    for (const host of [this.#footButtons, this.#downloadsListWrapper]) {
+      host.removeAttribute("zen-library-stack-open");
     }
     // The strip's fade stays until its progress is back at zero.
-    const tabs = this.#tabs;
-    if (!tabs) {
-      return;
-    }
-    tabs.setAttribute("zen-library-stack-closing", "true");
-    tabs.addEventListener("transitionend", function onEnd(event) {
+    const wrapper = this.#downloadsListWrapper;
+    wrapper.setAttribute("zen-library-stack-closing", "true");
+    wrapper.addEventListener("transitionend", function onEnd(event) {
       if (event.propertyName === "--zen-library-progress") {
-        tabs.removeEventListener("transitionend", onEnd);
-        tabs.removeAttribute("zen-library-stack-closing");
+        wrapper.removeEventListener("transitionend", onEnd);
+        wrapper.removeAttribute("zen-library-stack-closing");
       }
     });
   }
@@ -153,7 +151,7 @@ class ZenLibraryDownloadStack {
       return;
     }
     const target = entry.querySelector(".zen-library-download-badge");
-    const from = this.#badge.getBoundingClientRect();
+    const from = this.#window.windowUtils.getBoundsWithoutFlushing(this.#badge);
     const to = target.getBoundingClientRect();
     const style = this.#window.getComputedStyle(this.#badge);
     // The entry is still translated down while closed; land where it ends.
@@ -235,7 +233,31 @@ class ZenLibraryDownloadStack {
       .finally(() => download.target.refresh());
   }
 
+  /**
+   * @param {object} download
+   * @returns {boolean} Whether it will be opened as soon as it is here
+   */
+  #opensWhenDone(download) {
+    return !download.stopped && !!download.launchWhenSucceeded;
+  }
+
+  /**
+   * Clicking a download that is still coming in asks for it to be opened as
+   * soon as it is here, the way the downloads panel does.
+   *
+   * @param {object} download
+   */
+  #toggleOpenWhenDone(download) {
+    download.launchWhenSucceeded = !download.launchWhenSucceeded;
+    download._launchedFromPanel = download.launchWhenSucceeded;
+    this.#updateList();
+  }
+
   #openDownload(download) {
+    if (!download.stopped) {
+      this.#toggleOpenWhenDone(download);
+      return;
+    }
     if (download.succeeded) {
       lazy.DownloadsCommon.openDownload(download).catch(console.error);
     } else if (download.source?.url) {
@@ -274,14 +296,29 @@ class ZenLibraryDownloadStack {
       );
       entry.querySelector(".zen-library-download-list-title").textContent =
         this.#fileName(download);
-      entry.querySelector(".zen-library-download-list-subtitle").textContent =
-        this.#statusText(download);
+      const subtitle = entry.querySelector(
+        ".zen-library-download-list-subtitle"
+      );
+      if (this.#opensWhenDone(download)) {
+        this.#window.document.l10n.setAttributes(
+          subtitle,
+          "library-downloads-open-when-done"
+        );
+      } else {
+        subtitle.removeAttribute("data-l10n-id");
+        subtitle.textContent = this.#statusText(download);
+      }
       entry.toggleAttribute("downloading", !download.stopped);
+      entry.toggleAttribute("open-when-done", this.#opensWhenDone(download));
     });
-    this.#tabs?.style.setProperty(
-      "--zen-library-stack-height",
-      `${this.#list.getBoundingClientRect().height}px`
-    );
+    this.#window
+      .promiseDocumentFlushed(() => this.#list.getBoundingClientRect().height)
+      .then(height => {
+        this.#downloadsListWrapper.style.setProperty(
+          "--zen-library-stack-height",
+          `${height}px`
+        );
+      });
   }
 
   #updateBadge(badge, download) {
