@@ -99,33 +99,107 @@ export class TranceUpdates extends TranceFeature {
       return false;
     }
     this.#shownVersions.add(result.version);
-    const label = `Trance ${result.version} is available${
+    let label = `Trance ${result.version} is available${
       result.prerelease ? " (pre-release)" : ""
     }`;
-    const buttons = [
-      {
-        label: "Download",
-        accessKey: "D",
-        callback: () => {
-          win.openTrustedLinkIn(result.url, "tab");
-        },
-      },
-      {
-        label: "Skip this version",
-        accessKey: "S",
-        callback: () => {
-          Services.prefs.setStringPref(
-            "trance.updates.skipped",
-            result.version
+    const buttons = [];
+    const downloadPage = {
+      label: "Open release page",
+      accessKey: "O",
+      callback: () => win.openTrustedLinkIn(result.url, "tab"),
+    };
+    let installer = null;
+    if (result.asset) {
+      installer = ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceUpdateInstaller.mjs"
+      ).TranceUpdateInstaller;
+    }
+    const eligibility = installer?.canInstall();
+    // `appendNotification` is async: the bar exists once this resolves, and
+    // every later label change goes through it.
+    let notification = null;
+    const setLabel = text => {
+      if (notification) {
+        notification.label = text;
+      }
+    };
+    if (eligibility?.ok) {
+      let installing = false;
+      const install = async restart => {
+        if (installing) {
+          return true;
+        }
+        installing = true;
+        setLabel(`Downloading Trance ${result.version}…`);
+        try {
+          await installer.stage(result.asset, result.version, progress => {
+            const percent = Math.floor(
+              (progress.received / progress.total) * 100
+            );
+            setLabel(`Downloading Trance ${result.version} — ${percent}%`);
+          });
+          installer.installOnQuit({ restart });
+          setLabel(
+            restart
+              ? `Trance ${result.version} will install as the browser restarts.`
+              : `Trance ${result.version} is staged and will install when you quit.`
           );
-        },
+          if (restart) {
+            // Not `eRestart`: Gecko would relaunch this bundle the moment the
+            // process exits, while the helper is replacing it. The helper
+            // relaunches the new bundle itself once the swap is done.
+            Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);
+            if (!Services.startup.shuttingDown) {
+              // Something cancelled the quit; the update stays staged for the
+              // next ordinary quit, which should not relaunch.
+              installer.installOnQuit({ restart: false });
+              setLabel(
+                `Trance ${result.version} is staged and will install when you quit.`
+              );
+            }
+          }
+        } catch (error) {
+          installing = false;
+          setLabel(
+            `Could not install Trance ${result.version}: ${error.message}`
+          );
+          win.openTrustedLinkIn(result.url, "tab");
+        }
+        // Keep the bar open: it is where progress and the outcome are shown.
+        return true;
+      };
+      buttons.push({
+        label: "Install and restart",
+        accessKey: "I",
+        callback: () => install(true),
+      });
+      buttons.push({
+        label: "Install on quit",
+        accessKey: "Q",
+        callback: () => install(false),
+      });
+    } else {
+      label += result.asset
+        ? ` — ${eligibility?.reason || "Automatic installation is unavailable."}`
+        : " — no verified installer for this platform; use the release page.";
+      buttons.push(downloadPage);
+    }
+    buttons.push({
+      label: "Skip this version",
+      accessKey: "S",
+      callback: () => {
+        Services.prefs.setStringPref("trance.updates.skipped", result.version);
       },
-    ];
-    box.appendNotification(
-      NOTIFICATION_ID,
-      { label, priority: box.PRIORITY_INFO_MEDIUM },
-      buttons
-    );
+    });
+    box
+      .appendNotification(
+        NOTIFICATION_ID,
+        { label, priority: box.PRIORITY_INFO_MEDIUM },
+        buttons
+      )
+      .then(bar => {
+        notification = bar;
+      });
     return true;
   }
 }

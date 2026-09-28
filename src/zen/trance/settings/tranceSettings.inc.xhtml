@@ -1431,9 +1431,9 @@
   <html:div class="trance-card-header">
     <label><html:h2>Updates</html:h2></label>
     <description>
-      Check the Trance GitHub release page for newer stable or pre-release
-      builds. Trance never installs an update; Download opens the release page
-      so you can choose and install it yourself.
+      Check GitHub for newer stable or pre-release builds. Supported, verified
+      macOS releases can be downloaded and staged by Trance; other releases
+      open their release page for manual installation.
     </description>
   </html:div>
 
@@ -1465,6 +1465,7 @@
     <html:div class="trance-row-control">
       <label id="tranceUpdatesStatus" class="trance-range-value"/>
       <button id="tranceUpdatesCheckNow" label="Check now"/>
+      <button id="tranceUpdatesInstall" label="Install on quit" disabled="true"/>
     </html:div>
   </html:div>
 </groupbox>
@@ -1584,8 +1585,12 @@
 # question here ("this cannot be undone; do it?") and one shape of answer.
 #
 # It lives outside every groupbox because it is not a setting and must not be
-# swept up by the row-structure rules or by `data-category` show/hide.
-<html:dialog id="tranceConfirmDialog" class="trance-confirm">
+# swept up by the row-structure rules. It still carries `data-category`:
+# preferences.js's `search()` hides every child of `#mainPrefPane` whose
+# category is not the one shown, attribute or no attribute, and a modal dialog
+# under a hidden ancestor is open but never rendered — the destructive buttons
+# asked a question nobody could see.
+<html:dialog id="tranceConfirmDialog" class="trance-confirm" data-category="paneTrance">
   <html:h2 id="tranceConfirmTitle"></html:h2>
   <html:p id="tranceConfirmBody"></html:p>
   <html:div class="trance-confirm-actions">

@@ -96,6 +96,7 @@
         content/browser/trance-styles/trance-firstrun.css                       (../../zen/trance/styles/trance-firstrun.css)
         content/browser/trance-components/TranceUpdateLogic.mjs                 (../../zen/trance/features/updates/TranceUpdateLogic.mjs)
         content/browser/trance-components/TranceUpdateChecker.mjs               (../../zen/trance/features/updates/TranceUpdateChecker.mjs)
+        content/browser/trance-components/TranceUpdateInstaller.mjs             (../../zen/trance/features/updates/TranceUpdateInstaller.mjs)
         content/browser/trance-components/TranceUpdates.mjs                     (../../zen/trance/features/updates/TranceUpdates.mjs)
 
 # === Icons (TRANCE.md §3.8) ===

@@ -185,11 +185,13 @@ Preferences.addAll([
   { id: "trance.firstrun.enabled", type: "bool", default: true },
   { id: "trance.firstrun.completed", type: "bool", default: false },
 
-  // Updates (TRANCE.md §13 Phase 12)
+  // Updates (TRANCE.md §13 Phase 12); staged and restart-after-install are state.
   { id: "trance.updates.enabled", type: "bool", default: true },
   { id: "trance.updates.prereleases", type: "bool", default: true },
   { id: "trance.updates.skipped", type: "string", default: "" },
   { id: "trance.updates.last-check", type: "int", default: 0 },
+  { id: "trance.updates.staged", type: "string", default: "" },
+  { id: "trance.updates.restart-after-install", type: "bool", default: false },
 
   // Onboarding (TRANCE.md §13 Phase 13)
   //
@@ -556,52 +558,109 @@ var gTranceSettings = {
   initUpdates() {
     const status = document.getElementById("tranceUpdatesStatus");
     const button = document.getElementById("tranceUpdatesCheckNow");
+    const installButton = document.getElementById("tranceUpdatesInstall");
     const enabled = Preferences.get("trance.updates.enabled");
-    if (!status || !button || !enabled) {
+    if (!status || !button || !installButton || !enabled) {
       return;
     }
+    let latest = null;
+    const checker = () =>
+      ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
+      ).TranceUpdateChecker;
+    const installer = () =>
+      ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceUpdateInstaller.mjs"
+      ).TranceUpdateInstaller;
     const showResult = result => {
+      latest = result;
       switch (result?.status) {
-        case "available":
-          status.value = `${result.version} is available`;
+        case "available": {
+          const installable = !!result.asset && installer().canInstall().ok;
+          status.value = installable
+            ? `${result.version} is available to install`
+            : `${result.version} is available — open its release page`;
+          installButton.label = installable
+            ? "Install on quit"
+            : "Open release page";
+          installButton.disabled = !result.url;
           break;
+        }
         case "current":
           status.value = `Up to date — ${result.version}`;
+          installButton.disabled = true;
           break;
         case "skipped":
           status.value = `Skipped — ${result.version}`;
+          installButton.disabled = true;
           break;
         case "error":
           status.value = "Could not reach GitHub";
+          installButton.disabled = true;
           break;
         case "disabled":
           status.value = "Updates are off";
+          installButton.disabled = true;
           break;
         default:
           status.value = "Not checked yet";
+          installButton.disabled = true;
       }
     };
     const refresh = () => {
       button.disabled = !enabled.value;
       if (!enabled.value) {
         status.value = "Updates are off";
+        installButton.disabled = true;
         return;
       }
-      const { TranceUpdateChecker } = ChromeUtils.importESModule(
-        "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
-      );
-      showResult(TranceUpdateChecker.latestResult);
+      const staged = Services.prefs.getStringPref("trance.updates.staged", "");
+      if (staged) {
+        try {
+          const { version } = JSON.parse(staged);
+          installer();
+          status.value = `Trance ${version} is staged and will install when you quit`;
+          installButton.disabled = true;
+          return;
+        } catch {}
+      }
+      showResult(checker().latestResult);
     };
     button.addEventListener("command", async () => {
       button.disabled = true;
       status.value = "Checking GitHub…";
       try {
-        const { TranceUpdateChecker } = ChromeUtils.importESModule(
-          "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
-        );
-        showResult(await TranceUpdateChecker.check({ force: true }));
+        showResult(await checker().check({ force: true }));
       } finally {
         button.disabled = !enabled.value;
+      }
+    });
+    installButton.addEventListener("command", async () => {
+      if (!latest) {
+        return;
+      }
+      if (!latest.asset || !installer().canInstall().ok) {
+        Services.wm
+          .getMostRecentWindow("navigator:browser")
+          ?.openTrustedLinkIn(latest.url, "tab");
+        return;
+      }
+      installButton.disabled = true;
+      status.value = `Downloading Trance ${latest.version}…`;
+      try {
+        await installer().stage(latest.asset, latest.version, progress => {
+          const percent = Math.floor(
+            (progress.received / progress.total) * 100
+          );
+          status.value = `Downloading Trance ${latest.version} — ${percent}%`;
+        });
+        installer().installOnQuit();
+        status.value = `Trance ${latest.version} is staged and will install when you quit`;
+        installButton.label = "Staged";
+      } catch (error) {
+        status.value = `Could not install update: ${error.message}`;
+        installButton.label = "Open release page";
+        installButton.disabled = !latest.url;
       }
     });
     enabled.on("change", refresh);

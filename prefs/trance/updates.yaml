@@ -2,11 +2,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Trance: manual release notifications for Trance updates.
+# Trance: GitHub release detection and verified macOS DMG installation.
 #
-# The feature downloads nothing; it links to the GitHub release for the user to
-# install manually. Automated browser tests never fetch GitHub.
-# Refs: TRANCE.md §13 Phase 12; ADR-098
+# The built-in Firefox MAR/AUS updater remains disabled by distribution policy.
+# Trance verifies the release asset digest before staging and only swaps the
+# app bundle after the running browser exits.
+# Refs: TRANCE.md §13 Phase 12; ADR-104
 
 - name: trance.updates.enabled
   value: true
@@ -22,3 +23,11 @@
 # Unix seconds of the last check attempt; internal scheduler state.
 - name: trance.updates.last-check
   value: 0
+
+# The verified, staged bundle waiting for the next browser shutdown.
+- name: trance.updates.staged
+  value: ""
+
+# Set only by an explicit "Install and restart" action.
+- name: trance.updates.restart-after-install
+  value: false

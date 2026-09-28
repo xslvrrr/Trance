@@ -21,6 +21,7 @@ import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.
 
 const NS = "Core";
 const PREF_ENABLED = "trance.enabled";
+const PREF_UPDATE_STAGED = "trance.updates.staged";
 const STYLE_ENTRY_POINT = "chrome://browser/content/trance-styles/trance.css";
 
 class nsTranceCore extends nsZenPreloadedFeature {
@@ -34,6 +35,11 @@ class nsTranceCore extends nsZenPreloadedFeature {
   #registry = null;
 
   init() {
+    if (Services.prefs.getStringPref(PREF_UPDATE_STAGED, "")) {
+      ChromeUtils.importESModule(
+        "chrome://browser/content/trance-components/TranceUpdateInstaller.mjs"
+      );
+    }
     this.#prefObserver = { observe: () => this.#sync() };
     Services.prefs.addObserver(PREF_ENABLED, this.#prefObserver);
 

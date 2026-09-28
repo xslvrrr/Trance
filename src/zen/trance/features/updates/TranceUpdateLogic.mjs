@@ -111,3 +111,57 @@ export function normalizeVersion(value) {
     .trim()
     .replace(/^v/i, "");
 }
+/**
+ * Select a DMG whose name explicitly identifies the supported host and CPU.
+ * An asset is installable only when GitHub provides a browser URL and a
+ * well-formed SHA-256 digest; callers must not guess or download unverified
+ * assets.
+ *
+ * @param {object} release GitHub release.
+ * @param {{platform?: string, arch?: string}} [host]
+ * @returns {object|null}
+ */
+export function selectInstallerAsset(
+  release,
+  { platform = "darwin", arch = "aarch64" } = {}
+) {
+  if (platform !== "darwin" || !["aarch64", "x86_64"].includes(arch)) {
+    return null;
+  }
+  const suffix = arch === "aarch64" ? "aarch64" : "x86_64";
+  const version = normalizeVersion(release?.tag_name);
+  const expectedName = `Trance-${version}-macos-${suffix}.dmg`;
+  const asset = release?.assets?.find(candidate => {
+    if (
+      candidate?.name !== expectedName ||
+      typeof candidate.browser_download_url !== "string"
+    ) {
+      return false;
+    }
+    try {
+      const url = new URL(candidate.browser_download_url);
+      return (
+        url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+      );
+    } catch {
+      return false;
+    }
+  });
+  return asset && parseSha256Digest(asset.digest) ? asset : null;
+}
+
+/**
+ * Parse GitHub's `sha256:<hex>` asset digest.
+ *
+ * @param {string} digest
+ * @returns {string|null} Lowercase hexadecimal digest.
+ */
+export function parseSha256Digest(digest) {
+  if (typeof digest !== "string") {
+    return null;
+  }
+  const match = digest.match(/^sha256:([0-9a-f]{64})$/i);
+  return match ? match[1].toLowerCase() : null;
+}

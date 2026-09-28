@@ -8,6 +8,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   compareVersions,
+  parseSha256Digest,
+  selectInstallerAsset,
   selectRelease,
 } from "../features/updates/TranceUpdateLogic.mjs";
 
@@ -54,4 +56,61 @@ test("release selection filters prereleases, drafts, skipped and non-newer versi
     selectRelease([release("v0.3.0")], { currentVersion: "0.3.0" }),
     null
   );
+});
+
+test("installer selection requires exact host architecture and a digest", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const assets = [
+    {
+      name: "Trance-0.4.0-macos-aarch64.dmg",
+      browser_download_url: "https://example.test/a.dmg",
+      digest,
+    },
+    {
+      name: "Trance-0.4.0-macos-x86_64.dmg",
+      browser_download_url: "https://example.test/x.dmg",
+      digest,
+    },
+  ];
+  const update = release("0.4.0", { assets });
+  assert.equal(
+    selectInstallerAsset(update, { platform: "darwin", arch: "aarch64" }),
+    assets[0]
+  );
+  assert.equal(
+    selectInstallerAsset(update, { platform: "darwin", arch: "x86_64" }),
+    assets[1]
+  );
+  assert.equal(
+    selectInstallerAsset(update, { platform: "darwin", arch: "arm64" }),
+    null
+  );
+  assert.equal(
+    selectInstallerAsset(update, { platform: "linux", arch: "aarch64" }),
+    null
+  );
+  assert.equal(
+    selectInstallerAsset(release("0.4.0", { assets: [assets[1]] }), {
+      platform: "darwin",
+      arch: "aarch64",
+    }),
+    null
+  );
+  assert.equal(
+    selectInstallerAsset(
+      release("0.4.0", {
+        assets: [{ ...assets[0], digest: null }],
+      }),
+      { platform: "darwin", arch: "aarch64" }
+    ),
+    null
+  );
+});
+
+test("SHA-256 parser accepts GitHub digest format only", () => {
+  const hex = "AB".repeat(32);
+  assert.equal(parseSha256Digest(`sha256:${hex}`), hex.toLowerCase());
+  assert.equal(parseSha256Digest(hex), null);
+  assert.equal(parseSha256Digest(`sha256:${"a".repeat(63)}`), null);
+  assert.equal(parseSha256Digest(`sha256:${"g".repeat(64)}`), null);
 });

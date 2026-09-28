@@ -9,9 +9,17 @@
 import {
   compareVersions,
   normalizeVersion,
+  selectInstallerAsset,
   selectRelease,
 } from "./TranceUpdateLogic.mjs";
 import { TranceLog } from "chrome://browser/content/trance-components/TranceLog.mjs";
+
+// Imported without a `global` option, into the shared system global, where
+// `AppConstants` is not a bare global the way it is in a browser window.
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  AppConstants: "resource://gre/modules/AppConstants.sys.mjs",
+});
 
 const NS = "Updates";
 const PREF_ENABLED = "trance.updates.enabled";
@@ -24,6 +32,15 @@ const RELEASES_URL =
 let inFlight = null;
 let latestResult = null;
 const notifiedVersions = new Set();
+
+/** The CPU name the release assets use, or "" for one they never carry. */
+function hostArch() {
+  const abi = Services.appinfo.XPCOMABI.toLowerCase();
+  if (abi.includes("aarch64")) {
+    return "aarch64";
+  }
+  return abi.includes("x86_64") ? "x86_64" : "";
+}
 
 const disabledByAutomation = () =>
   Cu.isInAutomation ||
@@ -145,6 +162,13 @@ async function runCheck({ force, currentVersion, fetchReleases }) {
         version: normalizeVersion(release.tag_name),
         prerelease: !!release.prerelease,
         url: release.html_url || "",
+        asset: selectInstallerAsset(release, {
+          platform:
+            lazy.AppConstants.platform === "macosx"
+              ? "darwin"
+              : lazy.AppConstants.platform,
+          arch: hostArch(),
+        }),
       };
     } else {
       result = {
