@@ -3,12 +3,12 @@
   "schema": 1,
   "generator": "scripts/trance-patches.py manifest",
   "counts": {
-    "patches": 258,
-    "patchedFiles": 272,
-    "symlinkedFiles": 1452,
+    "patches": 265,
+    "patchedFiles": 279,
+    "symlinkedFiles": 1460,
     "filesWithMultipleOwners": 4,
     "orderSensitiveFiles": 3,
-    "deadPaths": 11
+    "deadPaths": 10
   },
   "overlappingFiles": {
     "toolkit/components/pictureinpicture/PictureInPicture.sys.mjs": {
@@ -123,12 +123,6 @@
         "kind": "and-false",
         "line": "+          this._tabbrowserTabs.verticalMode && tab.pinned && false"
       }
-    ],
-    "src/browser/extensions/newtab/lib/AboutPreferences-sys-mjs.patch": [
-      {
-        "kind": "if-false",
-        "line": "+      if (false) {"
-      }
     ]
   },
   "patches": [
@@ -136,7 +130,7 @@
       "patch": "src/external-patches/firefox/backdrop_filter_reads_web_content.patch",
       "owner": "external:firefox",
       "pin": {
-        "sha256": "09c7d548278218643f2749131a36ec0668b3613a54760fa7f29a92d0e81c508f",
+        "sha256": "36fcab4b5df4e6fdcb7efb4f474bc1a36a9e59872e84a45e062c31d69d7fc44e",
         "origin": {
           "type": "phabricator",
           "revisions": [
@@ -429,8 +423,8 @@
       "targets": [
         {
           "path": ".stylelintrc.js",
-          "base": "b5f8245fa04ffb8fc82240261d63f893f4629f19",
-          "result": "1b6ead24adbe69fcb5aeb95cfd3e7fa9662d89d8"
+          "base": "876f76417f800ce8889d398b6ab478cc089c4125",
+          "result": "5332a6b3ade8725fa5ef61641950e949a510a46e"
         }
       ]
     },
@@ -539,8 +533,8 @@
       "targets": [
         {
           "path": "browser/base/content/browser-box.inc.xhtml",
-          "base": "cf35762fdcc4716932c7af7cf4af4b2f72aea038",
-          "result": "6c13e42806ce80accce464d7ec7e022a0d8e0078"
+          "base": "599313b65c654906f3d52c0852d284937e31d09c",
+          "result": "fd0d2880b1ddc2b3e7ef7354ce8df2207448edc7"
         }
       ]
     },
@@ -572,8 +566,8 @@
       "targets": [
         {
           "path": "browser/base/content/browser-fullScreenAndPointerLock.js",
-          "base": "991cbab1fca19bc20adabb73c146c26a57db68eb",
-          "result": "5c0debc58c9614b13916e758c7f64b522756c1d4"
+          "base": "57711112f21a5929904fce26e44a8a7a2c85ecf4",
+          "result": "157f6ffe597203218790196507aa784f28097f26"
         }
       ]
     },
@@ -594,8 +588,8 @@
       "targets": [
         {
           "path": "browser/base/content/browser-init.js",
-          "base": "0aa4baea8e5e6d742fc6cd3333068e7eb64b5bbc",
-          "result": "057bb2386420edd31154979338e71d00a51a7266"
+          "base": "2f3f46d8d82dc90ebca8d64ace9d6bf1ee127937",
+          "result": "163eb027b8cca1d43af24fff762e951e6f1030fc"
         }
       ]
     },
@@ -605,8 +599,8 @@
       "targets": [
         {
           "path": "browser/base/content/browser.js",
-          "base": "4960f4baed32a9e9f523262591eb93550ca9c4b0",
-          "result": "9ee825057b1b3b5a08e1d2b2c1036f1be2088da6"
+          "base": "6ea9b0dbcd3bfbddd74eff63df06a8637619b990",
+          "result": "250fe064fcb5e267a27c5b645392bb1392fee3fd"
         }
       ]
     },
@@ -704,8 +698,8 @@
       "targets": [
         {
           "path": "browser/base/content/navigator-toolbox.inc.xhtml",
-          "base": "a76bb7aae7636c07989a4acb35281777d3103505",
-          "result": "d35aa0457307e95ad00464861fcee2827325193e"
+          "base": "12c237929070194908b4c90481a42752d7099b7b",
+          "result": "74fae7ab4155ee69463fea4af9b9562163d0621b"
         }
       ]
     },
@@ -759,8 +753,8 @@
       "targets": [
         {
           "path": "browser/components/BrowserContentHandler.sys.mjs",
-          "base": "4bfb4199dafac004486dfc61db954173742a010a",
-          "result": "542c156432b9d7c2190c0d14ce9cfd09814422bf"
+          "base": "f4a0e1e566c363d5eb1d77e0c021df250d96b3f3",
+          "result": "390e6377078504b84e47d44672a9352ecdfe1ae3"
         }
       ]
     },
@@ -1133,8 +1127,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionFile.sys.mjs",
-          "base": "370e5c105c3d9bee05c2d9d7b63d0ee45b8331e1",
-          "result": "1c37c19794ebe863a25f780e9a74d63526b929d7"
+          "base": "3c5cfef8c5c4c4439b2f4eca57a9423f9ae3f0e0",
+          "result": "4daf32d50c7ad11fea7f073be5c32397c4c467c7"
         }
       ]
     },
@@ -1166,8 +1160,8 @@
       "targets": [
         {
           "path": "browser/components/sessionstore/SessionStore.sys.mjs",
-          "base": "52fc803050cd257d6de52b1e4a92f3211cbaba88",
-          "result": "d4a7d082bda9fa6464a05f4746638c9ffa981e1d"
+          "base": "4947351aad5c4ae0125d772e8334b3f453f5b53d",
+          "result": "dbe4f0606f0c332d138aec9f3d76b2e6563740a5"
         }
       ]
     },
@@ -1243,8 +1237,8 @@
       "targets": [
         {
           "path": "browser/components/tabbrowser/Tabbrowser.sys.mjs",
-          "base": "f68e37926001384d0c8e80a3c163dc89e9c4ee5c",
-          "result": "a9a5dfbc38348f2c070f22af2954a089db94a6d3"
+          "base": "e41d07a03d564b2c5960d5b70cd76f8e528e6532",
+          "result": "1abf6b811f1fd2aad0e4701549a4215e450ab482"
         }
       ]
     },
@@ -1304,13 +1298,13 @@
       ]
     },
     {
-      "patch": "src/browser/components/tabbrowser/content/tabgroup-js.patch",
+      "patch": "src/browser/components/tabbrowser/content/tabgroup-mjs.patch",
       "owner": "zen",
       "targets": [
         {
-          "path": "browser/components/tabbrowser/content/tabgroup.js",
-          "base": "237950fb2c449ce088c204d33a70b1d95dae549b",
-          "result": "635f9dbc5c79b6bb869b4ab4ec2d4b4e226b4672"
+          "path": "browser/components/tabbrowser/content/tabgroup.mjs",
+          "base": "282fdbdf2ec30ac3ce7c508b8769e5c555f67ea7",
+          "result": "2b2f2c9fa6fe2ac17b8b00422c5d921ff1b87826"
         }
       ]
     },
@@ -1397,8 +1391,8 @@
       "targets": [
         {
           "path": "browser/components/urlbar/content/UrlbarInputBase.mjs",
-          "base": "8be35b58c5369e123ca69426e852e3849bf75513",
-          "result": "778d8aecce4da6748ecbf8b86a38c2da6e01bec5"
+          "base": "3c1964335b25a3f23db29e78203784bc487c9917",
+          "result": "0594e6b0aaa352ec96ad3873b390c4355f35e9f0"
         }
       ]
     },
@@ -1443,17 +1437,6 @@
           "path": "browser/components/urlbar/content/enUS-searchFeatures.ftl",
           "base": "e405f0f8844eea7081e4302cc35ccd8d8124aa90",
           "result": "90baec46971c6bd3ec738a338834af0351872d14"
-        }
-      ]
-    },
-    {
-      "patch": "src/browser/extensions/newtab/lib/AboutPreferences-sys-mjs.patch",
-      "owner": "zen",
-      "targets": [
-        {
-          "path": "browser/extensions/newtab/lib/AboutPreferences.sys.mjs",
-          "base": "4562efc05b76d5dddd35bda79bd7d5d98a51ffc9",
-          "result": "ad9b6f55f5e77065ce74535daf6457a5c4b44058"
         }
       ]
     },
@@ -1683,8 +1666,8 @@
       "targets": [
         {
           "path": "browser/themes/shared/tabbrowser/tabs.css",
-          "base": "61c0b8382c78f63ad9113af55a6236c4a29bc45b",
-          "result": "0ab463c768d4fb3f45d22e753f408c46b61c0480"
+          "base": "af38ca2d6fa4744dfc29da895af80051144f40d3",
+          "result": "633fdca104da8ca3a3f21c59c2d6dd835941f641"
         }
       ]
     },
@@ -1705,8 +1688,8 @@
       "targets": [
         {
           "path": "browser/themes/shared/urlbar.css",
-          "base": "06183c82e2869290a5fb476c47fb7db92bbef57f",
-          "result": "c64cde1eef50d3457fb1c540d95fe3b8aa087294"
+          "base": "f340b5fa0866c7185734fba0e5152c3f8ece7e44",
+          "result": "2fb69956b7421bf1be25e4c9fdf423d8aa570af4"
         }
       ]
     },
@@ -1716,8 +1699,8 @@
       "targets": [
         {
           "path": "browser/themes/shared/urlbar/view-proton.css",
-          "base": "3620b33cb11f2e6bba189cbaf7532cca0e97cd3b",
-          "result": "346c318ed178fb77a217b3b992b94706db6bf0ee"
+          "base": "a49dfd00bcf8a05ea2a6f4abf9c8a7f730b99039",
+          "result": "344cbf60cc6ed97f86e689b07621384a72dcc3b5"
         }
       ]
     },
@@ -1843,6 +1826,17 @@
       ]
     },
     {
+      "patch": "src/dom/base/nsAttrValue-cpp.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "dom/base/nsAttrValue.cpp",
+          "base": "47387126ef7cce245900200f821343a380bd5f8e",
+          "result": "2e0235579b73de461f24bc77ca09baf5d16a90ab"
+        }
+      ]
+    },
+    {
       "patch": "src/dom/canvas/CanvasRenderingContext2D-cpp.patch",
       "owner": "zen",
       "targets": [
@@ -1872,6 +1866,17 @@
           "path": "dom/chrome-webidl/MediaController.webidl",
           "base": "494ed7a424457dae822c86c0ef7f6d4e8685cd5e",
           "result": "a5a859cbdc76e0d79460780cfc41d7ed95e660e1"
+        }
+      ]
+    },
+    {
+      "patch": "src/dom/events/SimpleGestureEvent-h.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "dom/events/SimpleGestureEvent.h",
+          "base": "4b9f6584ba5a0d279dea130c059fef16cdb4de84",
+          "result": "34b3c36760b34de8ded047f947a17e1be20bd3fd"
         }
       ]
     },
@@ -1931,6 +1936,17 @@
       ]
     },
     {
+      "patch": "src/dom/webidl/SimpleGestureEvent-webidl.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "dom/webidl/SimpleGestureEvent.webidl",
+          "base": "58a242331ebfa36f6c3df1b1a52c7c1510b90a0d",
+          "result": "79b15ab56e8369d2b4f5df7166daed62fd9369f2"
+        }
+      ]
+    },
+    {
       "patch": "src/editor/libeditor/HTMLAbsPositionEditor-cpp.patch",
       "owner": "zen",
       "targets": [
@@ -1980,8 +1996,19 @@
       "targets": [
         {
           "path": "gfx/layers/AnimationInfo.cpp",
-          "base": "538808aa15d1902fc517f79e3a6d62f4d7fd9d37",
-          "result": "4b0760b7be9d872a926f99716d16f3f64dcb2378"
+          "base": "aba548880b3250818e7f7c0f14123a1ea3a2e32a",
+          "result": "e10b49ba484cd324bbbd31e27e4b38d61f8929b3"
+        }
+      ]
+    },
+    {
+      "patch": "src/gfx/layers/CompositorAnimationStorage-cpp.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "gfx/layers/CompositorAnimationStorage.cpp",
+          "base": "113f52409d2f2b985ea2fd7824893b65437147b3",
+          "result": "212ff912f3b942177ec77df78fdc26a86cc96203"
         }
       ]
     },
@@ -2035,8 +2062,8 @@
       "targets": [
         {
           "path": "layout/base/nsPresContext.h",
-          "base": "5f27c288fd027cf245421e7f049103a7e19da18a",
-          "result": "48d3dd437725d85c0968d409618afa84b34a7530"
+          "base": "dd13711ab28e0f43f2a0e4f5e9a9794c3eb4e206",
+          "result": "afbf98e0d13197b8ea2f884717cc704b8c2afbe8"
         }
       ]
     },
@@ -2189,8 +2216,30 @@
       "targets": [
         {
           "path": "layout/style/GeckoBindings.cpp",
-          "base": "ee784cef626a12da58ac1f6c6c8538c454f82f4f",
-          "result": "32158faf39de766a16318018f325d0e6c6aef50c"
+          "base": "b834569f339ad83467f7140992236730461a6199",
+          "result": "0e232baa9d61540b20cb947a951d7a13267d750c"
+        }
+      ]
+    },
+    {
+      "patch": "src/layout/style/ServoCSSParser-cpp.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "layout/style/ServoCSSParser.cpp",
+          "base": "7ec7188f4598ea40391af95a3d86e0f319832f69",
+          "result": "8990daab487db2cbcf91a3032f60cdf301a77a46"
+        }
+      ]
+    },
+    {
+      "patch": "src/layout/style/StyleAnimationValue-cpp.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "layout/style/StyleAnimationValue.cpp",
+          "base": "778fd72c7c132d4ee7f110a1dc3513cd23feedde",
+          "result": "7117539233af531584b22400de18badf67209dca"
         }
       ]
     },
@@ -2420,8 +2469,8 @@
       "targets": [
         {
           "path": "servo/components/style/queries/feature.rs",
-          "base": "beb8656bc51044343c8ce42892d03178edd2dff1",
-          "result": "d886bdecb37761badc534dc31e29cee43549c352"
+          "base": "089d56111dbcd73918e9f6db873a17245d4fd41f",
+          "result": "ca3f6bd48b62c924f032fd09cd551235601d6ef5"
         }
       ]
     },
@@ -2431,8 +2480,8 @@
       "targets": [
         {
           "path": "servo/components/style/queries/feature_expression.rs",
-          "base": "1519c1993d3f3c689aac423f430a53efe92aa009",
-          "result": "9c94cda6290448c040e43182957c10ead99ba178"
+          "base": "3632c4054ac01ec4ed6b8e6903322ef908e25da0",
+          "result": "9ce42db40fe72db3c1fef5010f579ffc34734d6e"
         }
       ]
     },
@@ -2816,8 +2865,8 @@
       "targets": [
         {
           "path": "toolkit/profile/nsToolkitProfileService.cpp",
-          "base": "f624b97e480cdeae8e7621060b33c7ab872c4523",
-          "result": "2fc8240543ef391f43ca6a02d169302488d738cc"
+          "base": "bf884a1ce6738e7b13ffdbef14ebef70f13d54f0",
+          "result": "c56756e43fe06c97c76cac0550b12203e14e53df"
         }
       ]
     },
@@ -2838,8 +2887,8 @@
       "targets": [
         {
           "path": "toolkit/themes/shared/design-system/dist/tokens-shared.css",
-          "base": "b0f8fa146de335c53e73d46853f45dda9b15cc73",
-          "result": "1b7592c0e9ca12fd9d1f8a555633fd39c2efb537"
+          "base": "5564b097da8f2837d4623cd48928640741f0f600",
+          "result": "894eef3d2f43db1889438f365f89255fe7b0857d"
         }
       ]
     },
@@ -3026,7 +3075,18 @@
         {
           "path": "widget/SwipeTracker.cpp",
           "base": "83b80a808261ce28e5c571dc802993556477f0c8",
-          "result": "8de39d5c724e23f540a70f47e893e46bcf1112e6"
+          "result": "2796f97c89f370cd895177b0142847a118df73b8"
+        }
+      ]
+    },
+    {
+      "patch": "src/widget/SwipeTracker-h.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "widget/SwipeTracker.h",
+          "base": "5c01323ee336313ff97e92b7fd4a86c1443c709f",
+          "result": "1658c6a19f05c94c078ead1d38ea7527f798ec47"
         }
       ]
     },
@@ -3036,8 +3096,8 @@
       "targets": [
         {
           "path": "widget/Theme.cpp",
-          "base": "0d9c9014dabfe7177c25d6f983ff823c4435a327",
-          "result": "7995de05ed556fa6373b83e3e44bffc1b857dd73"
+          "base": "93c947bb8dad0d4abd68871d9e6eb401bba2a24f",
+          "result": "e4358a5906527fe5578b37624210928ea08ed3cd"
         }
       ]
     },
@@ -3060,6 +3120,17 @@
           "path": "widget/ThemeColors.cpp",
           "base": "0ac3a8cbb04258312cba20a89a23700c6fd1b49f",
           "result": "dfd5203c1a795fc14befa88a474f241dd16e9c8f"
+        }
+      ]
+    },
+    {
+      "patch": "src/widget/TouchEvents-h.patch",
+      "owner": "zen",
+      "targets": [
+        {
+          "path": "widget/TouchEvents.h",
+          "base": "b54503605b1e0ca9ff5d7bd835821ab6c6c92426",
+          "result": "4361a397eea4f06f1651d2db6cce7c8ca830a712"
         }
       ]
     },
@@ -3102,8 +3173,8 @@
       "targets": [
         {
           "path": "widget/cocoa/nsCocoaWindow.mm",
-          "base": "5e02a34001f90c14a9c1d56e7f55ddaf7486c98a",
-          "result": "ae7a9decd734bbccb1b8f8df24329195d0e5e35b"
+          "base": "e467ce48f523859aaff26023633d4d2d3978818f",
+          "result": "078fbfefffe40ffacbf883b9dc3c3150eacaa5bc"
         }
       ]
     },
@@ -5103,6 +5174,10 @@
       "engine": "zen/spaces/ZenSpace.mjs"
     },
     {
+      "source": "src/zen/spaces/ZenSpaceAddSwipe.mjs",
+      "engine": "zen/spaces/ZenSpaceAddSwipe.mjs"
+    },
+    {
       "source": "src/zen/spaces/ZenSpaceBookmarksStorage.js",
       "engine": "zen/spaces/ZenSpaceBookmarksStorage.js"
     },
@@ -5133,6 +5208,10 @@
     {
       "source": "src/zen/spaces/moz.build",
       "engine": "zen/spaces/moz.build"
+    },
+    {
+      "source": "src/zen/spaces/nsZenSwipeOverrides.cpp",
+      "engine": "zen/spaces/nsZenSwipeOverrides.cpp"
     },
     {
       "source": "src/zen/spaces/overflow-icons.inc.css",
@@ -5375,6 +5454,10 @@
       "engine": "zen/tests/folders/browser_folder_empty_tab.js"
     },
     {
+      "source": "src/zen/tests/folders/browser_folder_issue_15522.js",
+      "engine": "zen/tests/folders/browser_folder_issue_15522.js"
+    },
+    {
       "source": "src/zen/tests/folders/browser_folder_issue_9885.js",
       "engine": "zen/tests/folders/browser_folder_issue_9885.js"
     },
@@ -5589,6 +5672,10 @@
     {
       "source": "src/zen/tests/mochitests/linkHandling/browser_javascript_links.js",
       "engine": "zen/tests/mochitests/linkHandling/browser_javascript_links.js"
+    },
+    {
+      "source": "src/zen/tests/mochitests/linkHandling/browser_nested_hrefless_links.js",
+      "engine": "zen/tests/mochitests/linkHandling/browser_nested_hrefless_links.js"
     },
     {
       "source": "src/zen/tests/mochitests/linkHandling/file_contentAreaClick_subframe_javascript.html",
@@ -6907,6 +6994,14 @@
       "engine": "zen/tests/mochitests/sessionstore/browser_splitview_string_migration.js"
     },
     {
+      "source": "src/zen/tests/mochitests/sessionstore/browser_startup_telemetry.toml",
+      "engine": "zen/tests/mochitests/sessionstore/browser_startup_telemetry.toml"
+    },
+    {
+      "source": "src/zen/tests/mochitests/sessionstore/browser_startup_timeline_telemetry.js",
+      "engine": "zen/tests/mochitests/sessionstore/browser_startup_timeline_telemetry.js"
+    },
+    {
       "source": "src/zen/tests/mochitests/sessionstore/browser_swapDocShells.js",
       "engine": "zen/tests/mochitests/sessionstore/browser_swapDocShells.js"
     },
@@ -7029,6 +7124,10 @@
     {
       "source": "src/zen/tests/mochitests/sessionstore/browser_windowStateContainer.js",
       "engine": "zen/tests/mochitests/sessionstore/browser_windowStateContainer.js"
+    },
+    {
+      "source": "src/zen/tests/mochitests/sessionstore/browser_window_position_precision.js",
+      "engine": "zen/tests/mochitests/sessionstore/browser_window_position_precision.js"
     },
     {
       "source": "src/zen/tests/mochitests/sessionstore/browser_wireframe_basic.js",
@@ -7217,6 +7316,10 @@
     {
       "source": "src/zen/tests/mochitests/sessionstore/unit/test_final_write_cleanup.js",
       "engine": "zen/tests/mochitests/sessionstore/unit/test_final_write_cleanup.js"
+    },
+    {
+      "source": "src/zen/tests/mochitests/sessionstore/unit/test_glean_backup_can_be_loaded.js",
+      "engine": "zen/tests/mochitests/sessionstore/unit/test_glean_backup_can_be_loaded.js"
     },
     {
       "source": "src/zen/tests/mochitests/sessionstore/unit/test_histogram_corrupt_files.js",

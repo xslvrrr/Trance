@@ -1,5 +1,5 @@
 diff --git a/widget/cocoa/nsCocoaWindow.mm b/widget/cocoa/nsCocoaWindow.mm
-index 5e02a34001f90c14a9c1d56e7f55ddaf7486c98a..ae7a9decd734bbccb1b8f8df24329195d0e5e35b 100644
+index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150eacaa5bc 100644
 --- a/widget/cocoa/nsCocoaWindow.mm
 +++ b/widget/cocoa/nsCocoaWindow.mm
 @@ -72,6 +72,7 @@
@@ -542,7 +542,7 @@ index 5e02a34001f90c14a9c1d56e7f55ddaf7486c98a..ae7a9decd734bbccb1b8f8df24329195
    LayoutDeviceIntRect innerBounds = GetClientBounds();
    if (mWidgetListener) {
      mWidgetListener->WindowResized(this, innerBounds.Size());
-@@ -8995,6 +9447,15 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
+@@ -9011,6 +9463,15 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
      return;
    }
  
