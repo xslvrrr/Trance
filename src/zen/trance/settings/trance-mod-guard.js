@@ -335,9 +335,10 @@ const TRANCE_REPLACED_MODS = [
       "before it did. The two register the same toolbar button, the same " +
       "element and the same global, and the mod tears the built-in one down " +
       "when it loads — so with it on, the Library in the browser is this " +
-      "mod's, not Zen's. Trance no longer installs it, and switched it off " +
-      "once in profiles it had installed it into. Uninstalling it is " +
-      "recommended (ADR-086).",
+      "mod's, not Zen's. Trance no longer installs it, and uninstalls it " +
+      "once from profiles it had installed it into. If it is here, it was " +
+      "installed again by hand; removing it is recommended (ADR-086, " +
+      "ADR-106).",
   },
   {
     keys: ["599a1599-e6ab-4749-ab22-de533860de2c"],

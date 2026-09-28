@@ -188,9 +188,9 @@ def zen_store_api(mod_id: str, ref: str) -> str:
 # the same verdict for the same reason until Zen shipped a native Library of
 # its own (gh-15438, Zen 1.23). The mod registers the same widget id, the same
 # custom element and the same `gZenLibrary` global, and destroys the native
-# instance on load, so it is no longer preinstalled and is retired from
-# existing profiles below (RETIRED_MODS, ADR-086). The paragraphs that follow
-# are the case as it was made for both.
+# instance on load, so it is no longer preinstalled and is uninstalled from
+# existing profiles below (RETIRED_MODS, ADR-086, ADR-106). The paragraphs that
+# follow are the case as it was made for both.
 #
 # The argument that justifies every other reimplementation in this project is
 # *ownership*: two stylesheets over one element, with a winner decided by load
@@ -306,13 +306,17 @@ PREINSTALLED_MODS = (
 )
 
 # Mods an earlier Trance preinstalled and this one no longer does, because
-# something in the browser now owns what they did. `config.js` switches each
-# one off once in a profile that has it, before Sine reads `mods.json`, and
-# records that it did so in `pref`, so a person who turns it back on in Sine
-# keeps it on. Disabled, not deleted: the mod's folder and settings are left
-# where they are (ADR-086).
+# something in the browser now owns what they did. `config.js` uninstalls each
+# one once in a profile that has it, before Sine reads `mods.json`: the entry
+# leaves `mods.json` and the mod's folder leaves `chrome/sine-mods`, so Sine
+# neither lists it nor updates it. `pref` records that the pass ran, so a person
+# who installs the mod again from the marketplace keeps it (ADR-106).
+#
+# The pref is `removed`, not the `retired` one ADR-086 used when the pass only
+# switched the mod off: profiles that already had that pass still carry the
+# disabled mod, and a new key is what makes them get the removal too.
 RETIRED_MODS = (
-    {"id": "zen-library", "pref": "trance.mods.retired.zen-library"},
+    {"id": "zen-library", "pref": "trance.mods.removed.zen-library"},
 )
 
 # Files the provisioner owns, relative to their install root. Anything listed
@@ -377,31 +381,39 @@ if (!Services.appinfo.inSafeMode) {
     }
 
     // Mods an earlier Trance preinstalled and something in the browser now
-    // owns (RETIRED_MODS in the provisioner). Switched off once, before Sine
-    // reads this file, and never again: the pref is how a person who turns one
-    // back on keeps it on. Synchronous on purpose — Sine's own read is the
-    // next thing that happens.
+    // owns (RETIRED_MODS in the provisioner). Uninstalled once, before Sine
+    // reads this file, and never again: the pref is how a person who installs
+    // one again keeps it. Synchronous on purpose — Sine's own read is the next
+    // thing that happens.
     const retired = %(retired)s;
     const pending = retired.filter(({ pref }) => !Services.prefs.getBoolPref(pref, false));
     const data = mods.clone();
     data.append("mods.json");
-    if (pending.length && data.exists()) {
-      const input = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
-      input.init(data, -1, 0, 0);
-      const reader = Cc["@mozilla.org/intl/converter-input-stream;1"].createInstance(Ci.nsIConverterInputStream);
-      reader.init(input, "UTF-8", 0, 0);
-      let text = "";
-      const chunk = {};
-      while (reader.readString(0xffffffff, chunk)) {
-        text += chunk.value;
+    if (pending.length) {
+      let installed = null;
+      if (data.exists()) {
+        const input = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(Ci.nsIFileInputStream);
+        input.init(data, -1, 0, 0);
+        const reader = Cc["@mozilla.org/intl/converter-input-stream;1"].createInstance(Ci.nsIConverterInputStream);
+        reader.init(input, "UTF-8", 0, 0);
+        let text = "";
+        const chunk = {};
+        while (reader.readString(0xffffffff, chunk)) {
+          text += chunk.value;
+        }
+        reader.close();
+        installed = JSON.parse(text || "{}");
       }
-      reader.close();
-      const installed = JSON.parse(text || "{}");
       let changed = false;
       for (const { id, pref } of pending) {
-        if (installed[id]?.enabled) {
-          installed[id].enabled = false;
+        if (installed && Object.hasOwn(installed, id)) {
+          delete installed[id];
           changed = true;
+        }
+        const folder = mods.clone();
+        folder.append(id);
+        if (folder.exists()) {
+          folder.remove(true);
         }
         Services.prefs.setBoolPref(pref, true);
       }

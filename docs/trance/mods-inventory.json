@@ -382,7 +382,7 @@
       "verdict": "ZEN",
       "phase": 7,
       "cluster": "apps",
-      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030), then PREINSTALL->ZEN when Zen shipped a native Library (gh-15438, Zen 1.23, merged for Trance 0.2.1). The mod registers the same `zen-library-button` widget, the same `zen-library` element and the same `gZenLibrary` global, and destroys the native instance on load, so the PREINSTALL premise (no second owner) stopped being true. No longer provisioned; switched off once in profiles an earlier Trance provisioned it into (RETIRED_MODS in scripts/trance-cosine.py, ADR-086).",
+      "notes": "Verdict changed NATIVE->PREINSTALL by its investigation (ADR-030), then PREINSTALL->ZEN when Zen shipped a native Library (gh-15438, Zen 1.23, merged for Trance 0.2.1). The mod registers the same `zen-library-button` widget, the same `zen-library` element and the same `gZenLibrary` global, and destroys the native instance on load, so the PREINSTALL premise (no second owner) stopped being true. No longer provisioned; uninstalled once (entry and folder removed) from profiles an earlier Trance provisioned it into (RETIRED_MODS in scripts/trance-cosine.py, ADR-086, ADR-106).",
       "investigated": "2026-08-26",
       "investigationDoc": "docs/trance/mods/zen-library.md",
       "implemented": "upstream"
