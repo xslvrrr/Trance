@@ -22,8 +22,8 @@
 // an occluded window entirely (TRANCE.md §3.3).
 //
 // This module replaces all four. The blur a person sees through the window is
-// the window server's on macOS, at `trance.surface.blur.radius`, published by
-// `TranceMaterial` (ADR-099); what is left in CSS are the surfaces that float
+// the window material's on macOS, at `trance.surface.blur.radius`, published
+// by `TranceMaterial` (ADR-099, ADR-107); what is left in CSS are the surfaces that float
 // over something Gecko painted — the extended address bar, compact mode's
 // floating chrome and the browser's own pages. The sidebar, splitter and
 // toolbar regions ADR-082 and ADR-087 added are gone: over a transparent

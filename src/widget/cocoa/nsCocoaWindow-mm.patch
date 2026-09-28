@@ -1,16 +1,8 @@
 diff --git a/widget/cocoa/nsCocoaWindow.mm b/widget/cocoa/nsCocoaWindow.mm
-index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150eacaa5bc 100644
+index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7686f4333 100644
 --- a/widget/cocoa/nsCocoaWindow.mm
 +++ b/widget/cocoa/nsCocoaWindow.mm
-@@ -72,6 +72,7 @@
- #include "gfxPlatform.h"
- #include "qcms.h"
- 
-+#import <objc/runtime.h>
- #include <algorithm>
- #include "mozilla/AutoRestore.h"
- #include "mozilla/BasicEvents.h"
-@@ -86,6 +87,8 @@
+@@ -87,6 +87,8 @@
  #include "mozilla/StaticPrefs_gfx.h"
  #include "mozilla/StaticPrefs_ui.h"
  #include "mozilla/StaticPrefs_widget.h"
@@ -19,7 +11,7 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
  #include "mozilla/WritingModes.h"
  #include "mozilla/dom/Document.h"
  #include "mozilla/layers/CompositorBridgeChild.h"
-@@ -1332,6 +1335,405 @@ mozilla::VibrancyManager& nsCocoaWindow::EnsureVibrancyManager() {
+@@ -1333,6 +1335,327 @@ mozilla::VibrancyManager& nsCocoaWindow::EnsureVibrancyManager() {
  }
  @end
  
@@ -95,6 +87,7 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +    "zen.view.grey-out-inactive-windows"_ns,
 +    // >>> TRANCE
 +    "zen.performance.low-power-mode"_ns,
++    "zen.widget.macos.window-blur-radius"_ns,
 +    // <<< TRANCE
 +};
 +
@@ -117,6 +110,90 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +      return NSVisualEffectMaterialUnderWindowBackground;
 +  }
 +}
++
++// >>> TRANCE
++// The material's blur, with a radius (ADR-107, superseding the window-server
++// blur of ADR-099).
++//
++// AppKit fixes the blur of a material and offers no radius. The material is
++// drawn by a private CABackdropLayer inside this view, though, and that
++// layer's `gaussianBlur` filter has one: `inputRadius`. So the radius Trance
++// publishes in `zen.widget.macos.window-blur-radius` is written there, and -1
++// ("no radius published") gives the material its own value back.
++//
++// ADR-099 reached the same control with CGSSetWindowBackgroundBlurRadius, and
++// that had two costs this does not. A window-server background blur only
++// blurs a window's *transparent* pixels, so the window had to become
++// non-opaque with a clear background: the window server then composites the
++// whole window with alpha over whatever is behind it on every frame that
++// changes — measured at +100 to +190 ms of WindowServer GPU time per second
++// over a video wallpaper for a 1400x880 window, the same at radius 0 as at 60
++// — and the window's shape became its rectangle, which squared off the rounded
++// corners the moment a radius was published. The material keeps the window
++// opaque, its backdrop is sampled at an eighth of the resolution, and AppKit
++// keeps its corner mask.
++//
++// AppKit rebuilds the backdrop layer and its filters whenever the state,
++// material, appearance or key status changes, and it does that from -layout
++// and -updateLayer, so the radius is re-applied after `super` in both. Only
++// this view's own layers are walked — never the Gecko child view's — and every
++// private name is looked up at runtime and checked, so a macOS that renames
++// them leaves the material's own blur rather than a crash.
++static int32_t ZenWindowBlurRadius() {
++  return Preferences::GetInt("zen.widget.macos.window-blur-radius", -1);
++}
++
++@interface ZenWindowMaterialView () {
++  // The material's own radius, captured before the first override, so that
++  // -1 can give it back without rebuilding the view.
++  NSNumber* mMaterialBlurRadius;
++}
++- (void)applyBlurRadius;
++@end
++
++static void ZenApplyBackdropBlurRadius(CALayer* aLayer, NSSet* aSkip,
++                                       int32_t aRadius, NSNumber** aOriginal,
++                                       uint32_t aDepth) {
++  static Class sBackdropClass = NSClassFromString(@"CABackdropLayer");
++  static Class sFilterClass = NSClassFromString(@"CAFilter");
++  if (!aLayer || !sBackdropClass || !sFilterClass || aDepth > 3 ||
++      [aSkip containsObject:aLayer]) {
++    return;
++  }
++  if ([aLayer isKindOfClass:sBackdropClass]) {
++    NSArray* filters = aLayer.filters;
++    bool changed = false;
++    for (id filter in filters) {
++      if (![filter isKindOfClass:sFilterClass] ||
++          ![[filter valueForKey:@"name"] isEqual:@"gaussianBlur"]) {
++        continue;
++      }
++      NSNumber* current = [filter valueForKey:@"inputRadius"];
++      if (![current isKindOfClass:[NSNumber class]]) {
++        continue;
++      }
++      if (!*aOriginal) {
++        *aOriginal = [current retain];
++      }
++      NSNumber* wanted = aRadius >= 0 ? @(aRadius) : *aOriginal;
++      if (![current isEqualToNumber:wanted]) {
++        [filter setValue:wanted forKey:@"inputRadius"];
++        changed = true;
++      }
++    }
++    if (changed) {
++      // Filters are copied into the render tree on assignment, so the edited
++      // array has to be handed back for the change to reach the screen.
++      aLayer.filters = filters;
++    }
++    return;
++  }
++  for (CALayer* sublayer in aLayer.sublayers) {
++    ZenApplyBackdropBlurRadius(sublayer, aSkip, aRadius, aOriginal,
++                               aDepth + 1);
++  }
++}
++// <<< TRANCE
 +
 +@implementation ZenWindowMaterialView
 +- (instancetype)initWithFrame:(NSRect)aRect {
@@ -147,6 +224,7 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +- (void)dealloc {
 +  // >>> TRANCE
 +  [NSNotificationCenter.defaultCenter removeObserver:self];
++  [mMaterialBlurRadius release];
 +  // <<< TRANCE
 +  for (const auto& pref : kZenWindowMaterialPrefs) {
 +    Preferences::UnregisterCallback(ZenWindowMaterialPrefChanged, pref, self);
@@ -158,6 +236,35 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +  self.material = ZenWindowMaterial();
 +  // >>> TRANCE
 +  [self windowActivityChanged:nil];
++  [self applyBlurRadius];
++}
++
++- (void)layout {
++  [super layout];
++  [self applyBlurRadius];
++}
++
++- (void)updateLayer {
++  [super updateLayer];
++  [self applyBlurRadius];
++}
++
++- (void)applyBlurRadius {
++  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
++  int32_t radius = ZenWindowBlurRadius();
++  if (radius < 0 && !mMaterialBlurRadius) {
++    // Never overridden, so there is nothing to give back.
++    return;
++  }
++  NSMutableSet* skip = [NSMutableSet set];
++  for (NSView* subview in self.subviews) {
++    if (subview.layer) {
++      [skip addObject:subview.layer];
++    }
++  }
++  ZenApplyBackdropBlurRadius(self.layer, skip, radius, &mMaterialBlurRadius,
++                             0);
++  NS_OBJC_END_TRY_IGNORE_BLOCK;
 +}
 +
 +- (void)viewDidMoveToWindow {
@@ -183,186 +290,6 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +}
 +@end
 +
-+// >>> TRANCE
-+// The window's own blur, with a radius.
-+//
-+// ZenWindowMaterialView is an NSVisualEffectView, and AppKit fixes the blur of
-+// a material: there is no radius to ask for, so Trance's blur control reached
-+// every surface except the one a person actually looks through — the desktop
-+// behind the window. The window server does blur a window's background by a
-+// radius (CGSSetWindowBackgroundBlurRadius, the call terminals use for the
-+// same control), so when Trance publishes a radius the material view is
-+// replaced by this plain wrapper and the radius is applied to the window.
-+//
-+// -1 is "no radius published": Zen's material, exactly as before.
-+//
-+// A browser window is created opaque ("non-popup windows are always opaque"),
-+// and the material never needed otherwise: an NSVisualEffectView blending
-+// behind the window shows through an opaque window by itself. A window-server
-+// background blur does not — it blurs what is behind a window's *transparent*
-+// pixels, and an opaque window has none, so it would paint the window's own
-+// background colour. This view therefore makes its window non-opaque with a
-+// clear background while it is the content view, and puts both back when it
-+// leaves; SetTransparencyMode keeps it that way for as long as it is there.
-+//
-+// The call is private, so it is looked up at runtime like the Spaces functions
-+// further down, and a missing symbol leaves an unblurred window rather than a
-+// crash.
-+static constexpr char kZenWindowBlurRadiusPref[] =
-+    "zen.widget.macos.window-blur-radius";
-+
-+static int32_t ZenWindowBlurRadius() {
-+  return Preferences::GetInt(kZenWindowBlurRadiusPref, -1);
-+}
-+
-+typedef CGError (*CGSSetWindowBackgroundBlurRadiusFunc)(CGSConnection cid,
-+                                                        CGSWindow wid,
-+                                                        NSUInteger radius);
-+static CGSSetWindowBackgroundBlurRadiusFunc
-+GetCGSSetWindowBackgroundBlurRadiusFunc() {
-+  static CGSSetWindowBackgroundBlurRadiusFunc func = nullptr;
-+  static bool lookedUpFunc = false;
-+  if (!lookedUpFunc) {
-+    func = (CGSSetWindowBackgroundBlurRadiusFunc)dlsym(
-+        RTLD_DEFAULT, "CGSSetWindowBackgroundBlurRadius");
-+    lookedUpFunc = true;
-+  }
-+  return func;
-+}
-+
-+@interface ZenWindowBlurView : NSView {
-+  NSInteger mAppliedWindowNumber;
-+  int32_t mAppliedRadius;
-+  // What the window was before this view made it see-through, so leaving
-+  // gives exactly that back rather than a guess.
-+  BOOL mRestoreOpaque;
-+  NSColor* mRestoreBackground;
-+}
-+- (void)applyBlur;
-+- (void)windowDidOrderIn;
-+- (void)windowActivityChanged:(NSNotification*)aNotification;
-+@end
-+
-+static void ZenWindowBlurPrefChanged(const char* aPref, void* aClosure) {
-+  [static_cast<ZenWindowBlurView*>(aClosure) applyBlur];
-+}
-+
-+static constexpr nsLiteralCString kZenWindowBlurPrefs[] = {
-+    "zen.widget.macos.window-blur-radius"_ns,
-+    "zen.performance.low-power-mode"_ns,
-+};
-+
-+static void ZenSetWindowBackgroundBlurRadius(NSWindow* aWindow,
-+                                             int32_t aRadius) {
-+  CGSSetWindowBackgroundBlurRadiusFunc func =
-+      GetCGSSetWindowBackgroundBlurRadiusFunc();
-+  if (!func || !aWindow || aWindow.windowNumber <= 0) {
-+    return;
-+  }
-+  func(_CGSDefaultConnection(), aWindow.windowNumber,
-+       static_cast<NSUInteger>(std::max(aRadius, 0)));
-+}
-+
-+@implementation ZenWindowBlurView
-+- (instancetype)initWithFrame:(NSRect)aRect {
-+  self = [super initWithFrame:aRect];
-+  if (self) {
-+    mAppliedWindowNumber = -1;
-+    mAppliedRadius = -1;
-+    // A window created with defer:YES has no window device, and so no window
-+    // number, until it is first shown; nsCocoaWindow::Show calls
-+    // -windowDidOrderIn once it has one. Occlusion changes re-send the radius
-+    // after a move between Spaces or a trip through full screen.
-+    [NSNotificationCenter.defaultCenter
-+        addObserver:self
-+           selector:@selector(windowActivityChanged:)
-+               name:NSWindowDidChangeOcclusionStateNotification
-+             object:nil];
-+    for (const auto& pref : kZenWindowBlurPrefs) {
-+      Preferences::RegisterCallback(ZenWindowBlurPrefChanged, pref, self);
-+    }
-+  }
-+  return self;
-+}
-+
-+- (void)dealloc {
-+  [NSNotificationCenter.defaultCenter removeObserver:self];
-+  for (const auto& pref : kZenWindowBlurPrefs) {
-+    Preferences::UnregisterCallback(ZenWindowBlurPrefChanged, pref, self);
-+  }
-+  [mRestoreBackground release];
-+  [super dealloc];
-+}
-+
-+- (void)viewWillMoveToWindow:(NSWindow*)aWindow {
-+  // Leaving the window — the material view is taking over, or the window is
-+  // going away. The radius and the transparency belong to the window rather
-+  // than to this view, so both have to be handed back explicitly or they
-+  // would outlive the choice.
-+  NSWindow* window = self.window;
-+  if (window && aWindow != window) {
-+    ZenSetWindowBackgroundBlurRadius(window, 0);
-+    mAppliedWindowNumber = -1;
-+    mAppliedRadius = -1;
-+    if (mRestoreBackground) {
-+      window.backgroundColor = mRestoreBackground;
-+      window.opaque = mRestoreOpaque;
-+      [mRestoreBackground release];
-+      mRestoreBackground = nil;
-+    }
-+  }
-+  [super viewWillMoveToWindow:aWindow];
-+}
-+
-+- (void)viewDidMoveToWindow {
-+  [super viewDidMoveToWindow];
-+  NSWindow* window = self.window;
-+  if (window && !mRestoreBackground) {
-+    mRestoreOpaque = window.opaque;
-+    mRestoreBackground =
-+        [(window.backgroundColor ?: NSColor.windowBackgroundColor) retain];
-+    window.opaque = NO;
-+    window.backgroundColor = NSColor.clearColor;
-+  }
-+  [self applyBlur];
-+}
-+
-+- (void)windowDidOrderIn {
-+  // Re-send even if the cache says this radius is already on this window: the
-+  // window server is the authority on what the window carries, and this runs
-+  // once per show.
-+  mAppliedRadius = -1;
-+  [self applyBlur];
-+}
-+
-+- (void)windowActivityChanged:(NSNotification*)aNotification {
-+  if (aNotification.object != self.window) {
-+    return;
-+  }
-+  [self windowDidOrderIn];
-+}
-+
-+- (void)applyBlur {
-+  NSWindow* window = self.window;
-+  if (!window || window.windowNumber <= 0) {
-+    return;
-+  }
-+  // Low Power Mode stops the material for the same reason: the window server
-+  // resolves a background blur continuously, and that is work nobody asked
-+  // for on a machine trying to save power.
-+  int32_t radius = Preferences::GetBool(kZenLowPowerModePref, false)
-+                       ? 0
-+                       : std::max(ZenWindowBlurRadius(), 0);
-+  if (window.windowNumber == mAppliedWindowNumber && radius == mAppliedRadius) {
-+    return;
-+  }
-+  ZenSetWindowBackgroundBlurRadius(window, radius);
-+  mAppliedWindowNumber = window.windowNumber;
-+  mAppliedRadius = radius;
-+}
-+@end
-+// <<< TRANCE
-+
 +static void ZenWindowVibrancyPrefChanged(const char* aPref, void* aClosure) {
 +  static_cast<nsCocoaWindow*>(aClosure)->UpdateWindowMaterial();
 +}
@@ -380,10 +307,6 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +  // <<< TRANCE
 +  Preferences::RegisterCallback(ZenWindowVibrancyPrefChanged,
 +                                "zen.widget.macos.window-vibrancy", this);
-+  // >>> TRANCE
-+  Preferences::RegisterCallback(ZenWindowVibrancyPrefChanged,
-+                                kZenWindowBlurRadiusPref, this);
-+  // <<< TRANCE
 +  UpdateWindowMaterial();
 +}
 +
@@ -394,23 +317,14 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
 +    return;
 +  }
 +  bool wanted = StaticPrefs::zen_widget_macos_window_vibrancy();
-+  // >>> TRANCE
-+  // A published radius replaces the material with the radius-driven wrapper;
-+  // without one this is Zen's choice between material and plain, unchanged.
-+  bool blur = wanted && ZenWindowBlurRadius() >= 0;
-+  bool material = wanted && !blur;
-+  NSView* current = mWindow.contentView;
-+  if (material == [current isKindOfClass:[ZenWindowMaterialView class]] &&
-+      blur == [current isKindOfClass:[ZenWindowBlurView class]]) {
++  if (wanted ==
++      [mWindow.contentView isKindOfClass:[ZenWindowMaterialView class]]) {
 +    return;
 +  }
 +
-+  NSRect frame = current.frame;
-+  NSView* wrapper = material
-+                        ? [[ZenWindowMaterialView alloc] initWithFrame:frame]
-+                    : blur ? [[ZenWindowBlurView alloc] initWithFrame:frame]
++  NSRect frame = mWindow.contentView.frame;
++  NSView* wrapper = wanted ? [[ZenWindowMaterialView alloc] initWithFrame:frame]
 +                           : [[NSView alloc] initWithFrame:frame];
-+  // <<< TRANCE
 +  wrapper.wantsLayer = YES;
 +  for (NSView* view in [mWindow contentViewContents]) {
 +    [view removeFromSuperviewWithoutNeedingDisplay];
@@ -425,7 +339,7 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
  void nsCocoaWindow::UpdateWindowDraggingRegion(
      const LayoutDeviceIntRegion& aRegion) {
    // mChildView returns YES from mouseDownCanMoveWindow, so we need to put
-@@ -3877,7 +4279,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
+@@ -3878,7 +4201,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  // NSDraggingDestination
  - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
    MOZ_LOG(sCocoaLog, LogLevel::Info, ("ChildView draggingUpdated: entered\n"));
@@ -436,7 +350,7 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
  }
  
  // NSDraggingDestination
-@@ -3893,6 +4297,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
+@@ -3894,6 +4219,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
    nsAutoRetainCocoaObject kungFuDeathGrip(self);
    BOOL handled = [self doDragAction:eDrop sender:sender] != NSDragOperationNone;
@@ -446,115 +360,14 @@ index e467ce48f523859aaff26023633d4d2d3978818f..078fbfefffe40ffacbf883b9dc3c3150
    NS_IF_RELEASE(mDragService);
    return handled;
  }
-@@ -4938,6 +5345,14 @@ void nsCocoaWindow::DestroyNativeWindow() {
+@@ -4939,6 +5267,10 @@ void nsCocoaWindow::DestroyNativeWindow() {
  nsCocoaWindow::~nsCocoaWindow() {
    NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
  
 +  if (mIsBrowserWindow) {
 +    Preferences::UnregisterCallback(ZenWindowVibrancyPrefChanged,
 +                                    "zen.widget.macos.window-vibrancy", this);
-+    // >>> TRANCE
-+    Preferences::UnregisterCallback(ZenWindowVibrancyPrefChanged,
-+                                    kZenWindowBlurRadiusPref, this);
-+    // <<< TRANCE
 +  }
    RemoveAllChildren();
    if (mWindow && mWindowMadeHere) {
      CancelAllTransitions();
-@@ -5638,6 +6053,13 @@ void nsCocoaWindow::Show(bool aState) {
-       } else {
-         [mWindow makeKeyAndOrderFront:nil];
-       }
-+      // >>> TRANCE
-+      // The window has a window device from here on. A background blur
-+      // published before this point had no window number to land on.
-+      if ([mWindow.contentView isKindOfClass:[ZenWindowBlurView class]]) {
-+        [(ZenWindowBlurView*)mWindow.contentView windowDidOrderIn];
-+      }
-+      // <<< TRANCE
-       NS_OBJC_END_TRY_IGNORE_BLOCK;
-     }
-     SetSupportsNativeFullscreen(savedValueForSupportsNativeFullscreen);
-@@ -5730,7 +6152,6 @@ bool nsCocoaWindow::ShouldShowAsNSPopover() const {
-   nsMenuPopupFrame* popupFrame = GetPopupFrame();
-   return [mWindow isKindOfClass:[PopupWindow class]] &&
-          [(PopupWindow*)mWindow usePopover] && popupFrame &&
--         popupFrame->ShouldFollowAnchor() &&
-          !popupFrame->PopupElement().GetBoolAttr(nsGkAtoms::nonnative);
- }
- 
-@@ -5750,6 +6171,14 @@ void nsCocoaWindow::SetTransparencyMode(TransparencyMode aMode) {
-   if (!mWindow) {
-     return;
-   }
-+  // >>> TRANCE
-+  // A window whose background the window server is blurring must stay
-+  // see-through; ZenWindowBlurView owns its opacity until it leaves, and puts
-+  // back what it found.
-+  if ([mWindow.contentView isKindOfClass:[ZenWindowBlurView class]]) {
-+    return;
-+  }
-+  // <<< TRANCE
- 
-   BOOL isTransparent = aMode == TransparencyMode::Transparent;
-   BOOL currentTransparency = !mWindow.isOpaque;
-@@ -6961,6 +7390,27 @@ static nsSizeMode GetWindowSizeMode(NSWindow* aWindow, bool aFullScreen) {
-   return nsSizeMode_Normal;
- }
- 
-+// The tiling state lives in a private NSWindow ivar "_tilingStateController"
-+// (an _NSWMWindowTilingStateController). That controller's -tilingState returns
-+// a non-nil _WMWindowTilingState only while the window is tiled by the system
-+// window manager. None of this is public API, so it is all guarded and degrades
-+// to false if the internals ever change.
-+static bool WindowIsTiled(NSWindow* aWindow) {
-+  if (!aWindow) {
-+    return false;
-+  }
-+  static Ivar sControllerIvar =
-+      class_getInstanceVariable([NSWindow class], "_tilingStateController");
-+  if (!sControllerIvar) {
-+    return false;
-+  }
-+  id controller = object_getIvar(aWindow, sControllerIvar);
-+  if (![controller respondsToSelector:@selector(tilingState)]) {
-+    return false;
-+  }
-+  return [controller performSelector:@selector(tilingState)] != nil;
-+}
-+
- void nsCocoaWindow::ReportMoveEvent() {
-   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
- 
-@@ -6974,6 +7424,7 @@ void nsCocoaWindow::ReportMoveEvent() {
-   mInReportMoveEvent = true;
- 
-   UpdateBounds();
-+  SetIsTiled(WindowIsTiled(mWindow));
- 
-   // The zoomed state can change when we're moving, in which case we need to
-   // update our internal mSizeMode. This can happen either if we're maximized
-@@ -7068,6 +7519,7 @@ void nsCocoaWindow::ReportSizeEvent() {
-   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
- 
-   UpdateBounds();
-+  SetIsTiled(WindowIsTiled(mWindow));
-   LayoutDeviceIntRect innerBounds = GetClientBounds();
-   if (mWidgetListener) {
-     mWidgetListener->WindowResized(this, innerBounds.Size());
-@@ -9011,6 +9463,15 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
-     return;
-   }
- 
-+  if (!positioningRect.size.width && !positioningRect.size.height &&
-+      mLastPopoverRect.size.width && mLastPopoverRect.size.height) {
-+    // Sometimes, specially when downloading addons from unofficial sources,
-+    // the popover is shown in a very fast motion and the positioningRect is
-+    // empty.
-+    positioningRect = mLastPopoverRect;
-+  }
-+  mLastPopoverRect = positioningRect;
-+
-   // Close existing popover if it's already shown
-   if (mPopover.shown) {
-     [mPopover close];

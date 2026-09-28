@@ -67,10 +67,12 @@ const PREF_ZEN_ACRYLIC = "zen.theme.acrylic-elements";
 const PREF_ZEN_GREY_INACTIVE = "zen.view.grey-out-inactive-windows";
 
 /**
- * The macOS window's own background blur, in points (ADR-099). Read by
- * `ZenWindowBlurView` in nsCocoaWindow.mm: -1 — its default, and what a
- * release restores — is Zen's `NSVisualEffectView` material; any other value
- * replaces that material with a window-server blur of exactly this radius.
+ * The macOS window's own background blur, in points (ADR-099, ADR-107). Read
+ * by `ZenWindowMaterialView` in nsCocoaWindow.mm: -1 — its default, and what a
+ * release restores — is the material's own radius; any other value is written
+ * into the radius of the material's backdrop blur. The window stays opaque and
+ * keeps its rounded corners either way (ADR-107 records why the window-server
+ * blur ADR-099 used for this was withdrawn).
  *
  * This is what makes the blur control reach the desktop behind the window.
  * A material's blur is fixed by AppKit and a `backdrop-filter` can only read
@@ -142,7 +144,7 @@ export class TranceMaterial {
   #intent = OPAQUE;
   /** Platform prefs that apply on this platform, resolved once. */
   #platformPrefs;
-  /** Whether this window's blur radius is the window server's (macOS). */
+  /** Whether this window's material takes a blur radius (macOS). */
   #nativeBlur = false;
   /** Whether the content-transparency claim is currently held. */
   #ownsContentTransparency = false;
@@ -240,13 +242,14 @@ export class TranceMaterial {
       this.#prefs.claim(pref, Boolean(intent.transparent));
     }
 
-    // The window's own blur radius, on the platform whose window server takes
-    // one. It is held whether or not the window is translucent: with
-    // translucency off the window is not see-through and the radius has nothing
-    // to blur, and holding it anyway means switching translucency back on never
-    // shows one frame of Zen's material first. Deliberately not suspended with
-    // focus or occlusion: the window server skips an occluded window by itself,
-    // and dropping the blur on every focus change would flash the desktop.
+    // The window material's own blur radius, on the platform whose material
+    // takes one. It is held whether or not the window is translucent: with
+    // translucency off the material is not shown and the radius has nothing to
+    // blur, and holding it anyway means switching translucency back on never
+    // shows one frame at the material's own radius first. Deliberately not
+    // suspended with focus or occlusion: the material view already goes
+    // inactive while the window cannot be seen (nsCocoaWindow.mm), and dropping
+    // the blur on every focus change would flash the desktop.
     if (this.#nativeBlur) {
       this.#prefs.claim(
         PREF_MACOS_BLUR_RADIUS,

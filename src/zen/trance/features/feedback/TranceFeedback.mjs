@@ -123,6 +123,54 @@ const ARRIVAL_BLUR = 15;
 /** The address bar comes *down* to its size, so the pack reads as two opposites. */
 const SEARCH_SCALE = 1.1;
 
+/**
+ * How much of an arrival carries its blur.
+ *
+ * The blur is the one part of the gesture the compositor cannot run: every
+ * frame it is present, the arriving pane is rendered into an offscreen target
+ * and blurred again, and the main thread restyles it. Under the standard
+ * easing the blur has fallen below a pixel by 60% of the duration (15px ×
+ * (1 − 0.93)), where nobody can see it, so it stops there and the scale and
+ * fade finish on the compositor alone. Measured on tab switching every 150ms:
+ * the arrival was 80 of 140 ms of GPU time per second (ADR-107).
+ */
+const ARRIVAL_BLUR_SHARE = 0.6;
+/** Linear segments the blur's share of the curve is sampled into. */
+const ARRIVAL_BLUR_SAMPLES = 6;
+
+/**
+ * `cubic-bezier(x1, y1, x2, y2)` as a function of time, or null for anything
+ * else. Solved by bisection: forty halvings are exact to far below a frame.
+ *
+ * @param {string} easing
+ * @returns {((t: number) => number) | null}
+ */
+function cubicBezier(easing) {
+  const match = /^cubic-bezier\(([^)]*)\)$/.exec(String(easing).trim());
+  const points = match?.[1].split(",").map(Number);
+  if (!points || points.length !== 4 || points.some(Number.isNaN)) {
+    return null;
+  }
+  const [x1, y1, x2, y2] = points;
+  const axis = (a, b) => t =>
+    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3;
+  const x = axis(x1, x2);
+  const y = axis(y1, y2);
+  return time => {
+    let low = 0;
+    let high = 1;
+    for (let i = 0; i < 40; i++) {
+      const mid = (low + high) / 2;
+      if (x(mid) < time) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    return y((low + high) / 2);
+  };
+}
+
 /** Clamped so a number typed into about:config cannot schedule arbitrary work. */
 const MIN_BUBBLES = 3;
 const MAX_BUBBLES = 16;
@@ -764,22 +812,62 @@ export class TranceFeedback extends TranceFeature {
     for (const animation of pane.getAnimations()) {
       animation.cancel();
     }
+    this.#arrive(pane, ARRIVAL_SCALE);
+  }
+
+  /**
+   * One arrival: a scale and a fade for the whole duration, and the blur for
+   * the part of it where the blur is visible (ARRIVAL_BLUR_SHARE).
+   *
+   * Two animations rather than one. Scale and opacity run on the compositor;
+   * a blur cannot, and while it is present the element is re-rendered and
+   * re-blurred every frame. As one animation the blur lived the full duration;
+   * split, it is sampled from the same easing over its first 60% and then
+   * leaves, so the last 40% costs the compositor alone and the curve a person
+   * sees is unchanged to within a pixel of blur. An easing that is not a
+   * `cubic-bezier()` cannot be sampled here, so it keeps the single animation.
+   *
+   * @param {Element} element
+   * @param {number} scale
+   */
+  #arrive(element, scale) {
+    const duration = this.#durationOf("--trance-dur-arrival");
+    const easing = this.#token("--trance-ease-standard");
+    const curve = cubicBezier(easing);
+    if (!curve) {
+      this.context.motion.animate(
+        element,
+        [
+          {
+            transform: `scale(${scale})`,
+            filter: `blur(${ARRIVAL_BLUR}px)`,
+            opacity: 0,
+          },
+          { transform: "none", filter: "blur(0px)", opacity: 1 },
+        ],
+        { duration, easing, willChange: "transform, filter, opacity" }
+      );
+      return;
+    }
     this.context.motion.animate(
-      pane,
+      element,
       [
-        {
-          transform: `scale(${ARRIVAL_SCALE})`,
-          filter: `blur(${ARRIVAL_BLUR}px)`,
-          opacity: 0,
-        },
-        { transform: "none", filter: "blur(0px)", opacity: 1 },
+        { transform: `scale(${scale})`, opacity: 0 },
+        { transform: "none", opacity: 1 },
       ],
-      {
-        duration: this.#durationOf("--trance-dur-arrival"),
-        easing: this.#token("--trance-ease-standard"),
-        willChange: "transform, filter, opacity",
-      }
+      { duration, easing, willChange: "transform, opacity" }
     );
+    const blurFrames = [];
+    for (let i = 0; i <= ARRIVAL_BLUR_SAMPLES; i++) {
+      const offset = i / ARRIVAL_BLUR_SAMPLES;
+      const radius = ARRIVAL_BLUR * (1 - curve(offset * ARRIVAL_BLUR_SHARE));
+      blurFrames.push({ offset, filter: `blur(${radius.toFixed(2)}px)` });
+    }
+    this.context.motion.animate(element, blurFrames, {
+      duration: duration * ARRIVAL_BLUR_SHARE,
+      easing: "linear",
+      willChange: "filter",
+    });
   }
 
   /**
@@ -821,22 +909,7 @@ export class TranceFeedback extends TranceFeature {
     if (!urlbar.hasAttribute("breakout-extend")) {
       return;
     }
-    this.context.motion.animate(
-      urlbar,
-      [
-        {
-          transform: `scale(${SEARCH_SCALE})`,
-          filter: `blur(${ARRIVAL_BLUR}px)`,
-          opacity: 0,
-        },
-        { transform: "none", filter: "blur(0px)", opacity: 1 },
-      ],
-      {
-        duration: this.#durationOf("--trance-dur-arrival"),
-        easing: this.#token("--trance-ease-standard"),
-        willChange: "transform, filter, opacity",
-      }
-    );
+    this.#arrive(urlbar, SEARCH_SCALE);
   }
 
   // --- Tab-close burst -------------------------------------------------------

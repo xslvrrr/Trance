@@ -135,16 +135,6 @@ ORDER_RULES = {
         "engine, so whichever order surfer used produced a file that contains "
         "both edits; a swap that broke either one would fail `verify`."
     ),
-    "widget/cocoa/nsCocoaWindow.mm": (
-        "The tiled-attribute patch adds ~5 lines above the window-visibility "
-        "block, and Zen's Cocoa patch — which Trance extends with "
-        "ZenWindowMaterialView (ADR-061) — carries hunks at 6953/6966/7060 "
-        "against the tiled patch's 6948/6961/7055. The fork patch's pre-image "
-        "*is* the tiled patch's post-image, so the tiled patch applies first. "
-        "A swap is caught rather than guessed at: the fork patch would not "
-        "reverse-apply out of the finished engine, which is `verify`'s "
-        "not-reflected failure."
-    ),
     "toolkit/moz.configure": (
         "LibreWolf's `firefox-in-ua` patch and the configure patch carrying "
         "MOZ_APP_PROFILE and MOZ_APP_VENDOR (ADR-014) both edit the app-name "

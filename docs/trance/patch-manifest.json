@@ -5,9 +5,9 @@
   "counts": {
     "patches": 265,
     "patchedFiles": 279,
-    "symlinkedFiles": 1460,
+    "symlinkedFiles": 1461,
     "filesWithMultipleOwners": 4,
-    "orderSensitiveFiles": 3,
+    "orderSensitiveFiles": 2,
     "deadPaths": 10
   },
   "overlappingFiles": {
@@ -64,16 +64,6 @@
         ]
       ],
       "rule": "LibreWolf's `firefox-in-ua` patch and the configure patch carrying MOZ_APP_PROFILE and MOZ_APP_VENDOR (ADR-014) both edit the app-name block at the top of the file. Both reverse-apply cleanly out of the finished engine; a swap that dropped either edit would fail `verify`.",
-      "declared": true
-    },
-    "widget/cocoa/nsCocoaWindow.mm": {
-      "patches": [
-        [
-          "src/external-patches/firefox/expose_tiled_attribute_to_all_platforms.patch",
-          "src/widget/cocoa/nsCocoaWindow-mm.patch"
-        ]
-      ],
-      "rule": "The tiled-attribute patch adds ~5 lines above the window-visibility block, and Zen's Cocoa patch \u2014 which Trance extends with ZenWindowMaterialView (ADR-061) \u2014 carries hunks at 6953/6966/7060 against the tiled patch's 6948/6961/7055. The fork patch's pre-image *is* the tiled patch's post-image, so the tiled patch applies first. A swap is caught rather than guessed at: the fork patch would not reverse-apply out of the finished engine, which is `verify`'s not-reflected failure.",
       "declared": true
     }
   },
@@ -3173,8 +3163,8 @@
       "targets": [
         {
           "path": "widget/cocoa/nsCocoaWindow.mm",
-          "base": "e467ce48f523859aaff26023633d4d2d3978818f",
-          "result": "078fbfefffe40ffacbf883b9dc3c3150eacaa5bc"
+          "base": "1af56a5e2f7bb912f352e417b01a8c4e25f97b30",
+          "result": "ef789acad9908bb58eff4b42c94a8ed7686f4333"
         }
       ]
     },
@@ -8828,6 +8818,10 @@
     {
       "source": "src/zen/trance/features/updates/TranceUpdateChecker.mjs",
       "engine": "zen/trance/features/updates/TranceUpdateChecker.mjs"
+    },
+    {
+      "source": "src/zen/trance/features/updates/TranceUpdateInstaller.mjs",
+      "engine": "zen/trance/features/updates/TranceUpdateInstaller.mjs"
     },
     {
       "source": "src/zen/trance/features/updates/TranceUpdateLogic.mjs",

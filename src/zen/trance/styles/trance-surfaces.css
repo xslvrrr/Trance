@@ -46,8 +46,8 @@
  * consequential thing in this file.
  *
  *   window   → not a `backdrop-filter` at all. The desktop behind the window
- *              is blurred by the window server on macOS, at the same radius
- *              (`zen.widget.macos.window-blur-radius`, ADR-099)
+ *              is blurred by the window's own material on macOS, at the same
+ *              radius (`zen.widget.macos.window-blur-radius`, ADR-107)
  *   compact  → #navigator-toolbox / #zen-appcontent-navbar-wrapper, only
  *              while compact mode floats them over the page
  *   overlay  → #urlbar[breakout-extend]          (it floats over the page, so
@@ -737,9 +737,9 @@
  * Not from here. The window is transparent, and what shows through it is the
  * desktop; a `backdrop-filter` can only read what Gecko painted, and the
  * desktop is not something Gecko painted. On macOS the radius therefore goes
- * to the window server instead — `TranceMaterial` publishes
+ * to the window's material instead — `TranceMaterial` publishes
  * `trance.surface.blur.radius` as `zen.widget.macos.window-blur-radius`, and
- * the widget blurs the window's background by exactly that much (ADR-099).
+ * the widget writes it into the material's backdrop blur (ADR-099, ADR-107).
  *
  * ── Why the sidebar, splitter and toolbar regions are gone ────────────────
  *

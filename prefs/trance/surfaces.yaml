@@ -56,15 +56,17 @@
 - name: trance.surface.blur.radius
   value: 24
 
-# Derived, never set by hand: the macOS window-server blur radius (ADR-099).
-# `TranceMaterial` holds it on the default branch at `trance.surface.blur.radius`
-# while Trance owns the window's material, and gives it back on release.
+# Derived, never set by hand: the macOS window material's blur radius (ADR-099,
+# ADR-107). `TranceMaterial` holds it on the default branch at
+# `trance.surface.blur.radius` while Trance owns the window's material, and
+# gives it back on release.
 #
-# -1 means "no radius": the window keeps Zen's `NSVisualEffectView` material,
-# whose blur AppKit fixes per material. Any other value replaces that material
-# with a plain view and asks the window server to blur the window's background
-# by exactly this many points — `ZenWindowBlurView` in
-# src/widget/cocoa/nsCocoaWindow-mm.patch. 0 is a clear window.
+# -1 means "no radius": Zen's `NSVisualEffectView` material keeps the blur
+# AppKit gives it. Any other value is written into the radius of that
+# material's backdrop blur — `ZenWindowMaterialView` in
+# src/widget/cocoa/nsCocoaWindow-mm.patch. 0 is an unblurred material. The
+# window stays opaque and keeps its rounded corners at every value; the
+# window-server blur ADR-099 first used made it neither (ADR-107).
 #
 # `zen.*` rather than `trance.*` because the widget reads it beside
 # `zen.widget.macos.window-material`, and because it is not a setting: the
