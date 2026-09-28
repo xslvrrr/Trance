@@ -163,6 +163,9 @@ export class TranceChrome extends TranceFeature {
   /** Whether the in-sidebar `mousemove` that watches the band is attached. */
   #bandListening = false;
 
+  /** The strip's margin slide while one is running (see `#setTopButtonsNear`). */
+  #topbuttonsSlide = null;
+
   onEnable() {
     this.context.document.documentElement.setAttribute(ATTR_ROOT, "true");
 
@@ -337,11 +340,11 @@ export class TranceChrome extends TranceFeature {
     }
     const rect =
       this.context.window.windowUtils.getBoundsWithoutFlushing(strip);
-    const root = this.context.document.documentElement;
     if (!rect.height) {
-      root.removeAttribute(ATTR_TOPBUTTONS_NEAR);
+      this.#setTopButtonsNear(false);
       return;
     }
+    const root = this.context.document.documentElement;
 
     // Two thresholds, and which one applies depends on where the strip already
     // is. Reading the attribute back rather than keeping a field: it is the
@@ -356,11 +359,86 @@ export class TranceChrome extends TranceFeature {
       lower = centre + half;
     }
 
-    if (point.y >= upper && point.y <= lower) {
+    this.#setTopButtonsNear(point.y >= upper && point.y <= lower);
+  }
+
+  /**
+   * Shows or hides the strip, and slides the sidebar's content with it.
+   *
+   * ── Why the slide is a Web Animation as well as a transition ─────────────
+   *
+   * trance-chrome.css transitions the strip's `margin-block-end`, and that is
+   * all the stock browser needs. But `transition` is a single property, and a
+   * stylesheet that sets it on `#zen-sidebar-top-buttons` for its own reasons —
+   * a mod, or a `userChrome.css` fading the strip with `transition: opacity
+   * !important` — replaces the whole list. The margin then changes in one
+   * frame and the tab list jumps by the strip's height the moment the pointer
+   * reaches the window buttons. A user sheet's `!important` outranks anything
+   * Trance's author sheet can declare, so no selector wins that back.
+   *
+   * An animation is a different cascade origin: nobody's `transition` removes
+   * it, and it outranks the margin rules it animates between. So the band's own
+   * toggle is animated here, from wherever the margin is now — mid-slide,
+   * or pinned to 0 because the sidebar is collapsed — to wherever the new state
+   * puts it (the implicit end keyframe). Where the transition survives it runs
+   * alongside with the same timing and wins the cascade, so the two are the
+   * same motion. The transition stays for the changes this method does not
+   * make: keyboard focus inside the strip, and the sidebar collapsing.
+   *
+   * One computed-style read per state change, never per `mousemove`: margins
+   * are layout-dependent in Gecko, so this may flush layout, and it only runs
+   * when the answer actually changes.
+   *
+   * @param {boolean} near
+   */
+  #setTopButtonsNear(near) {
+    const doc = this.context.document;
+    const root = doc.documentElement;
+    if (root.hasAttribute(ATTR_TOPBUTTONS_NEAR) === near) {
+      return;
+    }
+    const win = this.context.window;
+    const strip = doc.getElementById(TOPBUTTONS_ID);
+    const from = strip ? win.getComputedStyle(strip).marginBlockEnd : "";
+    this.#cancelTopButtonsSlide();
+
+    if (near) {
       root.setAttribute(ATTR_TOPBUTTONS_NEAR, "true");
     } else {
       root.removeAttribute(ATTR_TOPBUTTONS_NEAR);
     }
+    if (!from) {
+      return;
+    }
+
+    const tokens = win.getComputedStyle(root);
+    const rawDuration = tokens.getPropertyValue("--trance-dur-base").trim();
+    const duration = parseFloat(rawDuration);
+    const slide = this.context.motion.animate(
+      strip,
+      [{ marginBlockEnd: from, offset: 0 }],
+      {
+        duration: rawDuration.endsWith("ms") ? duration : duration * 1000,
+        easing: tokens.getPropertyValue("--trance-ease-standard").trim(),
+      }
+    );
+    if (!slide) {
+      // Motion level 0: the new margin applies in one step, as intended.
+      return;
+    }
+    this.#topbuttonsSlide = slide;
+    const release = () => {
+      if (this.#topbuttonsSlide === slide) {
+        this.#topbuttonsSlide = null;
+      }
+    };
+    slide.finished.then(release, release);
+  }
+
+  #cancelTopButtonsSlide() {
+    const slide = this.#topbuttonsSlide;
+    this.#topbuttonsSlide = null;
+    slide?.cancel();
   }
 
   #detachBandTracking() {
@@ -428,7 +506,7 @@ export class TranceChrome extends TranceFeature {
 
   #closeTopButtons() {
     this.#disarmPointerResolve();
-    this.context.document.documentElement.removeAttribute(ATTR_TOPBUTTONS_NEAR);
+    this.#setTopButtonsNear(false);
   }
 
   #teardownTopButtons() {
@@ -440,6 +518,9 @@ export class TranceChrome extends TranceFeature {
       toolbox?.removeEventListener("mouseleave", this.#onSidebarLeave);
     }
     this.#closeTopButtons();
+    // The feature is going away with its stylesheet; nothing of it may be left
+    // animating the strip.
+    this.#cancelTopButtonsSlide();
   }
 
   /**

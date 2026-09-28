@@ -304,7 +304,13 @@
       /* The strip gives its height back to the tab list below it while it is
        * hidden, and that is the whole point of hiding it — a transform would
        * move the strip and leave the gap it used to fill. Layout is the effect
-       * here, not an accident of how it was written. */
+       * here, not an accident of how it was written.
+       *
+       * `TranceChrome.#setTopButtonsNear` animates the same margin when the
+       * band toggles, because a mod or `userChrome.css` that sets `transition`
+       * on this element replaces this one outright — and then the tab list
+       * jumps rather than slides. This transition covers what that method does
+       * not drive: keyboard focus, and the sidebar collapsing. */
       /* stylelint-disable-next-line trance/no-layout-transition -- layout is the gesture */
       transition: margin-block-end var(--trance-dur-base)
         var(--trance-ease-standard);

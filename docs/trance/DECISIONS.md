@@ -4609,3 +4609,45 @@ was a size larger than its neighbours.
 - `browser_trance_chrome.js`: the mark test asserted `about-logo.svg` and `mask-size: contain`,
   neither of them true since ADR-050, and now asserts the shipped mark. A new
   `test_the_app_menu_hover_box_matches_its_neighbours` fails on the 41px stack.
+
+---
+
+## ADR-103 — The top strip's slide is a Web Animation, so a stylesheet's `transition` cannot take it away
+
+**Date:** 2026-09-28
+**Status:** Accepted
+**Amends:** ADR-057
+
+**Context:**
+
+Reaching the window buttons dropped the whole tab list by the strip's height in one frame. The slide
+ADR-057 relies on was one declaration, `transition: margin-block-end …` on `#zen-sidebar-top-buttons`.
+`transition` is a single property, so any other stylesheet that sets it on that element replaces the
+whole list. The profile it was reported from imports a `userChrome.css` that fades the strip with
+`transition: opacity … !important`. That is a user sheet, and a user-origin `!important` outranks any
+declaration Trance's author sheet can make. The margin still changed, but with no transition. Measured
+over Marionette with that rule loaded as a user sheet: the strip's margin went from −30px to 0 between
+two frames. Without the rule it took ~220ms.
+
+**Decision:**
+
+`TranceChrome.#setTopButtonsNear` is now the only place that sets or clears
+`trance-chrome-topbuttons-near`. It reads the strip's current margin, flips the attribute, and animates
+from that margin to the implicit end keyframe with `TranceMotion.animate`, using the `--trance-dur-base`
+duration and `--trance-ease-standard` easing. An animation is in a different cascade origin from
+`transition`, so nobody's `transition` removes it, and it outranks the margin rules it moves between.
+
+The CSS transition stays. Where it survives, it runs alongside the animation with the same timing and
+wins the cascade, so what you see does not change. It also covers the two changes the method does not
+make: keyboard focus inside the strip, and the sidebar collapsing.
+
+**Consequences:**
+
+- One computed-style read per state change, never per `mousemove`. Margins are layout-dependent in
+  Gecko, so the read can flush layout.
+- Motion level 0 still switches instantly (`animate` returns null), and level 1 uses the instant token.
+- `browser_trance_chrome.js` gains `test_the_tab_list_slides_when_a_user_sheet_owns_the_transition`.
+  It loads such a user sheet and fails on the old code.
+- The compact-mode toggle is a `toolbarbutton`, and the same profile's sheet also replaces `transition`
+  on every `toolbarbutton`. So there the toggle still appears without its fade. That rule is the
+  profile's own and is not something Trance's sheets can outrank.

@@ -431,3 +431,86 @@ add_task(async function test_the_sidebar_is_laid_out_expanded() {
     }
   }
 });
+
+add_task(
+  async function test_the_tab_list_slides_when_a_user_sheet_owns_the_transition() {
+    // A userChrome.css fading the strip with `transition: opacity !important`
+    // replaced trance-chrome.css's margin transition outright, so reaching the
+    // window buttons dropped the whole tab list by the strip's height in one
+    // frame. The reveal has to slide whoever owns `transition`.
+    const root = document.documentElement;
+    const strip = document.getElementById("zen-sidebar-top-buttons");
+    if (
+      root.getAttribute("trance-chrome-topbuttons") !== "true" ||
+      root.getAttribute("zen-sidebar-expanded") !== "true" ||
+      !strip
+    ) {
+      ok(true, "the reveal is not active in this layout");
+      return;
+    }
+
+    const sheet = Services.io.newURI(
+      "data:text/css," +
+        encodeURIComponent(
+          "#zen-sidebar-top-buttons { transition: opacity 1ms !important; }"
+        )
+    );
+    window.windowUtils.loadSheet(sheet, window.windowUtils.USER_SHEET);
+    registerCleanupFunction(() =>
+      window.windowUtils.removeSheet(sheet, window.windowUtils.USER_SHEET)
+    );
+
+    const settle = () =>
+      Promise.all(strip.getAnimations().map(a => a.finished.catch(() => {})));
+    const toolbox = gNavToolbox.getBoundingClientRect();
+    const middle = [
+      toolbox.left + toolbox.width / 2,
+      toolbox.top + toolbox.height / 2,
+    ];
+    // From outside the sidebar first: the band is only watched between the
+    // sidebar's mouseenter and mouseleave, and the harness may start with the
+    // pointer already inside it.
+    EventUtils.synthesizeMouseAtPoint(toolbox.right + 40, middle[1], {
+      type: "mousemove",
+    });
+    EventUtils.synthesizeMouseAtPoint(...middle, { type: "mousemove" });
+    await TestUtils.waitForCondition(
+      () => !root.hasAttribute("trance-chrome-topbuttons-near"),
+      "the pointer starts away from the strip"
+    );
+    await settle();
+    const hidden = parseFloat(window.getComputedStyle(strip).marginBlockEnd);
+    Assert.less(hidden, 0, "the hidden strip gives its height to the tab list");
+
+    const rect = strip.getBoundingClientRect();
+    EventUtils.synthesizeMouseAtPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      { type: "mousemove" }
+    );
+    // Synthesized mouse events dispatch synchronously, so this is the same turn
+    // as the reveal: the margin must still be where the hidden strip left it.
+    ok(
+      root.hasAttribute("trance-chrome-topbuttons-near"),
+      "the pointer in the band reveals the strip"
+    );
+    Assert.less(
+      parseFloat(window.getComputedStyle(strip).marginBlockEnd),
+      hidden / 2,
+      "the tab list has not jumped to its revealed position in the same frame"
+    );
+    await settle();
+    is(
+      window.getComputedStyle(strip).marginBlockEnd,
+      "0px",
+      "and it arrives there when the slide ends"
+    );
+
+    EventUtils.synthesizeMouseAtPoint(...middle, { type: "mousemove" });
+    await TestUtils.waitForCondition(
+      () => !root.hasAttribute("trance-chrome-topbuttons-near"),
+      "leaving the band hides the strip again"
+    );
+    await settle();
+  }
+);
