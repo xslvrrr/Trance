@@ -193,7 +193,7 @@ only brand assets whose content is literally the word "Zen" and they are the mos
 
 ## ADR-009 — Auto-update off, `updateHostname` on a reserved `.invalid` host
 
-**Date:** 2026-08-24 · **Status:** accepted, provisional — revisit in Phase 12
+**Date:** 2026-08-24 · **Status:** accepted; the updater half answered by ADR-104 (MAR/AUS stays off)
 
 **Context:** `surfer.json` `updateHostname` is required (it becomes `MOZ_APPUPDATE_HOST` and is
 baked into `application.ini`), but there is no Trance update server and `TRANCE.md` §16 Q3 is
@@ -1536,38 +1536,31 @@ that do not survive inspection.
 
 ---
 
-## ADR-036 — The Trance mochitests only pass when run one file at a time
+## ADR-036 — The Trance mochitest suite needs whole-suite verification
 
-**Date:** 2026-08-26 · **Status:** accepted (defect recorded, not fixed)
+**Date:** 2026-08-26 · **Status:** accepted; the burst flake is explained and fixed by ADR-105
 
-**Context:** Phase 11 needed to know whether its changes broke anything, which meant knowing what
-was already broken. `npm test trance` reports 6–7 failures across four files. Every one of those
-files passes on its own:
+**Context:** Phase 11 found that `npm test trance` reported 6–7 failures across four files even
+though those files passed on their own. The exact failing count and task varied between identical
+runs, with tab-close burst assertions repeatedly observing fewer than the configured number of
+bubbles. Removing `browser_trance_perf.js` from the manifest reproduced the failures, so that test
+was not their source.
 
-```
-npm test trance/browser_trance_settings.js   → 0 failures
-npm test trance/browser_trance_surfaces.js   → 0 failures
-npm test trance/browser_trance_theme.js      → 0 failures
-npm test trance/browser_trance_feedback.js   → 0 failures (3 runs)
-```
+After fixing stale expectations and test isolation, a non-headless whole-suite run on 2026-09-28,
+after `npm run import && npm run build:ui`, ran all twelve registered browser tests: **913 passed,
+1 failed, 12 TODO** (938 checks total). The remaining failure is
+`browser_trance_feedback.js::test_the_line_shape_stays_on_one_axis`, which observed only two
+`.trance-burst-bubble` nodes against a configured count of twelve. The standalone feedback file had
+passed earlier on the same source. *(2026-09-29)* ADR-105 found the cause: the test's keyframe
+parser matched only `calc(-50% + Npx)`, so every bubble that went left or up was dropped.
 
-The failures are also not stable: the tab-close burst assertions report `2 > 2`, then `1 > 2`, then
-`0 > 2` across runs of identical code. And removing `browser_trance_perf.js` from `browser.toml`
-entirely reproduces the same six failures, so the file added in this phase is not the one leaking.
-
-**Decision:** Record it as a defect of the suite and leave it. Phase 11's changes are verified
-against it rather than blamed for it.
+**Decision:** Keep running the suite as a whole; individual-file green runs do not substitute for
+suite evidence. Record the transient tab-close burst count as the outstanding failure and continue
+triaging it rather than treating the full-suite run as a smoke-only gate.
 
 **Consequences:**
-- `npm test trance` is currently a *smoke* test, not a gate. Until this is fixed, a red run has to
-  be triaged file-by-file, which is the opposite of what a suite is for, and any future phase will
-  pay that cost again.
-- The likely mechanism is state carried between files in one browser session — prefs left set, DOM
-  left in place, a `registerCleanupFunction` that does not restore what its test changed. Four
-  files failing and the rest passing is a small enough surface to find it in.
-- Worth doing before Phase 12 wires CI: a suite that cannot distinguish "my change broke this" from
-  "this was already broken" will either block every PR or be ignored, and both outcomes cost more
-  than the fix.
+- The burst count was the parser, not timing (ADR-105).
+- Do not claim a clean test gate until a whole-suite run passes with no unexpected results.
 
 ---
 
@@ -4005,7 +3998,7 @@ that was checked across all eight Zen JS touchpoints against the fork point.
 ## ADR-086 — Zen Library is Zen's now, so Trance stops preinstalling the mod
 
 **Date:** 2026-09-23
-**Status:** Accepted. Completed by ADR-090.
+**Status:** Accepted. Completed by ADR-090; the switch-off became an uninstall in ADR-106.
 **Supersedes:** the Zen Library half of ADR-030
 
 **Context:**
@@ -4402,7 +4395,8 @@ ClearURLs' private storage format. ClearURLs has no per-site allowlist either (A
 ## ADR-098 — Trance checks GitHub releases and links manual updates
 
 **Date:** 2026-09-26
-**Status:** Accepted. Amends ADR-009 (the updater stays off; a notice is added beside it).
+**Status:** Accepted. Amends ADR-009 (the updater stays off; a notice is added beside it). Amended by
+ADR-104 (supported macOS releases are installed, not linked).
 
 **Context:**
 
@@ -4450,7 +4444,7 @@ have.
 ## ADR-099 — The blur knob is the window's own blur, and the docked chrome regions are gone
 
 **Date:** 2026-09-26
-**Status:** Accepted
+**Status:** Accepted. The window-server blur is superseded by ADR-107; the region removal stands.
 **Supersedes:** the region half of ADR-082 and ADR-087
 
 **Context:**
@@ -4651,3 +4645,221 @@ make: keyboard focus inside the strip, and the sidebar collapsing.
 - The compact-mode toggle is a `toolbarbutton`, and the same profile's sheet also replaces `transition`
   on every `toolbarbutton`. So there the toggle still appears without its fade. That rule is the
   profile's own and is not something Trance's sheets can outrank.
+
+---
+
+## ADR-104 — Trance stages and installs verified macOS releases
+
+**Date:** 2026-09-28
+**Status:** Accepted
+**Amends:** ADR-098, ADR-009
+
+**Context:**
+
+ADR-098 checks GitHub releases and links users to the release page. That leaves choosing, verifying
+and installing an update entirely to the user. The releases already publish macOS DMGs with a
+GitHub-provided SHA-256 digest. Firefox's MAR/AUS updater is disabled by distribution policy and
+remains outside this decision.
+
+**Decision:**
+
+- Trance selects only a DMG whose name matches the current macOS CPU architecture, and refuses to
+  install an asset without its expected size and valid `sha256:` digest. The download is streamed to
+  staging and checked for both size and digest before it is mounted.
+- Before copying, the mounted bundle's identifier and version must match Trance and the selected
+  release. Trance copies it with `ditto` and removes the quarantine attribute. There is no
+  `codesign --verify`: release builds are ad-hoc/linker-signed, and `codesign --verify --deep
+  --strict` on the published 0.3.0 app fails ("code has no resources but signature indicates they
+  must be present") while proving nothing a self-signature could. The SHA-256 against GitHub's
+  digest is the integrity check.
+- The running bundle is never replaced in-process. A shutdown helper waits a bounded interval for
+  the browser process to exit, moves the staged bundle into place with rollback on swap failure,
+  and relaunches only after the explicit restart action. "Install and restart" quits *without*
+  `eRestart`: Gecko would relaunch the old bundle path while the helper is moving it, so the helper
+  does the relaunch with `open` after the swap. If the quit is cancelled, the update stays staged
+  for the next ordinary quit, without a relaunch.
+- If the app is translocated, on a read-only volume, or there is no verified installer for the host,
+  Trance offers the release-page link instead. An unwritable install parent uses macOS's
+  administrator-privilege prompt for the shutdown helper.
+- A staged bundle is recorded in prefs and re-armed on a later launch. GitHub release checking
+  remains event-driven, rate-limited, and disabled in automation unless an injected local seam is
+  used.
+
+**Consequences:**
+
+- The first supported automatic installer is macOS arm64; a matching x86_64 DMG is selected only
+  when a release actually publishes it. Other operating systems retain the manual release link.
+- No code signing or notarisation credentials are introduced.
+- `TranceUpdateInstaller.stage` accepts an explicit test target path and the checker accepts an
+  injected release list, allowing a local HTTP server and throwaway bundle to exercise the path
+  without changing production defaults.
+- Exercised end to end on the packaged 0.3.2 app (2026-09-29), with an injected release list and the
+  0.3.2 DMG served from `127.0.0.1`: the x86_64 asset is ignored, the bar offers **Install and
+  restart**, **Install on quit** and **Skip this version**, a tampered digest is refused, **Install
+  on quit** downloads, verifies, stages and relabels the bar, and after quit the helper swaps the
+  bundle in place and removes its staging directory. That run found three defects the code had
+  shipped with in the working tree, all fixed before release: `TranceUpdates.mjs` had dropped out
+  of `jar.inc.mn`; the first chunk was written with IOUtils' `append` mode, which refuses a file
+  that does not exist yet; and the SHA-256 was hex-encoded from `finish(false)`'s binary string with
+  `Number#toString(16)` applied to characters, so no download could ever verify. The swap helper
+  also interpolated a JavaScript `${target}` where the shell's `$target` was meant.
+- Not exercised: the restart path's relaunch (it would open the default profile) and the
+  administrator-prompt path for an unwritable install directory.
+
+---
+
+## ADR-105 — The Trance suite's failures were stale expectations, one parser and one real bug
+
+**Date:** 2026-09-29
+**Status:** Accepted
+**Amends:** ADR-036, ADR-088
+
+**Context:**
+
+The whole-suite run TRANCE.md §13 recorded had about twenty failures. Triaged one by one, they fell
+into three groups.
+
+**Decision:**
+
+- **The burst flake of ADR-036 was the test's parser.** A bubble's end keyframe is written as
+  `calc(-50% + -3.25px)` and read back re-serialised as `calc(-50% - 3.25px)`, and an offset of zero
+  can drop out of the `calc()` entirely. `burstVectors` matched only `+ N`, so it counted just the
+  bubbles that went right and down: a coin toss per bubble, which is the "2 > 2, then 1 > 2, then
+  0 > 2" ADR-036 recorded. It now reads both signs and the collapsed form, and the geometry tests pin
+  full motion and twelve bubbles instead of inheriting the workstation's settings.
+- **Stale expectations are updated to the behaviour Trance now has, not deleted:** the reload button
+  is hidden in Trance's layout, so the app-menu comparison uses the back button; the tab strip has
+  ADR-062's narrow cache observer beside the shared one; the blur knob's dead zone sits at the top
+  (ADR-089), so the midpoint is pressed at the bottom; the loading bar's gradient is on
+  `#trance-loading-fill`; the ownership context exposes `tabCache`; the edgeless page test uses a web
+  page, because `about:blank` is governed by the internal-pages switch; the first-run panel test
+  turns onboarding off and marks Zen's welcome seen so the panel can open, and restores both.
+- **Isolation:** the ownership test deletes its scratch pref's default-branch value, and the loading
+  bar test waits for the initial load instead of assuming it finished.
+- **Deleted, as tests of something that is not Trance's:** the settings search strip's
+  `.sticky-container` (Firefox 157 no longer wraps it), and edgeless hiding
+  `#zen-toolbar-background`: Zen hides that element outside compact mode itself, so turning edgeless
+  off could never bring it back.
+- **One real bug.** `tranceConfirmDialog` had no `data-category`, and preferences.js's `search()`
+  hides every child of `#mainPrefPane` whose category is not the one shown, attribute or no
+  attribute. `showModal()` opened a dialog under a hidden ancestor: `open`, focused nowhere, never
+  drawn. "Forget saved themes" asked a question nobody could see. The dialog now carries
+  `data-category="paneTrance"`.
+- `trance.onboarding.channel` is no longer declared. ADR-088 kept it without a reader or a writer;
+  the settings test requires every declared `trance.*` pref to have a control, and a pref nothing
+  reads should not get one.
+
+**Consequences:**
+
+- `npm test -- trance --headless` on the 0.3.2 build: **916 passed, 0 failed, 11 TODO**.
+- ADR-036's rule stands: the suite is judged whole, and a green single file is not evidence.
+
+---
+
+## ADR-106 — Retired mods are uninstalled, not switched off
+
+**Date:** 2026-09-28
+**Status:** Accepted
+**Amends:** ADR-086
+
+**Context:**
+
+ADR-086 switched Zen Library off once in profiles an earlier Trance had provisioned it into. The
+mod stayed installed: its entry stayed in `mods.json`, its folder stayed in `chrome/sine-mods`, and
+Sine kept listing it and updating it. A disabled copy of a mod that tears down Zen's own Library on
+load is one click from doing so again, and the request was to remove it.
+
+**Decision:**
+
+- `config.js` (generated by `scripts/trance-cosine.py`) now deletes each `RETIRED_MODS` entry from
+  `mods.json` and removes `chrome/sine-mods/<id>` recursively, once, synchronously, before Sine reads
+  the file. A profile without `mods.json` still has its folder removed.
+- The once-only pref is `trance.mods.removed.<id>`, not ADR-086's `trance.mods.retired.<id>`.
+  Profiles that already ran the switch-off pass carry the old pref and the disabled mod; a new key
+  is what gives them the removal too.
+- The mod guard's text says Trance uninstalls it, so a copy that is present was installed again by
+  hand.
+
+**Consequences:**
+
+- A person who reinstalls the mod from the marketplace keeps it: the pass runs once per profile.
+- Uninstalling deletes the mod's own settings along with its folder. Its settings were for a
+  surface Zen now owns.
+
+---
+
+## ADR-107 — The blur radius goes into the material, and the arrival blur stops early
+
+**Date:** 2026-09-28
+**Status:** Accepted
+**Supersedes:** the window-server blur of ADR-099
+
+**Context:**
+
+Two reports against 0.3.1: the window "goes boxy" when transparency or blur is edited, and GPU use
+rose sharply.
+
+Both trace to ADR-099's `ZenWindowBlurView`. A window-server background blur
+(`CGSSetWindowBackgroundBlurRadius`) only blurs a window's transparent pixels, so the wrapper made
+the window non-opaque with a clear background. The window's shape then became its rectangle, and
+the rounded corners (and any border drawn around the window's shape) squared off the moment a radius
+was published. The window server also composites a non-opaque window with alpha over whatever is
+behind it on every frame that changes. Measured with IOKit's per-client GPU accounting over a video
+wallpaper, the same 1400×880 window's WindowServer GPU time per second, medians of two rounds:
+
+| Window | WindowServer ms GPU/s |
+|---|---|
+| 0.3.1 default (window-server blur) | 969–973 |
+| window-server blur, radius 0 | 977 |
+| window-server blur, radius 24 | 961 |
+| `NSVisualEffectView` material | 766–812 |
+| opaque | 748–775 |
+| minimized | 784–817 |
+
+The cost was the same at radius 0 as at 24: it is the non-opaque window, not the blur.
+
+The second cost was the tab-switch arrival. Trance's own GPU-process time while switching tabs every
+150ms was 140 ms/s with the arrival animation and 60 ms/s without it. Its `filter: blur()` is the one
+part the compositor cannot run: every frame it is present, the pane is rendered offscreen and blurred
+again.
+
+**Decision:**
+
+- Touchpoint 30 drops `ZenWindowBlurView` and its hooks in `SetWindowClass`, `UpdateWindowMaterial`,
+  `Show`, `SetTransparencyMode` and the destructor; those are Zen's code again. The window keeps
+  Zen's `ZenWindowMaterialView`, and the radius goes into the material itself: its private
+  `CABackdropLayer` carries a `gaussianBlur` filter with an `inputRadius`. After `super` in `-layout`
+  and `-updateLayer`, where AppKit rebuilds that filter on state, material, appearance and key
+  changes, the view writes `zen.widget.macos.window-blur-radius` into it. -1 restores the radius the
+  material had before the first override. Class and filter names are looked up at runtime and
+  checked, and only the view's own layers are walked, so a macOS that renames them keeps the
+  material's own blur.
+- The window stays opaque and keeps AppKit's corner mask at every radius.
+- The pref, its owner (`TranceMaterial`) and its -1 default are unchanged.
+- Arrivals (tab switch and search) become two animations: scale and opacity on the compositor for
+  the whole `--trance-dur-arrival`, and the blur for its first 60% only, sampled from the same
+  `--trance-ease-standard` curve into six linear segments. By 60% of the curve the 15px blur is
+  about 1px, under a nearly opaque pane. An easing that is not a `cubic-bezier()` keeps the single
+  animation.
+
+**Consequences:**
+
+- In a standalone AppKit prototype over the same wallpaper (WindowServer ms GPU/s, two rounds), no
+  window measured 804/795, the material at its own radius (30) 775/758, the material with a radius
+  of 2 written in 782/788, and with 80 783/885. The window-server blur measured 937/919 at 30 and
+  935/884 at 0.
+- Checked in the built browser (0.3.2 dev build, 2026-09-29) by walking the window's layers from
+  chrome JS through js-ctypes: the window reports `isOpaque` YES with `ZenWindowMaterialView` as its
+  content view, and the material's `gaussianBlur` `inputRadius` is 24 at Trance's default, 60 and 0
+  when the knob is set there, and back to AppKit's own 30 when Trance releases the material (-1).
+  The screen was locked for that run, so the material was forced active for the walk; the corner
+  capture and the GPU A/B were not repeated on the built browser.
+- The `CAFilter` path is private API, like the call it replaces. A macOS release that changes it
+  degrades to the material's fixed blur, and this entry is where to start.
+- The arrival's last 40% no longer re-blurs the pane each frame. What is visible is unchanged to
+  within a pixel of blur.
+- The patch is re-cut against `HEAD` with both external patches that edit the file
+  (`expose_tiled_attribute_to_all_platforms`, `native_macos_popovers_fix`) applied, which is what
+  surfer applies it on top of. 0.3.1's copy had been cut against bare `HEAD` and carried both
+  external changes inside it, so a fresh `import` failed on it. Its hunks no longer collide with
+  either external patch, and `ORDER_RULES` loses its `nsCocoaWindow.mm` entry.

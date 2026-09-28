@@ -136,12 +136,15 @@ It is deliberately not a "theme pack". It is a browser.
   patch and inventory checks (`.github/workflows/trance-checks.yml:3-8, 17-52`). The release
   workflows are also retargeted to `--brand trance` (for example
   `.github/workflows/macos-release-build.yml:81-82`); the matrix has not been measured here.
-- No signing certificates or notarisation credentials exist, and no update server is configured
-  (updates are off, ADR-009). Trance does *notice* updates: it checks the GitHub releases for
-  `xslvrrr/Trance`, pre-releases included, and links to the release page (ADR-098).
-- `npm run lc` currently fails on **524** paths. Every failure is inherited Zen/Firefox content:
-  copied mochitest suites under `src/zen/tests/mochitests/**`, Gecko declaration stubs under
-  `src/zen/@types/lib.gecko.*.d.ts`, and binary assets including `welcome-background.mp4`.
+- No signing certificates or notarisation credentials exist, and no update server is configured.
+  Firefox's own MAR/AUS updater remains disabled by policy (ADR-009). Trance checks GitHub
+  releases (pre-releases included) and can download, verify, stage and install the supported
+  macOS DMG at restart/quit; unsupported platforms fall back to the release page (ADR-098,
+  ADR-104).
+- `npm run lc` currently fails on **533** paths (2026-09-29). Every failure is inherited Zen/Firefox
+  content: copied mochitest suites under `src/zen/tests/mochitests/**` (515), Gecko declaration
+  stubs under `src/zen/@types/lib.gecko.*.d.ts`, a few Zen `.inc.xhtml` and icon files, and binary
+  assets including `welcome-background.mp4`.
   No Trance-owned file fails. The standing signal is a **new failing path under
   `src/zen/trance/`**, not the inherited total; surfer's ignore regex does not cover every
   inherited binary suffix.
@@ -1537,7 +1540,9 @@ replacement.
 **Deliverables**
 - ~~`TranceLibrary`~~, ~~`TranceCalendar`~~ — not written
 - *(2026-09-23)* `zen-library` left `PREINSTALLED_MODS` again when Zen shipped a native Library (gh-15438),
-  and is switched off once in profiles that had it (`RETIRED_MODS`, ADR-086).
+  and was switched off once in profiles that had it (`RETIRED_MODS`, ADR-086). *(2026-09-28)* It is
+  now uninstalled once instead — its `mods.json` entry and its `chrome/sine-mods/zen-library` folder
+  are removed — including from profiles that only had it switched off (ADR-106).
 - `zen-library` and `zen-live-calendar` added to `PREINSTALLED_MODS` in `scripts/trance-cosine.py`,
   pinned, staged into the app so a fresh profile gets them
 - Investigation docs (`docs/trance/mods/zen-library.md`, `live-calendar.md`) and ADR-030
@@ -1855,16 +1860,18 @@ tell which of them were decisions and which were defects.
 - [ ] Signing (macOS notarisation, Windows Authenticode) — certificates and notarisation
       credentials do not exist; the current macOS workflow explicitly ad-hoc signs and creates an
       unsigned, non-notarised DMG (`.github/workflows/macos-universal-release-build.yml:162-180`).
-- [x] Update server / `updateHostname`, or explicitly disabled auto-update via policy — disabled,
-      in `src/zen/trance/distribution/policies.json` (Phase 9)
-- [x] Update *detection* without an updater — `TranceUpdates`/`TranceUpdateChecker` check GitHub
-      releases (pre-releases included by default) at most every six hours, with no timer, and show a
-      notification bar that links to the release page. Nothing is downloaded or installed (ADR-098)
+- [x] Firefox's `updateHostname`/MAR updater remains disabled by distribution policy, in
+      `src/zen/trance/distribution/policies.json` (Phase 9)
+- [x] GitHub release detection and a Trance-owned macOS DMG installer — checks pre-releases by
+      default at most every six hours, with no timer; downloads to staging, verifies the GitHub
+      SHA-256 digest and app identity/version, and swaps the bundle only after browser exit.
+      Unsupported platforms/assets use the release-page fallback. Firefox MAR/AUS remains disabled
+      by policy; signing and notarisation are still absent (ADR-104).
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1, 0.3.0 and 0.3.1 were built
-      locally rather than in CI; the current 0.3.1 artefact is a development build.
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1, 0.3.0, 0.3.1 and 0.3.2 were
+      built locally rather than in CI; the current 0.3.2 artefact is a development build.
 
 **Release history**
 
@@ -1887,7 +1894,7 @@ tell which of them were decisions and which were defects.
   the splitter blur seam, the eight-page onboarding, the theme-picker ring and saved-theme pages,
   Zen's native Library switched on, workspace dots, and the macOS panel exit fade
   (`docs/trance/release-0.3.0.md`). Same build shape as 0.2.0.
-- **0.3.1 (current, 2026-09-28):** merged Zen `3d874409e` (Firefox 157.0, release-candidate
+- **0.3.1 (2026-09-28):** merged Zen `3d874409e` (Firefox 157.0, release-candidate
   build 1, which the `trance` brand builds from because it is not `release`), re-applying
   touchpoints 8, 28, 29 and 30 on the new tree. The blur knob drives the macOS window's own
   background blur through the window server, and the docked sidebar, splitter and toolbar lose the
@@ -1897,6 +1904,14 @@ tell which of them were decisions and which were defects.
   app-menu mark's hover box is the same 29px as its neighbours' (ADR-102). The top strip's slide
   survives a stylesheet that overrides `transition` (ADR-103). GitHub release detection lands
   (ADR-098) (`docs/trance/release-0.3.1.md`). Same build shape as 0.2.0.
+- **0.3.2 (current, 2026-09-29):** same base. The window blur radius goes into the macOS material's
+  backdrop blur instead of the window server, so the window stays opaque — the non-opaque window was
+  both the square corners and the 0.3.1 WindowServer GPU cost — and the tab-switch and search
+  arrivals carry their blur for 60% of the gesture only (ADR-107, touchpoint 30 re-cut, a full
+  `npm run build`). Supported macOS releases download, verify and install themselves at quit or
+  restart (ADR-104). Zen Library is uninstalled from profiles that had it rather than switched off
+  (ADR-106). The suite's failures are fixed, including the settings confirmation dialog that opened
+  hidden (ADR-105) (`docs/trance/release-0.3.2.md`). Same build shape as 0.2.0.
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
@@ -1998,23 +2013,15 @@ twilight" only for a fork with exactly Zen's two brands. Trance's one brand is n
 on the twilight side, and the channel page had been writing `true` over a default that was already
 `true` since the day it was written. Touchpoint 26.*
 
-*The reason it went unseen: **the suite had never been run whole.** The last recorded run had five
-files and all 196 assertions passing. Phases 8 to 13 added six more without executing them. The
-historical run on 2026-08-28 reported **766 passed, 23 failed**, then **804 passed, 21 failed**
-after ADR-054 and the import-page fixes. Those totals predate the latest manifest edits and are not
-a current suite result.*
+*The reason it went unseen: **the suite had never been run whole.** The historical 2026-08-28 runs
+reported **766 passed, 23 failed**, then **804 passed, 21 failed** after ADR-054 and the import-page
+fixes. Those totals predate the latest manifest edits.*
 
-*Three previously unregistered mochitests are now in their browser manifests:
-`browser_trance_ownership.js` (`src/zen/tests/trance/browser.toml:17`),
-`browser_media_position_ticker.js` (`src/zen/tests/media/browser.toml:16`), and
-`browser_compact_mode_activity.js` (`src/zen/tests/compact_mode/browser.toml:7`). The mochitest
-suite has **not** been run after that registration, so the twenty-test triage remains open and no
-new pass/fail total is claimed. The prior triage listed the first-run panel's `popup is null` in
-three tasks, the app-menu mark's three, the theme translucency slider's two, edgeless's two, and
-one each in surfaces, tabstrip, chrome and settings. A separate historical run of
-`browser_trance_feedback.js` three times showed four repeat failures, with the burst's bubble-count
-assertion migrating between task names — flaky in attribution, not in outcome. **Clearing them is
-still work this plan owes.***
+*A non-headless whole-suite run on 2026-09-28 reported **913 passed, 1 failed, 12 TODO**; the
+failure was the burst test's keyframe parser (ADR-105). On 2026-09-29, with that parser fixed, the
+non-headless run reported **915 passed, 1 failed**: the settings confirmation dialog, which opened
+under a pane `search()` had hidden — a real defect, fixed (ADR-105). The whole suite on the 0.3.2
+build, `npm test -- trance --headless`, reports **916 passed, 0 failed, 11 TODO**. See ADR-036.*
 
 ---
 
@@ -2138,10 +2145,11 @@ Decide these with the user; record answers in `docs/trance/DECISIONS.md`.
    branding is done? (Public + Zen branding = trademark problem — §7.4.)
 2. ~~**Channels.** One `trance` channel, or `release` + a twilight-equivalent?~~
    **Answered (ADR-006):** one `trance` brand. A second channel is a cheap later addition.
-3. **Updates.** Run an update server (`updateHostname`), use GitHub releases + a MAR feed, or
-   disable auto-update and ship manual downloads?
-   *Provisionally off (ADR-009). Must be decided for real in Phase 12.* Detection without
-   installation is in place (ADR-098); the updater itself is still off.
+3. ~~**Updates.**~~
+   **Answered (ADR-104):** Firefox MAR/AUS stays disabled by policy; Trance uses GitHub releases
+   and installs a digest-verified macOS DMG by staging it and swapping the app after shutdown.
+   Unsupported platforms retain the release-page fallback. Signing and notarisation remain open
+   under question 4.
 4. **Signing.** Apple Developer ID for notarisation? Windows code-signing cert? Without these,
    macOS and Windows installs need Gatekeeper/SmartScreen overrides.
 5. **Zen's native mods system** — keep enabled, keep but point at a Trance store, or remove?

@@ -17,14 +17,13 @@ loader or the conflicts, with invisible-window work suspended instead of left ru
 
 ## Download
 
-[**Trance 0.3.1 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.1)
+[**Trance 0.3.2 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.2)
 
-The [0.3.1 release notes](./docs/trance/release-0.3.1.md) cover the blur knob now blurring the
-window itself, the end of the white panels on the sidebar and toolbar, the tab glow, workspace
-icons and app-menu button fixes, the sidebar's top strip sliding again, update notices, and the
-Firefox 157 base. The
-[0.3.0 notes](./docs/trance/release-0.3.0.md) cover the Google sign-in and AI Overview fix and the
-eight-page onboarding.
+The [0.3.2 release notes](./docs/trance/release-0.3.2.md) cover the window keeping its rounded
+corners at every blur value, the GPU cost 0.3.1's window blur added, updates that install
+themselves, the settings confirmation dialog that never appeared, and the Zen Library mod being
+uninstalled. The [0.3.1 notes](./docs/trance/release-0.3.1.md) cover the Firefox 157 base, the
+blur knob, and the tab glow, workspace icon and app-menu fixes.
 
 A development build: no PGO, no LTO, **not signed and not notarised**. Gatekeeper will refuse to
 open it until you clear the quarantine attribute yourself:
@@ -33,8 +32,8 @@ open it until you clear the quarantine attribute yourself:
 xattr -dr com.apple.quarantine /Applications/Trance.app
 ```
 
-No Intel, Linux or Windows builds yet, and no auto-update — updates are disabled by policy and new
-builds appear on the releases page. Both are Phase 12 (`TRANCE.md` §13).
+No Intel, Linux or Windows builds yet. From 0.3.2 on, Trance installs its own macOS updates from
+this repository's releases; Firefox's updater stays disabled by policy (`TRANCE.md` §13 Phase 12).
 
 ## Why
 
