@@ -72,11 +72,14 @@ add_task(async function test_the_loading_bar_exists_and_is_inert() {
   const bar = document.getElementById("trance-loading-bar");
   ok(bar, "the bar is in the DOM");
   is(bar.parentElement.id, "zen-tabbox-wrapper", "inside the content wrapper");
-
   const style = window.getComputedStyle(bar);
   is(style.position, "absolute", "out of flow, so it measures as nothing");
   is(style.pointerEvents, "none", "and cannot be clicked");
-  ok(!bar.hasAttribute("active"), "and is inactive while nothing is loading");
+
+  await TestUtils.waitForCondition(
+    () => !bar.hasAttribute("active"),
+    "the bar settles when the browser's initial load finishes"
+  );
 });
 
 add_task(async function test_no_infinite_animation_and_no_keyframes() {
@@ -311,29 +314,53 @@ add_task(async function test_closing_a_tab_bursts_and_cleans_up() {
  * at the origin and moved by a `transform` that only exists in the keyframes,
  * so the DOM says nothing about where any of them is going.
  *
+ * The keyframe comes back re-serialised, not as written: `calc(-50% + -3.25px)`
+ * reads back as `calc(-50% - 3.25px)`, and a zero offset may drop out of the
+ * `calc()` entirely. Matching only `+ N` counted just the bubbles that went
+ * right and down, which made the count a coin toss per bubble — the
+ * "2 > 2, then 1 > 2, then 0 > 2" of ADR-036.
+ *
  * @param {Element} layer
  * @returns {Array<{x: number, y: number}>}
  */
 function burstVectors(layer) {
+  const offset = component => {
+    const match = component.match(/-50%\s*([+-])\s*([\d.]+(?:e[+-]?\d+)?)px/);
+    if (!match) {
+      return /-50%/.test(component) ? 0 : NaN;
+    }
+    return (match[1] === "-" ? -1 : 1) * parseFloat(match[2]);
+  };
   return [...layer.querySelectorAll(".trance-burst-bubble")]
     .map(bubble => {
       const [, end] = bubble.getAnimations()[0]?.effect?.getKeyframes() ?? [];
-      const match = end?.transform?.match(
-        /translate\(calc\(-50% \+ (-?[\d.]+)px\), calc\(-50% \+ (-?[\d.]+)px\)\)/
+      const translate = end?.transform?.match(
+        /translate\(((?:calc\([^)]*\)|[^,)])+),\s*((?:calc\([^)]*\)|[^,)])+)\)/
       );
-      return match
-        ? { x: parseFloat(match[1]), y: parseFloat(match[2]) }
-        : null;
+      if (!translate) {
+        return null;
+      }
+      const x = offset(translate[1]);
+      const y = offset(translate[2]);
+      return Number.isNaN(x) || Number.isNaN(y) ? null : { x, y };
     })
     .filter(Boolean);
 }
 
 add_task(async function test_the_burst_is_sampled_not_stepped() {
-  // The first version placed bubble `i` at exactly `i / count` of a circle and
-  // sent all of them exactly `travel` pixels — a ring expanding at a constant
-  // rate, identical on every close. Angle, distance and end scale are each an
-  // evenly-spaced mean plus a clamped normal deviate now, so no two bubbles are
-  // the same distance out and no two bursts are the same burst.
+  // The burst's geometry only exists for its animation's lifetime. This test
+  // exercises the full-motion branch regardless of the workstation setting.
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["layout.css.prefers-reduced-motion", 0],
+      ["trance.motion.level", 2],
+      ["trance.feedback.bubbles.count", 12],
+    ],
+  });
+  await TestUtils.waitForCondition(
+    () => document.documentElement.getAttribute("trance-motion") === "2",
+    "full motion is active for the geometry check"
+  );
   const tab = BrowserTestUtils.addTab(gBrowser, "about:blank");
   BrowserTestUtils.removeTab(tab);
 
@@ -353,15 +380,24 @@ add_task(async function test_the_burst_is_sampled_not_stepped() {
     () => !layer.querySelector(".trance-burst-bubble"),
     "and they still clean themselves up"
   );
+  await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function test_the_line_shape_stays_on_one_axis() {
-  // `line` is the same scatter sent along the row the tab was in rather than
-  // around it: the cross-axis spread is a fraction of the along-axis reach, and
-  // both arms are used whatever the bubble count.
+  // `line` sends the scatter along the row the tab was in rather than around
+  // it; the cross-axis spread is a fraction of the along-axis reach.
   await SpecialPowers.pushPrefEnv({
-    set: [["trance.feedback.bubbles.shape", "line"]],
+    set: [
+      ["layout.css.prefers-reduced-motion", 0],
+      ["trance.motion.level", 2],
+      ["trance.feedback.bubbles.count", 12],
+      ["trance.feedback.bubbles.shape", "line"],
+    ],
   });
+  await TestUtils.waitForCondition(
+    () => document.documentElement.getAttribute("trance-motion") === "2",
+    "full motion is active for the geometry check"
+  );
 
   const tab = BrowserTestUtils.addTab(gBrowser, "about:blank");
   BrowserTestUtils.removeTab(tab);
@@ -479,13 +515,13 @@ add_task(async function test_the_marks_are_visible_against_the_chrome() {
     "and is lifted away from the raw accent rather than aliasing it"
   );
 
-  const bar = document.getElementById("trance-loading-bar");
-  ok(bar, "the loading bar exists");
-  if (bar) {
-    const background = window.getComputedStyle(bar).backgroundImage;
+  const fill = document.getElementById("trance-loading-fill");
+  ok(fill, "the loading fill exists");
+  if (fill) {
+    const background = window.getComputedStyle(fill).backgroundImage;
     ok(
       background && background !== "none",
-      "and is painted with a gradient rather than nothing"
+      "and its fill is painted with a gradient rather than nothing"
     );
   }
 });

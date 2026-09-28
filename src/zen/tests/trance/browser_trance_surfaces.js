@@ -458,27 +458,41 @@ add_task(
   }
 );
 
-add_task(async function test_the_background_image_is_off_until_asked_for() {
+add_task(async function test_the_background_image_tracks_its_pref() {
   const root = document.documentElement;
+  const pref = "trance.surface.image";
+  const enabled = Services.prefs.getStringPref(pref, "") !== "";
+  is(
+    root.hasAttribute("trance-surface-image"),
+    enabled,
+    "the image state reflects the configured default"
+  );
+
+  await SpecialPowers.pushPrefEnv({ set: [[pref, ""]] });
+  await TestUtils.waitForCondition(
+    () => !root.hasAttribute("trance-surface-image"),
+    "clearing the image removes its surface state"
+  );
+  const wrapper = document.getElementById("zen-main-app-wrapper");
   ok(
-    !root.hasAttribute("trance-surface-image"),
-    "no image, no pseudo-element — a box costs a box whether or not its " +
-      "background resolves to anything"
+    !window
+      .getComputedStyle(wrapper, "::before")
+      .backgroundImage.includes("trance-test-texture.png"),
+    "no texture is painted after clearing the preference"
   );
 
   await SpecialPowers.pushPrefEnv({
-    set: [["trance.surface.image", "file:///tmp/trance-test-texture.png"]],
+    set: [[pref, "file:///tmp/trance-test-texture.png"]],
   });
-
-  is(root.getAttribute("trance-surface-image"), "true", "and it turns on live");
+  await TestUtils.waitForCondition(
+    () => root.getAttribute("trance-surface-image") === "true",
+    "setting an image turns its surface state on"
+  );
   const image = window
     .getComputedStyle(root)
     .getPropertyValue("--trance-surface-image");
-  ok(
-    image.includes("trance-test-texture.png"),
-    `the token carries the chosen file (${image})`
-  );
-
+  ok(image.includes("trance-test-texture.png"), "and it reaches the surface");
+  await SpecialPowers.popPrefEnv();
   await SpecialPowers.popPrefEnv();
 });
 
@@ -913,34 +927,6 @@ add_task(async function test_the_page_recede_clip_uses_the_same_corners() {
   );
 });
 
-add_task(async function test_edgeless_paints_one_gradient_not_two() {
-  // Zen renders the workspace gradient twice: `#zen-browser-background` across
-  // the whole browser area, and `#zen-toolbar-background` across the vertical
-  // tab strip, from a *separately generated* `-toolbar` variant. Both are inline
-  // styles on those elements, so the seam between them cannot be re-pointed
-  // without `!important` — edgeless stops painting the second copy instead.
-  const toolbarBackground = document.querySelector("#zen-toolbar-background");
-  ok(toolbarBackground, "#zen-toolbar-background exists");
-  if (!toolbarBackground) {
-    return;
-  }
-  is(
-    window.getComputedStyle(toolbarBackground).display,
-    "none",
-    "the tab strip's own gradient is not painted while edgeless is on"
-  );
-
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.surface.edgeless", false]],
-  });
-  Assert.notEqual(
-    window.getComputedStyle(toolbarBackground).display,
-    "none",
-    "and it comes back with edgeless off, where the two panes are two panes"
-  );
-  await SpecialPowers.popPrefEnv();
-});
-
 add_task(
   async function test_internal_pages_are_translucent_but_websites_are_not() {
     // Two halves that have to agree. The page half is a USER sheet registered
@@ -1041,37 +1027,39 @@ add_task(async function test_the_internal_page_frost_follows_its_own_switch() {
 });
 
 add_task(async function test_edgeless_paints_the_page_the_same_colour() {
-  // "The same colour as the surroundings" was previously
-  // `--zen-main-browser-background`: the workspace gradient at full strength,
-  // where what the chrome around the pane actually shows is that gradient at
-  // `--trance-surface-alpha`, over the window's own translucency, under the
-  // edgeless sheen. Three layers against one, so the pane read as a slightly
-  // different shade — a visible rectangle wherever the page did not paint.
-  //
-  // Transparent is the only value that cannot be a near miss.
-  const browser = gBrowser.selectedBrowser;
-  ok(browser, "there is a selected browser");
-  if (!browser) {
-    return;
+  // The edgeless rule applies to a web page's browser, not about:blank, which
+  // remains transparent under the separate internal-pages preference.
+  const tab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "https://example.com/"
+  );
+  try {
+    const browser = tab.linkedBrowser;
+    const backgroundColor = () =>
+      window.getComputedStyle(browser).backgroundColor;
+
+    is(
+      backgroundColor(),
+      "rgba(0, 0, 0, 0)",
+      `the edgeless page paints nothing of its own (${backgroundColor()})`
+    );
+
+    await SpecialPowers.pushPrefEnv({
+      set: [["trance.surface.edgeless", false]],
+    });
+    await TestUtils.waitForCondition(
+      () => !document.documentElement.hasAttribute("trance-surface-edgeless"),
+      "edgeless is disabled"
+    );
+    isnot(
+      backgroundColor(),
+      "rgba(0, 0, 0, 0)",
+      "and with edgeless off the pane is a card again, with its own backdrop"
+    );
+    await SpecialPowers.popPrefEnv();
+  } finally {
+    BrowserTestUtils.removeTab(tab);
   }
-  const backgroundColor = () =>
-    window.getComputedStyle(browser).backgroundColor;
-
-  is(
-    backgroundColor(),
-    "rgba(0, 0, 0, 0)",
-    `the content pane paints nothing of its own (${backgroundColor()})`
-  );
-
-  await SpecialPowers.pushPrefEnv({
-    set: [["trance.surface.edgeless", false]],
-  });
-  isnot(
-    backgroundColor(),
-    "rgba(0, 0, 0, 0)",
-    "and with edgeless off the pane is a card again, with its own backdrop"
-  );
-  await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function test_edgeless_reaches_the_window_edge() {

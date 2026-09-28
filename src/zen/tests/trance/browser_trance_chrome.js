@@ -339,37 +339,41 @@ add_task(async function test_the_app_menu_button_wears_the_trance_mark() {
 });
 
 add_task(async function test_the_app_menu_hover_box_matches_its_neighbours() {
-  // The regression: the mark's image was given an unbadged button's padded
-  // size inside a *badged* button's stack, which pads it again. The stack —
-  // the element a toolbar button paints its hover fill on and is hit-tested
-  // through — came out 41px square around a 31×29 button (ADR-102).
-  const menuStack = document
-    .getElementById("PanelUI-menu-button")
-    ?.querySelector(".toolbarbutton-badge-stack");
-  // The reload button is on the toolbar in every layout; the overflow button
-  // is hidden whenever nothing overflows.
-  const reloadIcon = document
-    .getElementById("reload-button")
-    ?.querySelector(".toolbarbutton-icon");
-  ok(menuStack && reloadIcon, "both hover boxes exist");
-  if (!menuStack || !reloadIcon) {
+  const menuButton = document.getElementById("PanelUI-menu-button");
+  const menuStack = menuButton?.querySelector(".toolbarbutton-badge-stack");
+  ok(menuStack, "the app menu hover box exists");
+  if (!menuStack) {
     return;
   }
+
+  // The reload button is hidden in Trance's layout; the back button remains a
+  // visible standard toolbar control to compare with.
+  const neighbour = document
+    .getElementById("back-button")
+    ?.querySelector(".toolbarbutton-icon");
+  ok(neighbour, "a visible standard toolbar neighbour exists");
+  if (!neighbour) {
+    return;
+  }
+  const neighbourRect = neighbour.getBoundingClientRect();
+  ok(
+    neighbourRect.width > 0 && neighbourRect.height > 0,
+    "the back-button hover box has visible dimensions"
+  );
+
   const menu = menuStack.getBoundingClientRect();
-  const neighbour = reloadIcon.getBoundingClientRect();
+  const neighbourBox = neighbour.getBoundingClientRect();
   Assert.lessOrEqual(
-    Math.abs(menu.width - neighbour.width),
+    Math.abs(menu.width - neighbourBox.width),
     1,
-    `the app menu's hover box is as wide as its neighbour's (${menu.width} vs ${neighbour.width})`
+    `the app menu's hover box is as wide as its neighbour's (${menu.width} vs ${neighbourBox.width})`
   );
   Assert.lessOrEqual(
-    Math.abs(menu.height - neighbour.height),
+    Math.abs(menu.height - neighbourBox.height),
     1,
-    `and as tall (${menu.height} vs ${neighbour.height})`
+    `and as tall (${menu.height} vs ${neighbourBox.height})`
   );
-  const buttonBox = document
-    .getElementById("PanelUI-menu-button")
-    .getBoundingClientRect();
+  const buttonBox = menuButton.getBoundingClientRect();
   Assert.lessOrEqual(
     menu.width,
     buttonBox.width,

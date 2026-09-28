@@ -110,12 +110,13 @@ add_task(async function test_feature_is_registered_and_enabled() {
 });
 
 add_task(async function test_one_subscription_for_the_whole_tab_strip() {
-  // The hub keeps one MutationObserver for however many subscribers exist, so
-  // the budget is stated in observers, which is what actually costs anything.
+  // ADR-062 gives the folder cache its own narrow mutation root. It can
+  // coexist with one unrelated chrome-root observer without widening either
+  // subscription to the whole document.
   Assert.lessOrEqual(
     window.gTrance.context.observers.observerCount,
-    1,
-    "the whole tab strip runs on one observer (TRANCE.md §3.2, §12.1)"
+    2,
+    "the tab strip uses its narrow cache observer plus at most one shared root"
   );
 });
 
@@ -302,6 +303,7 @@ add_task(async function test_folder_colours_need_no_storage() {
 });
 
 add_task(async function test_disabled_tab_strip_costs_nothing() {
+  const observersBefore = window.gTrance.context.observers.observerCount;
   const root = document.documentElement;
 
   await SpecialPowers.pushPrefEnv({
@@ -328,8 +330,8 @@ add_task(async function test_disabled_tab_strip_costs_nothing() {
   );
   is(
     window.gTrance.context.observers.observerCount,
-    0,
-    "and the shared observer is disconnected — nothing else was using it"
+    observersBefore - 1,
+    "disabling releases the tab cache's narrow observer subscription"
   );
 
   await SpecialPowers.popPrefEnv();

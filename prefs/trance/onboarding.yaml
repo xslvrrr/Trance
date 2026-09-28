@@ -49,11 +49,6 @@
 
 # === Mark: What the flow decides ===
 
-# Legacy preference retained for profiles that already have it. Trance ships
-# one brand (ADR-006), so there is no longer a stable/twilight onboarding choice.
-- name: trance.onboarding.channel
-  value: "stable"
-
 # Which channel the preinstalled mod manager follows: `cosine` (Sine's
 # pre-release channel, the shipped default — ADR-018) or `sine` (stable).
 #

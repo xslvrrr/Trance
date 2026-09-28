@@ -85,6 +85,7 @@ add_task(async function test_a_claim_is_refcounted_across_owners() {
     "and the registry no longer holds it"
   );
 
+  Services.prefs.getDefaultBranch("").deleteBranch(SCRATCH_PREF);
   Services.prefs.clearUserPref(SCRATCH_PREF);
 });
 
@@ -123,6 +124,7 @@ add_task(async function test_a_default_only_pref_is_cleared_not_frozen() {
     "restoring a pref that only had a default clears it rather than " +
       "freezing today's default into prefs.js"
   );
+  Services.prefs.getDefaultBranch("").deleteBranch(SCRATCH_PREF);
 });
 
 add_task(async function test_the_loading_indicator_is_owned_not_mirrored() {
@@ -258,10 +260,10 @@ add_task(async function test_reads_all_happen_before_writes() {
 // --- The tab-strip structural cache -----------------------------------------
 
 add_task(async function test_the_cache_answers_without_a_document_query() {
-  const { tabs } = context();
-  ok(tabs.root, "the cache found the tab strip's root");
+  const { tabCache } = context();
+  ok(tabCache.root, "the cache found the tab strip's root");
   is(
-    tabs.folderCount,
+    tabCache.folderCount,
     document.querySelectorAll("zen-folder").length,
     "and its answer matches the document it was built from"
   );

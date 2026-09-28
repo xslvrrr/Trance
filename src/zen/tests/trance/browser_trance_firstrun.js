@@ -26,7 +26,10 @@ const FIRSTRUN_SHEET =
   "chrome://browser/content/trance-styles/trance-firstrun.css";
 const PREF_ENABLED = "trance.firstrun.enabled";
 const PREF_COMPLETED = "trance.firstrun.completed";
+const PREF_ONBOARDING_ENABLED = "trance.onboarding.enabled";
+const PREF_ZEN_WELCOME_SEEN = "zen.welcome-screen.seen";
 const PANEL_ID = "trance-firstrun-panel";
+let panelPrefsPushed = false;
 
 function feature() {
   return window.gTrance.features.find(f => f.name === "FirstRun");
@@ -54,11 +57,20 @@ function policyIds() {
 }
 
 async function openPanel() {
-  Services.prefs.setBoolPref(PREF_COMPLETED, false);
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      [PREF_ONBOARDING_ENABLED, false],
+      [PREF_ZEN_WELCOME_SEEN, true],
+      [PREF_COMPLETED, false],
+    ],
+  });
+  panelPrefsPushed = true;
   feature().show();
   const node = panel();
   ok(node, "the panel was built");
-  await BrowserTestUtils.waitForPopupEvent(node, "shown");
+  if (node) {
+    await BrowserTestUtils.waitForPopupEvent(node, "shown");
+  }
   return node;
 }
 
@@ -71,14 +83,14 @@ async function openPanel() {
  */
 async function closePanel() {
   const node = panel();
-  if (!node) {
-    return;
+  if (node) {
+    node.hidePopup();
+    await BrowserTestUtils.waitForPopupEvent(node, "hidden");
   }
-  node.hidePopup();
-  // `waitForPopupEvent`, not `waitForEvent`: a panel that never finished
-  // opening fires no `popuphidden`, and a test that waited for one would hang
-  // rather than fail.
-  await BrowserTestUtils.waitForPopupEvent(node, "hidden");
+  if (panelPrefsPushed) {
+    panelPrefsPushed = false;
+    await SpecialPowers.popPrefEnv();
+  }
 }
 
 registerCleanupFunction(async () => {

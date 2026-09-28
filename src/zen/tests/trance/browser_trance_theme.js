@@ -316,27 +316,24 @@ add_task(async function test_the_blur_knob_can_actually_be_moved() {
   is(knob.textContent, `${after}px`, "and the readout follows it");
 
   // A drag is the other input, and it is the one the report was about. The
-  // gesture is `mousedown` anywhere in the circle; the arc is 270° with its gap
-  // at the bottom, so straight up is the middle of the range. Measured from a
-  // radius that is not already the midpoint, so the write is observable.
-  // The panel is opened for this half only: a closed popup lays out nothing,
-  // and the bearing is measured against the knob's own box.
+  // ADR-089 leaves a 10° dead zone centred at the top. The usable arc is
+  // centred on the bottom, so a straight-down press writes the midpoint.
   await openPanel();
-  Services.prefs.setIntPref("trance.surface.blur.radius", 4);
   const rect = knob.getBoundingClientRect();
+  Services.prefs.setIntPref("trance.surface.blur.radius", 4);
   knob.dispatchEvent(
     new MouseEvent("mousedown", {
       bubbles: true,
       button: 0,
       clientX: rect.left + rect.width / 2,
-      clientY: rect.top,
+      clientY: rect.bottom,
     })
   );
   document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   is(
     Services.prefs.getIntPref("trance.surface.blur.radius"),
     30,
-    "pressing at the top of the arc writes the middle of the range"
+    "pressing at the bottom of the arc writes the middle of the range"
   );
   await closePanel();
 

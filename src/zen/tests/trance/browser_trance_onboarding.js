@@ -117,7 +117,7 @@ add_task(async function test_starting_takes_the_window_and_claims_the_run() {
     "the splash is the first thing on screen"
   );
   node.querySelector("#trance-onboarding-splash button").click();
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () =>
       node.querySelector("#trance-onboarding-copy h1")?.textContent ===
       "Cosine or Sine",
