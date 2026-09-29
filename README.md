@@ -17,13 +17,14 @@ loader or the conflicts, with invisible-window work suspended instead of left ru
 
 ## Download
 
-[**Trance 0.3.2 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.2)
+[**Trance 0.3.3 — macOS, Apple Silicon**](https://github.com/xslvrrr/Trance/releases/tag/0.3.3)
 
-The [0.3.2 release notes](./docs/trance/release-0.3.2.md) cover the window keeping its rounded
-corners at every blur value, the GPU cost 0.3.1's window blur added, updates that install
-themselves, the settings confirmation dialog that never appeared, and the Zen Library mod being
-uninstalled. The [0.3.1 notes](./docs/trance/release-0.3.1.md) cover the Firefox 157 base, the
-blur knob, and the tab glow, workspace icon and app-menu fixes.
+The [0.3.3 release notes](./docs/trance/release-0.3.3.md) cover the blur knob working again and
+turning like the grain knob, the empty-tab mark staying behind a restored Settings page, the update
+bar drawn under the page, the mark's new glow, and better mod warnings. The
+[0.3.2 notes](./docs/trance/release-0.3.2.md) cover the window keeping its rounded corners, the GPU
+cost 0.3.1's window blur added, updates that install themselves, and the Zen Library mod being
+uninstalled.
 
 A development build: no PGO, no LTO, **not signed and not notarised**. Gatekeeper will refuse to
 open it until you clear the quarantine attribute yourself:

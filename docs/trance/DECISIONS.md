@@ -4906,3 +4906,171 @@ rules out.
 - `browser_trance_chrome.js` gains `test_the_update_bar_paints_above_the_page`, which shows the real
   update bar through the checker's injected release list and hit-tests its buttons. It fails on the
   0.3.2 code (the hit is `browser`) and passes with the move.
+
+---
+
+## ADR-109 — The blur knob drives the window server, turns like the grain knob, and places its handle in CSS
+
+**Date:** 2026-09-29
+**Status:** Accepted
+**Amends:** ADR-107, ADR-089
+
+**Context:**
+
+Three reports against the blur knob in 0.3.2.
+
+1. It did nothing. ADR-107 writes the radius into the `inputRadius` of the material's
+   `CABackdropLayer` `gaussianBlur` filter with `-[CAFilter setValue:forKey:]` on the filter
+   object, then assigns the same array back to `filters`. Reading the layer tree back from chrome JS
+   (js-ctypes, key window, dev build) showed `inputRadius` at 0, 24 and 60 as the knob moved, and
+   screenshots of the window over the same wallpaper were identical at 0 and at 60. The model
+   changed and the render tree did not. The backdrop is `windowServerAware` in the
+   `NSCGSWindowBehindWindowCaptureBackdropGroup`, so the window server draws it, and it never saw the
+   edit. ADR-107's verification read the model, which is the half that did change.
+2. On every browser start its handle sat in the knob's corner until something moved it.
+   `#placeHandle` measured the knob with `getBoundsWithoutFlushing` and returned on a width of 0,
+   and the blur knob is only placed from `#syncMaster`, which first runs before the panel has ever
+   been laid out.
+3. Its top had a dead arc: ADR-089's 10° gap between zero and the maximum, which no other knob has.
+
+**Decision:**
+
+- Touchpoint 30 writes the radius with `[layer setValue:forKeyPath:@"filters.gaussianBlur.inputRadius"]`
+  inside a `CATransaction` with actions disabled. That is Core Animation's own route to a named
+  filter's input, and it marks the layer for the next commit. The filter object is no longer edited
+  in place and the array is no longer handed back.
+- The blur knob maps the whole ring the way Zen's grain knob does: zero at the top, clockwise, 31
+  detents of 2px for 0 to 60, and a press on the detent that would land on the top again is zero.
+  The gap and its snap-to-nearest-end logic are gone.
+- `#placeHandle` writes only `--trance-knob-bearing`. trance-theme.css places the handle with
+  `left: calc(50% + sin(bearing) * 50% - 3px)`, `top: calc(50% - cos(bearing) * 50% - 6px)` and
+  `rotate(bearing)`, as fractions of the knob's own box, so nothing is measured and an unlaid-out
+  panel places it correctly. Both knobs use it.
+
+**Consequences:**
+
+- Checked on the rebuilt dev build over the same wallpaper: radius 0 shows the wallpaper sharp and 60
+  a soft wash, with the layer reading 0 and 60. Opened through `PanelMultiView` on a fresh start,
+  the blur handle's centre is on the ring at 24px's bearing, and the angle handle is at the top at
+  0°.
+- `browser_trance_theme.js` presses at 90°, 180°, 15° short of the top and 3° either side of it, and
+  checks that the handle is on the ring. It now opens the picker through `PanelMultiView.openPopup`:
+  a bare `openPopup` shows a view 0px wide, where every knob measures 0 across and a press at any
+  bearing lands on the centre line.
+
+---
+
+## ADR-110 — The mod guard names the Sine mods it was wrong about
+
+**Date:** 2026-09-29
+**Status:** Accepted
+**Amends:** the mod guard's generic classifier
+
+**Context:**
+
+The guard in Settings → Mods has two halves: the 23 mods Trance absorbed, named exactly, and a
+keyword classifier for everything else. Run over the 69 mods in the current Sine marketplace
+(`sineorg/store` `marketplace.json`, fetched 2026-09-29), the classifier was wrong both ways about
+mods people install. Eight whole-browser themes (Natsumi Browser, Arc 2.0, Neo Zen, Wireframe 2.0,
+macaron, Livs Theme, zap's cool photon theme, Paneru) describe themselves as "a theme" and matched
+nothing — or, for Paneru, only "transparency" — while restyling every element Trance owns. Zen Page
+Tint, Blended Addressbar, No-Gaps and Square UI matched nothing either. Six mods matched "workspace",
+"pinned" or "sidebar" without touching anything Trance owns: Zen Auto Wallpaper (it sets the
+*desktop* wallpaper through `gSetBackground`), Zen Site Appearance Toggle, Tidy Pinned Tabs (it
+rewrites titles), Zen Notes, Workspace Toast and Compact Settings.
+
+**Decision:**
+
+- `TRANCE_CLASHING_MODS`: exact entries, by store id and display name, with status `clash`, an owner,
+  a pref and a detail of their own. The eight themes share one detail that points at `trance.enabled`.
+  Zen Page Tint → Trance theming, Blended Addressbar and Square UI → Trance chrome, No-Gaps →
+  `trance.surface.edgeless`.
+- `TRANCE_QUIET_MODS`: id and display name for the six false positives, indexed to a sentinel that
+  `_apply` turns into no banner.
+- `addressbar` joins the chrome keywords.
+- Neither table is mirrored in `mods-inventory.json`, which stays the list of mods Trance absorbed.
+
+**Consequences:**
+
+- Over the same 69 mods: 8 themes and 4 named mods now carry a specific banner, the 6 quiet ones
+  carry none, and the installed list resolves them by name (it has no id).
+- Both tables are checked against one snapshot of a moving store. A mod added or renamed later
+  falls back to the classifier, as before.
+
+---
+
+## ADR-111 — The mark glows with a blurred copy of itself
+
+**Date:** 2026-09-29
+**Status:** Accepted
+
+**Context:**
+
+The empty-tab mark is iridescent: a sheen masked to the artwork, sliding with the pointer. A glow
+drawn with `drop-shadow()` is one colour, which is wrong for a mark whose light is every colour on
+it in the places they are.
+
+**Decision:**
+
+- A child of the mark, `.trance-newtab-logo-glow`, at `z-index: -1` in the mark's own stacking
+  context, so it sits behind the mark and tilts with it. It is blurred on its own box
+  (`--trance-newtab-logo-glow-blur`, 24px), and the copy is its `::before`. `filter` runs before
+  `mask`, so a masked, blurred element would be cut back to the sharp shape it started from.
+- With holographic on, the copy is the sheen: the same two layers, sizes and blend, masked by the
+  artwork. The pointer's position is now one custom property, `--trance-newtab-logo-sheen-position`,
+  set on the mark while the pointer is over it and read by both the sheen and the glow, so the glow is
+  the colour of the light on the mark at every point of the slide. With holographic off, the copy is
+  the artwork.
+- Its strength is `--trance-newtab-logo-glow-alpha` (0.8) times the alpha of what it copies.
+- `trance.surface.newtab.logo.glow`, default on, with a Settings row beside Holographic. Off, the
+  root attribute goes and no rule matches.
+- The mark's `contain: strict` becomes `size layout style`. Paint containment would clip the blur to
+  the mark's box.
+
+**Consequences:**
+
+- One blurred element, drawn only while an empty tab is selected. WebRender keeps the blur while
+  nothing under it changes, so it is redrawn while the sheen slides under a pointer and at no other
+  time.
+- Checked by `drawWindow` of the mark on the dev build, glow on and off.
+
+---
+
+## ADR-112 — The scheduler follows window activation, not focus
+
+**Date:** 2026-09-29
+**Status:** Accepted
+**Amends:** TranceScheduler's suspension (TRANCE.md §3.6)
+
+**Context:**
+
+From an empty window, Cmd+Shift+T brought back `about:preferences` and the empty-tab mark stayed
+behind it. The mark hides from the navigation router, which flushes on a scheduler frame, and the
+scheduler was suspended. It suspended on `blur` whenever `document.hasFocus()` was false, and resumed
+only on the chrome window's own `focus`. Browser-native pages load in the parent process, in a window
+inside this one. Focusing one fires `blur` at the chrome window while focus is between the two, when
+`hasFocus()` is false, and the `focus` that ends the move is fired at the page's window. So the
+scheduler stayed suspended in a window the user was typing into, until focus left the browser and
+came back. Every frame subscriber in that window stopped: the mark's navigation sync, its pointer
+writes, the loading bar. Traced on the dev build: the scheduler was suspended with the page focused,
+the window active and not occluded, and the router's flush never ran after the restore.
+
+**Decision:**
+
+In a chrome window the scheduler tracks the window's own `activate` and `deactivate` events (only
+those aimed at the window itself, since both bubble) and reads that instead of `hasFocus()`. It no
+longer listens to `focus` and `blur`. Its initial state is `Services.focus.activeWindow === win`.
+Occlusion, minimising and a content document's `visibilitychange` are unchanged.
+
+**Consequences:**
+
+- Moving focus inside the window never suspends the loop. Switching to another application still
+  does: checked on the dev build with `focusmanager.testmode` off, the scheduler suspended when
+  Finder was brought forward and resumed when the browser came back.
+- `browser_trance_perf.js` focuses `about:preferences`'s window and checks that the loop still runs,
+  and `browser_trance_surfaces.js` loads it into an empty tab and checks that the mark goes. Both fail
+  on the 0.3.2 scheduler and pass on this one.
+- A report against onboarding re-run from Settings (a stronger tint over the page, the mark blurred,
+  flicker when hovering it) could not be reproduced on a fresh profile. Settings is one of these
+  pages, so that run happened in a window whose loop had stopped. The report stays open until it can
+  be reproduced.

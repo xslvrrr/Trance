@@ -1870,8 +1870,8 @@ tell which of them were decisions and which were defects.
 - [x] Release channel decision — one `trance` brand, recorded in ADR-006 and configured as the
       sole `surfer.json` brand (`docs/trance/DECISIONS.md:115-138`; `surfer.json:16-36`).
 - [x] Public repo, README — `xslvrrr/Trance`. Screenshots still missing
-- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1, 0.3.0, 0.3.1 and 0.3.2 were
-      built locally rather than in CI; the current 0.3.2 artefact is a development build.
+- [x] Downloadable macOS arm64 builds — 0.1.0, 0.1.1, 0.2.0, 0.2.1, 0.3.0, 0.3.1, 0.3.2 and 0.3.3
+      were built locally rather than in CI; the current 0.3.3 artefact is a development build.
 
 **Release history**
 
@@ -1904,7 +1904,7 @@ tell which of them were decisions and which were defects.
   app-menu mark's hover box is the same 29px as its neighbours' (ADR-102). The top strip's slide
   survives a stylesheet that overrides `transition` (ADR-103). GitHub release detection lands
   (ADR-098) (`docs/trance/release-0.3.1.md`). Same build shape as 0.2.0.
-- **0.3.2 (current, 2026-09-29):** same base. The window blur radius goes into the macOS material's
+- **0.3.2 (2026-09-29):** same base. The window blur radius goes into the macOS material's
   backdrop blur instead of the window server, so the window stays opaque — the non-opaque window was
   both the square corners and the 0.3.1 WindowServer GPU cost — and the tab-switch and search
   arrivals carry their blur for 60% of the gesture only (ADR-107, touchpoint 30 re-cut, a full
@@ -1912,6 +1912,15 @@ tell which of them were decisions and which were defects.
   restart (ADR-104). Zen Library is uninstalled from profiles that had it rather than switched off
   (ADR-106). The suite's failures are fixed, including the settings confirmation dialog that opened
   hidden (ADR-105) (`docs/trance/release-0.3.2.md`). Same build shape as 0.2.0.
+- **0.3.3 (current, 2026-09-29):** same base. The blur radius reaches the window server through the
+  backdrop layer's `filters.gaussianBlur.inputRadius` key path — 0.3.2's in-place filter edit only
+  changed the model, so the knob did nothing on screen — and the blur knob maps the whole ring in
+  2px detents like Zen's grain knob, with both knobs' handles placed in CSS from a bearing
+  (ADR-109, touchpoint 30, a full `npm run build`). The scheduler suspends on window deactivation
+  rather than on `blur`, which a focused parent-process page fired and never undid (ADR-112). The
+  window-wide notification stack moves into `#browser`, above the page (ADR-108, touchpoint 19).
+  The mark glows with a blurred copy of itself (ADR-111), and the mod guard names the Sine mods its
+  classifier got wrong (ADR-110) (`docs/trance/release-0.3.3.md`). Same build shape as 0.2.0.
 
 **The 0.1.0 build (2026-08-28).** `npm run package` on this machine, from the tree at `bf1a6900d`.
 Dev build — no PGO, no LTO — ad-hoc/linker-signed only, so Gatekeeper rejects it until the user
@@ -2021,7 +2030,8 @@ fixes. Those totals predate the latest manifest edits.*
 failure was the burst test's keyframe parser (ADR-105). On 2026-09-29, with that parser fixed, the
 non-headless run reported **915 passed, 1 failed**: the settings confirmation dialog, which opened
 under a pane `search()` had hidden — a real defect, fixed (ADR-105). The whole suite on the 0.3.2
-build, `npm test -- trance --headless`, reports **916 passed, 0 failed, 11 TODO**. See ADR-036.*
+build, `npm test -- trance --headless`, reports **916 passed, 0 failed, 11 TODO**; on the 0.3.3
+build it reports **941 passed, 0 failed, 12 TODO**. See ADR-036.*
 
 ---
 
