@@ -11,7 +11,7 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
  #include "mozilla/WritingModes.h"
  #include "mozilla/dom/Document.h"
  #include "mozilla/layers/CompositorBridgeChild.h"
-@@ -1333,6 +1335,327 @@ mozilla::VibrancyManager& nsCocoaWindow::EnsureVibrancyManager() {
+@@ -1333,6 +1335,330 @@ mozilla::VibrancyManager& nsCocoaWindow::EnsureVibrancyManager() {
  }
  @end
  
@@ -161,9 +161,7 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
 +    return;
 +  }
 +  if ([aLayer isKindOfClass:sBackdropClass]) {
-+    NSArray* filters = aLayer.filters;
-+    bool changed = false;
-+    for (id filter in filters) {
++    for (id filter in aLayer.filters) {
 +      if (![filter isKindOfClass:sFilterClass] ||
 +          ![[filter valueForKey:@"name"] isEqual:@"gaussianBlur"]) {
 +        continue;
@@ -176,15 +174,20 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
 +        *aOriginal = [current retain];
 +      }
 +      NSNumber* wanted = aRadius >= 0 ? @(aRadius) : *aOriginal;
-+      if (![current isEqualToNumber:wanted]) {
-+        [filter setValue:wanted forKey:@"inputRadius"];
-+        changed = true;
++      if ([current isEqualToNumber:wanted]) {
++        continue;
 +      }
-+    }
-+    if (changed) {
-+      // Filters are copied into the render tree on assignment, so the edited
-+      // array has to be handed back for the change to reach the screen.
-+      aLayer.filters = filters;
++      // Through the layer's key path, never on the filter object (ADR-109).
++      // A filter already attached to a layer takes `setValue:forKey:` into
++      // the model only: reading it back says the new radius while the window
++      // server, which renders a behind-window backdrop, keeps the old one —
++      // and handing the same array back to `filters` is not a change either.
++      // The key path is Core Animation's own route for a named filter's
++      // input, and marks the layer for the next commit.
++      [CATransaction begin];
++      [CATransaction setDisableActions:YES];
++      [aLayer setValue:wanted forKeyPath:@"filters.gaussianBlur.inputRadius"];
++      [CATransaction commit];
 +    }
 +    return;
 +  }
@@ -339,7 +342,7 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
  void nsCocoaWindow::UpdateWindowDraggingRegion(
      const LayoutDeviceIntRegion& aRegion) {
    // mChildView returns YES from mouseDownCanMoveWindow, so we need to put
-@@ -3878,7 +4201,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
+@@ -3878,7 +4204,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  // NSDraggingDestination
  - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
    MOZ_LOG(sCocoaLog, LogLevel::Info, ("ChildView draggingUpdated: entered\n"));
@@ -350,7 +353,7 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
  }
  
  // NSDraggingDestination
-@@ -3894,6 +4219,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
+@@ -3894,6 +4222,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
  - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender {
    nsAutoRetainCocoaObject kungFuDeathGrip(self);
    BOOL handled = [self doDragAction:eDrop sender:sender] != NSDragOperationNone;
@@ -360,7 +363,7 @@ index 1af56a5e2f7bb912f352e417b01a8c4e25f97b30..ef789acad9908bb58eff4b42c94a8ed7
    NS_IF_RELEASE(mDragService);
    return handled;
  }
-@@ -4939,6 +5267,10 @@ void nsCocoaWindow::DestroyNativeWindow() {
+@@ -4939,6 +5270,10 @@ void nsCocoaWindow::DestroyNativeWindow() {
  nsCocoaWindow::~nsCocoaWindow() {
    NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
  
