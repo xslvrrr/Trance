@@ -53,6 +53,19 @@ class ZenStartup {
 
       // overlap and interaction issues with vertical tabs
       document.getElementById("browser").prepend(deckTemplate);
+      // >>> TRANCE: the window-wide notification bar, out of the sidebar.
+      // browser.js puts `gNotificationBox`'s stack in `#notifications-toolbar`,
+      // inside `#navigator-toolbox`. That toolbox is a stacking context at
+      // `--browser-area-z-index-toolbox` (2) and the content wrapper beside it
+      // is a flex item at z-index 3 outside the single-toolbar layout, so the
+      // stack's `position: fixed; z-index: 9999` could not climb out of it
+      // and every global bar (update notices included) painted under the
+      // page. `#browser` holds both, so from there 9999 is above them — the
+      // same move as the tab deck above. The stack is created here, empty, so
+      // it is in place before anything can be shown in it.
+      // Refs: TRANCE.md §13 Phase 12; ADR-108
+      document.getElementById("browser").append(gNotificationBox.stack);
+      // <<< TRANCE
 
       gZenWorkspaces.init().then(() => {
         gZenUIManager.init();

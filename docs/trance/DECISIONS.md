@@ -4863,3 +4863,46 @@ again.
   surfer applies it on top of. 0.3.1's copy had been cut against bare `HEAD` and carried both
   external changes inside it, so a fresh `import` failed on it. Its hunks no longer collide with
   either external patch, and `ORDER_RULES` loses its `nsCocoaWindow.mm` entry.
+
+---
+
+## ADR-108 — The window-wide notification bar lives in `#browser`, above the page
+
+**Date:** 2026-09-29
+**Status:** Accepted
+**Amends:** ADR-098, ADR-104
+
+**Context:**
+
+The update bar (ADR-098, ADR-104) was drawn under the page, so neither its old **Download** link nor
+0.3.2's install buttons could be clicked. It is shown through `gNotificationBox`, and browser.js puts
+that box's stack in `#notifications-toolbar`, inside `#navigator-toolbox`. Zen styles the stack
+`position: fixed; z-index: 9999` in the bottom corner of the window, but `z-index` cannot leave the
+stacking context it is in: the toolbox is one at `--browser-area-z-index-toolbox` (2), and outside
+the single-toolbar layout `#zen-appcontent-wrapper` is a flex item at z-index 3. Hit-tested in the
+0.3.2 build, the point at the centre of the bar was the page's `<browser>`. Every global bar had
+the same problem, not only Trance's.
+
+**Decision:**
+
+Zen's startup already moves the tab notification deck into `#browser` for "overlap and interaction
+issues with vertical tabs". Touchpoint 19 now does the same for the global stack, beside it:
+`gNotificationBox.stack` is created there, empty, and appended to `#browser`, which holds both the
+toolbox and the content wrapper, so the stack's 9999 is compared with their 2 and 3.
+
+The alternatives were worse. Lowering the toolbox to `z-index: auto` would change what the sidebar
+paints over in the single-toolbar layout, where it sits above the content wrapper (1) on purpose. Replacing the
+box's private insert function from Trance code would be the after-the-fact patching TRANCE.md §3.7
+rules out.
+
+**Consequences:**
+
+- Checked in the dev build, in the multi-toolbar, single-toolbar and compact layouts: the stack's
+  parent is `#browser` and the bar's own buttons are the topmost element at their centres.
+- The stack is created at startup rather than with the first notification: one empty, fixed,
+  zero-size `vbox`.
+- It no longer inherits from `#notifications-toolbar`. The only declarations that reached it from
+  there were `browser.nova.enabled` margins, which Zen's own bar style does not use.
+- `browser_trance_chrome.js` gains `test_the_update_bar_paints_above_the_page`, which shows the real
+  update bar through the checker's injected release list and hit-tests its buttons. It fails on the
+  0.3.2 code (the hit is `browser`) and passes with the move.

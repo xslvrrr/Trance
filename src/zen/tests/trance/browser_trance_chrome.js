@@ -518,3 +518,63 @@ add_task(
     await settle();
   }
 );
+
+add_task(async function test_the_update_bar_paints_above_the_page() {
+  // The regression: `gNotificationBox`'s stack lived in `#notifications-toolbar`,
+  // inside the sidebar's `#navigator-toolbox` stacking context (z-index 2),
+  // while the content wrapper beside it sits at 3. Its `z-index: 9999` could
+  // not leave the toolbox, so the update bar was drawn under the page and no
+  // click reached it (ADR-108). Shown through the checker's injected release
+  // list, which is the real path to the bar with no network.
+  const { TranceUpdateChecker } = ChromeUtils.importESModule(
+    "chrome://browser/content/trance-components/TranceUpdateChecker.mjs"
+  );
+  const result = await TranceUpdateChecker.check({
+    force: true,
+    currentVersion: "0.0.1",
+    fetchReleases: [
+      {
+        tag_name: "999.0.0",
+        prerelease: false,
+        draft: false,
+        html_url: "https://example.com/release",
+        assets: [],
+      },
+    ],
+  });
+  is(result.status, "available", "the injected release is newer");
+
+  const bar = gNotificationBox.getNotificationWithValue(
+    "trance-update-available"
+  );
+  ok(bar, "the update bar is shown");
+  if (!bar) {
+    return;
+  }
+  try {
+    await TestUtils.waitForCondition(
+      () => bar.getBoundingClientRect().height > 0,
+      "the bar has laid out"
+    );
+    const buttons = [
+      ...(bar.shadowRoot?.querySelectorAll("button") ?? []),
+      ...bar.querySelectorAll("button"),
+    ];
+    ok(buttons.length, "the bar has buttons");
+    for (const button of buttons) {
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      );
+      ok(
+        hit === button || bar.contains(hit) || hit?.getRootNode()?.host === bar,
+        `"${button.label || button.textContent.trim()}" is the topmost thing ` +
+          `under its own centre (${hit?.localName}#${hit?.id})`
+      );
+    }
+  } finally {
+    gNotificationBox.removeNotification(bar, true);
+    Services.prefs.clearUserPref("trance.updates.last-check");
+  }
+});
