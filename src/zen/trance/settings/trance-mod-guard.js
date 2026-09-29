@@ -356,6 +356,116 @@ const TRANCE_REPLACED_MODS = [
   },
 ];
 
+/* Sine-store mods Trance never absorbed and still collides with, named exactly.
+ *
+ * The keyword classifier below is right about most of the store and wrong
+ * about a known few, both ways, and those few are the mods people actually
+ * install. A whole-browser theme usually describes itself as "a theme" and
+ * nothing more, so it matched no keyword while restyling every element Trance
+ * owns; a mod that syncs the desktop wallpaper *with* a workspace matched
+ * "workspace" and was warned about as a tab-strip mod. This table is checked
+ * after the one above and before the classifier, and it is not mirrored in
+ * mods-inventory.json: nothing here is a mod Trance investigated in order to
+ * replace it, only one it was checked against. Checked against the Sine
+ * marketplace on 2026-09-29 (ADR-110).
+ */
+const TRANCE_WHOLE_THEME_DETAIL =
+  "A whole-browser theme restyles the sidebar, the toolbars, the menus and " +
+  "the surface behind them — every element Trance already owns, from the " +
+  "same selectors. Running one on top of Trance gives each of those two " +
+  "owners, and which one wins changes element by element with load order. " +
+  "Turn Trance off in its settings if this theme is the look you want.";
+
+const TRANCE_CLASHING_MODS = [
+  ...[
+    ["natsumi-browser", "Natsumi Browser"],
+    ["Arc-2.0", "Arc 2.0"],
+    ["Neo-Zen", "Neo Zen"],
+    ["wireframe-2.0", "Wireframe 2.0"],
+    ["macaron", "macaron"],
+    ["livstheme", "Livs Theme"],
+    ["zaps-cool-photon-theme", "zap's cool photon theme"],
+    ["paneru", "Paneru"],
+  ].map(([key, name]) => ({
+    keys: [key],
+    names: [name],
+    status: "clash",
+    owner: "Trance surfaces, tab strip and chrome",
+    pref: "trance.enabled",
+    detail: TRANCE_WHOLE_THEME_DETAIL,
+  })),
+  {
+    keys: ["zen-page-tint"],
+    names: ["Zen Page Tint"],
+    status: "clash",
+    owner: "Trance theming",
+    pref: "trance.theme.enabled",
+    detail:
+      "The colour of the chrome is the space's theme, and Trance owns it: " +
+      "the gradient, its lightness and the tint the surface carries over it. " +
+      "This mod recolours the same chrome from the page on every tab switch, " +
+      "so the theme and the page take turns being the colour.",
+  },
+  {
+    keys: ["blended-addressbar"],
+    names: ["Blended Addressbar"],
+    status: "clash",
+    owner: "Trance chrome",
+    pref: "trance.chrome.enabled",
+    detail:
+      "Trance owns the address bar's look, its expanded state and the page " +
+      "recede behind it. This mod repaints the same bar from the page, so " +
+      "the bar has two owners and each overrides the other's colours.",
+  },
+  {
+    keys: ["No-Gaps"],
+    names: ["No-Gaps"],
+    status: "clash",
+    owner: "Trance surfaces",
+    pref: "trance.surface.edgeless",
+    detail:
+      "Trance's edgeless surface already decides the edge of the page: on, " +
+      "the web view runs to the window's edge as part of the one frosted " +
+      "surface; off, it keeps its own card. This mod sets the same margins " +
+      "from its own rules, so the setting stops answering for them.",
+  },
+  {
+    keys: ["square-ui"],
+    names: ["Square UI"],
+    status: "clash",
+    owner: "Trance chrome",
+    pref: "trance.chrome.enabled",
+    detail:
+      "Trance draws the corners of its chrome and of the web view from one " +
+      "set of radius tokens. This mod squares the same corners element by " +
+      "element, so the ones it reaches and the ones it does not stop " +
+      "agreeing.",
+  },
+];
+
+/* Store mods the keyword classifier flags and should not: each mentions a
+ * word from an area Trance owns, and none touches an element Trance owns.
+ * A warning on one of these trains people to ignore the rest (ADR-110).
+ * The display name is there for the installed list, which has no id. */
+const TRANCE_QUIET_MODS = [
+  // Sets the *desktop* wallpaper through Firefox's gSetBackground, per
+  // workspace; "workspace" is the match.
+  ["zen-auto-wallpaper", "Zen Auto Wallpaper"],
+  // A toolbar button for a site's colour scheme; "workspace" again.
+  ["zen-site-appearance-toggle", "Zen Site Appearance Toggle"],
+  // Rewrites pinned tabs' *titles*; "pinned" is the match.
+  ["zen-tidy-pinned-tabs", "Tidy Pinned Tabs"],
+  // A note widget that lives in the sidebar; "sidebar" is the match.
+  ["zen-notes", "Zen Notes"],
+  // A toast on workspace switch, over the page; "sidebar" is the match.
+  ["zen-workspace-toast", "Workspace Toast"],
+  // The preferences page's own sidebar; "sidebar" is the match.
+  ["compact-settings", "Compact Settings"],
+];
+
+/** What `_lookup` answers for a mod in TRANCE_QUIET_MODS: no banner. */
+const TRANCE_QUIET = Object.freeze({ status: "quiet" });
+
 /* ── Everything that is not in the table above ───────────────────────────────
  *
  * The table names 23 mods exactly, and that was the whole of this feature: a mod
@@ -443,6 +553,7 @@ const TRANCE_CLASH_AREAS = [
       "urlbar",
       "url bar",
       "address bar",
+      "addressbar",
       "toolbar",
       "context menu",
       "menu",
@@ -558,13 +669,16 @@ var gTranceModGuard = {
     }
     this.__hasInitialized = true;
 
-    for (const entry of TRANCE_REPLACED_MODS) {
+    for (const entry of [...TRANCE_REPLACED_MODS, ...TRANCE_CLASHING_MODS]) {
       for (const key of entry.keys) {
         this._index.set(this._normalize(key), entry);
       }
       for (const name of entry.names) {
         this._index.set(this._normalize(name), entry);
       }
+    }
+    for (const identity of TRANCE_QUIET_MODS.flat()) {
+      this._index.set(this._normalize(identity), TRANCE_QUIET);
     }
 
     // trance-settings.js already owns a scheduler and an observer hub for this
@@ -739,7 +853,7 @@ var gTranceModGuard = {
     // would be a worse answer to a question this file already knows.
     const entry =
       this._lookup(identity) ?? this._classify(this._cardText(item));
-    if (!entry) {
+    if (!entry || entry === TRANCE_QUIET) {
       return;
     }
 
