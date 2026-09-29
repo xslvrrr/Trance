@@ -104,18 +104,22 @@ const PREF_ZEN_CUSTOM_COLORS = "zen.theme.gradient.show-custom-colors";
 const ANGLE_STEP = 15;
 
 /**
- * The blur knob's ceiling, pixels, and usable arc around its full ring.
+ * The blur knob's ceiling and detent, pixels.
  *
- * The small gap keeps the two ends distinct. It is centred at the top, where
- * zero sits just clockwise of up and the maximum sits just counter-clockwise.
+ * The knob works the way Zen's grain knob beside it does: the whole ring is
+ * the range, zero is straight up, the value grows clockwise in detents, and
+ * turning past the last detent comes back round to zero. So there is no dead
+ * arc anywhere on it (ADR-109, replacing ADR-089's gap at the top). With a
+ * detent every two pixels, 0 to 60 is 31 positions, spaced evenly round the
+ * full circle — the last one, 60, sits one detent short of the top.
  */
 const MAX_BLUR = 60;
-const BLUR_GAP = 10;
-const BLUR_SWEEP = 360 - BLUR_GAP;
-const BLUR_START = BLUR_GAP / 2;
 
-/** Pixels per press of an arrow key on the blur knob, and per haptic tick. */
+/** Pixels per detent, per press of an arrow key, and per haptic tick. */
 const BLUR_STEP = 2;
+
+/** How many detents the ring has, zero included. */
+const BLUR_DETENTS = MAX_BLUR / BLUR_STEP + 1;
 
 /** The blur knob's tooltip, in each of the two states it has. */
 const BLUR_TITLE = "Frost blur — drag to turn, or use the arrow keys";
@@ -1142,20 +1146,17 @@ export class TranceTheme extends TranceFeature {
   /**
    * Puts a handle on the ring at a bearing.
    *
-   * @param {Element} knob
+   * Only the bearing is written; trance-theme.css turns it into a position on
+   * the ring as a fraction of the knob. This used to measure the knob and
+   * place the handle in pixels, and a knob measured before the panel had ever
+   * been laid out — the blur knob, on every browser start, until something
+   * else moved it — measured 0 wide, so its handle stayed in the corner.
+   *
    * @param {Element} handle
    * @param {number} degrees Clockwise from "up".
    */
-  #placeHandle(knob, handle, degrees) {
-    const size =
-      this.context.window.windowUtils.getBoundsWithoutFlushing(knob).width;
-    if (!size) {
-      return;
-    }
-    const radians = ((degrees - 90) * Math.PI) / 180;
-    handle.style.transform = `rotate(${degrees}deg)`;
-    handle.style.left = `${size / 2 + Math.cos(radians) * (size / 2) - 3}px`;
-    handle.style.top = `${size / 2 + Math.sin(radians) * (size / 2) - 6}px`;
+  #placeHandle(handle, degrees) {
+    handle.style.setProperty("--trance-knob-bearing", `${degrees}deg`);
   }
 
   #onAngleKey(event) {
@@ -1199,21 +1200,15 @@ export class TranceTheme extends TranceFeature {
   }
 
   /**
-   * Maps the full-ring bearing to the blur knob's bounded value.
-   *
-   * The top-centred gap separates the two ends. Bearings within it snap to
-   * the nearer end, so the knob never wraps from maximum back to zero.
+   * Maps a bearing on the ring to the blur knob's value, the way Zen's grain
+   * knob maps it: clockwise from the top, snapped to the nearest detent, and
+   * the detent that would land back on the top is zero again.
    *
    * @param {number} degrees Bearing, clockwise from "up".
    */
   #setBlurFromBearing(degrees) {
-    const theta = (((degrees - BLUR_START) % 360) + 360) % 360;
-    let clampedTheta = theta;
-    if (theta > BLUR_SWEEP) {
-      // Inside the gap: whichever end is nearer.
-      clampedTheta = theta - BLUR_SWEEP < 360 - theta ? BLUR_SWEEP : 0;
-    }
-    this.#setBlur((clampedTheta / BLUR_SWEEP) * MAX_BLUR);
+    const turn = ((((degrees % 360) + 360) % 360) / 360) * BLUR_DETENTS;
+    this.#setBlur((Math.round(turn) % BLUR_DETENTS) * BLUR_STEP);
   }
 
   /**
@@ -1783,7 +1778,7 @@ export class TranceTheme extends TranceFeature {
       knob.setAttribute("aria-valuenow", String(angle));
       knob.setAttribute("aria-valuetext", `${angle} degrees`);
       this.#nodes.knobValue.textContent = `${angle}°`;
-      this.#placeHandle(knob, this.#nodes.knobHandle, angle);
+      this.#placeHandle(this.#nodes.knobHandle, angle);
     }
 
     const heart = this.#nodes.heart;
@@ -1834,9 +1829,8 @@ export class TranceTheme extends TranceFeature {
     knob.title = live ? BLUR_TITLE : BLUR_TITLE_INERT;
     this.#nodes.blurKnobValue.textContent = `${pixels}px`;
     this.#placeHandle(
-      knob,
       this.#nodes.blurKnobHandle,
-      BLUR_START + (pixels / MAX_BLUR) * BLUR_SWEEP
+      (pixels / BLUR_STEP / BLUR_DETENTS) * 360
     );
   }
 

@@ -54,6 +54,11 @@ function panel() {
  * parsed, and none of its controls exist, until this panel first opens. The
  * file was written before that and assumed a feature built at startup, so
  * every task after the first failed on a missing node.
+ *
+ * Through `PanelMultiView.openPopup`, the way Zen opens it. A bare
+ * `openPopup` shows the panel without PanelMultiView building its view, and
+ * the view it shows is 0px wide — every knob in it measures 0 across, so a
+ * test pressing at a bearing on the ring was pressing on its centre line.
  */
 async function openPanel() {
   const el = panel();
@@ -61,7 +66,7 @@ async function openPanel() {
     return;
   }
   const shown = BrowserTestUtils.waitForEvent(el, "popupshown");
-  el.openPopup(gNavToolbox, "after_start");
+  PanelMultiView.openPopup(el, gNavToolbox, { position: "after_start" });
   await shown;
 }
 
@@ -316,24 +321,47 @@ add_task(async function test_the_blur_knob_can_actually_be_moved() {
   is(knob.textContent, `${after}px`, "and the readout follows it");
 
   // A drag is the other input, and it is the one the report was about. The
-  // ADR-089 leaves a 10° dead zone centred at the top. The usable arc is
-  // centred on the bottom, so a straight-down press writes the midpoint.
+  // knob reads the whole ring the way Zen's grain knob does (ADR-109): zero at
+  // the top, clockwise in 2px detents, and past the last detent back to zero,
+  // with no dead arc anywhere on it.
   await openPanel();
   const rect = knob.getBoundingClientRect();
+  const pressAt = degrees => {
+    const radians = (degrees * Math.PI) / 180;
+    knob.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        clientX: rect.left + rect.width / 2 + Math.sin(radians) * rect.width,
+        clientY: rect.top + rect.height / 2 - Math.cos(radians) * rect.height,
+      })
+    );
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    return Services.prefs.getIntPref("trance.surface.blur.radius");
+  };
   Services.prefs.setIntPref("trance.surface.blur.radius", 4);
-  knob.dispatchEvent(
-    new MouseEvent("mousedown", {
-      bubbles: true,
-      button: 0,
-      clientX: rect.left + rect.width / 2,
-      clientY: rect.bottom,
-    })
-  );
-  document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  is(
-    Services.prefs.getIntPref("trance.surface.blur.radius"),
-    30,
-    "pressing at the bottom of the arc writes the middle of the range"
+  is(pressAt(90), 16, "a quarter turn is a quarter of the 31 detents");
+  is(pressAt(180), 32, "half a turn is half of them");
+  is(pressAt(-15), 60, "the last detent before the top is the maximum");
+  is(pressAt(-3), 0, "and just short of the top comes round to zero");
+  is(pressAt(3), 0, "as does just past it");
+
+  // The handle is placed by bearing alone, so it is on the ring whether or
+  // not the knob had a size when it was last synced.
+  Services.prefs.setIntPref("trance.surface.blur.radius", 30);
+  const handle = knob.querySelector(".trance-theme-knob-handle");
+  const box = handle.getBoundingClientRect();
+  const centre = [box.left + box.width / 2, box.top + box.height / 2];
+  const expected = (15 / 31) * 2 * Math.PI;
+  Assert.less(
+    Math.hypot(
+      centre[0] -
+        (rect.left + rect.width / 2 + Math.sin(expected) * (rect.width / 2)),
+      centre[1] -
+        (rect.top + rect.height / 2 - Math.cos(expected) * (rect.height / 2))
+    ),
+    1.5,
+    "the handle sits on the ring at 30px's bearing"
   );
   await closePanel();
 
