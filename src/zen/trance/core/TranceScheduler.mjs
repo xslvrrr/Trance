@@ -11,7 +11,7 @@
 // pins the browser at display refresh rate forever.
 //
 // So: one rAF loop per window, started only while something is subscribed,
-// suspended the moment the window is blurred, minimised or fully occluded; and
+// suspended the moment the window is inactive, minimised or fully occluded; and
 // wall-clock work armed to the next boundary rather than polled.
 //
 // Refs: TRANCE.md §3.4, §3.6, §6.3, §12.1, §12.3
@@ -60,6 +60,23 @@ export class TranceScheduler {
   #isChromeWindow = false;
 
   /**
+   * Whether the operating system has this window as its active window.
+   *
+   * Tracked from `activate` and `deactivate` rather than read from
+   * `document.hasFocus()` on `focus` and `blur`, which is what this used to do
+   * and which stopped the frame loop for good whenever a browser-native page
+   * was selected (ADR-112). `about:preferences`, `about:addons` and the rest
+   * load in the parent process, in a window of their own inside this one, so
+   * focusing one fires `blur` at this window while focus is between the two —
+   * `hasFocus()` answers false at that instant — and the `focus` that ends the
+   * move is fired at the page's window, not this one. The loop stayed
+   * suspended in a window the user was typing into until something outside
+   * the browser moved focus again. Activation is what "the window is in the
+   * background" means, and moving focus inside the window never changes it.
+   */
+  #active = false;
+
+  /**
    * @param {Window} win - The browser window this scheduler belongs to.
    */
   constructor(win) {
@@ -69,13 +86,15 @@ export class TranceScheduler {
 
     this.#isChromeWindow = win.STATE_MINIMIZED !== undefined;
 
-    win.addEventListener("focus", this.#boundVisibility);
-    win.addEventListener("blur", this.#boundVisibility);
-    win.addEventListener("occlusionstatechange", this.#boundVisibility);
-    win.addEventListener("sizemodechange", this.#boundVisibility);
-    if (!this.#isChromeWindow) {
+    if (this.#isChromeWindow) {
+      this.#active = Services.focus.activeWindow === win;
+      win.addEventListener("activate", this.#boundVisibility);
+      win.addEventListener("deactivate", this.#boundVisibility);
+    } else {
       win.document.addEventListener("visibilitychange", this.#boundVisibility);
     }
+    win.addEventListener("occlusionstatechange", this.#boundVisibility);
+    win.addEventListener("sizemodechange", this.#boundVisibility);
 
     this.#suspended = !this.#isVisible();
   }
@@ -166,7 +185,7 @@ export class TranceScheduler {
 
   // --- State -----------------------------------------------------------------
 
-  /** True while the window is blurred, minimised or fully occluded. */
+  /** True while the window is inactive, minimised or fully occluded. */
   get suspended() {
     return this.#suspended;
   }
@@ -188,16 +207,17 @@ export class TranceScheduler {
   destroy() {
     this.#destroyed = true;
     const win = this.#window;
-    win.removeEventListener("focus", this.#boundVisibility);
-    win.removeEventListener("blur", this.#boundVisibility);
-    win.removeEventListener("occlusionstatechange", this.#boundVisibility);
-    win.removeEventListener("sizemodechange", this.#boundVisibility);
-    if (!this.#isChromeWindow) {
+    if (this.#isChromeWindow) {
+      win.removeEventListener("activate", this.#boundVisibility);
+      win.removeEventListener("deactivate", this.#boundVisibility);
+    } else {
       win.document.removeEventListener(
         "visibilitychange",
         this.#boundVisibility
       );
     }
+    win.removeEventListener("occlusionstatechange", this.#boundVisibility);
+    win.removeEventListener("sizemodechange", this.#boundVisibility);
 
     if (this.#rafId) {
       win.cancelAnimationFrame(this.#rafId);
@@ -230,13 +250,25 @@ export class TranceScheduler {
     if (win.windowState === win.STATE_MINIMIZED) {
       return false;
     }
-    // An unfocused window is still visible, but nothing Trance animates is
+    // An inactive window is still visible, but nothing Trance animates is
     // worth a frame in it. Features that genuinely need to keep painting while
-    // unfocused should not be using the frame loop in the first place.
-    return win.document.hasFocus();
+    // inactive should not be using the frame loop in the first place.
+    return this.#active;
   }
 
-  #onVisibilityChanged() {
+  /**
+   * @param {Event} [event]
+   */
+  #onVisibilityChanged(event) {
+    // Only an `activate` or `deactivate` aimed at this window: both bubble, so
+    // one fired at a window inside it would otherwise arrive here too.
+    if (event?.target === this.#window) {
+      if (event.type === "activate") {
+        this.#active = true;
+      } else if (event.type === "deactivate") {
+        this.#active = false;
+      }
+    }
     const suspended = !this.#isVisible();
     if (suspended === this.#suspended) {
       return;

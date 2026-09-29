@@ -211,6 +211,41 @@ add_task(async function test_scheduler_suspends_when_occluded() {
 });
 
 add_task(
+  async function test_scheduler_keeps_running_when_a_page_in_this_process_takes_focus() {
+    // ADR-112. about:preferences, about:addons and the other browser-native
+    // pages load in the parent process, in a window inside this one. Focusing
+    // one fires `blur` at this window while focus is between the two, and the
+    // `focus` that ends the move goes to the page's window. The scheduler used to
+    // decide on `blur` from `document.hasFocus()`, caught it false, and stayed
+    // suspended in a window the user was typing into: every frame subscriber
+    // stopped, including the one that hides the empty-tab mark, which is how it
+    // was reported — the mark left behind a page restored with Cmd+Shift+T.
+    const { scheduler } = window.gTrance.context;
+    let ticks = 0;
+    const handle = scheduler.onFrame(() => ticks++);
+    registerCleanupFunction(() => scheduler.cancel(handle));
+
+    await BrowserTestUtils.withNewTab("about:preferences", async browser => {
+      ok(!browser.isRemoteBrowser, "the page is in this process");
+      browser.contentWindow.focus();
+      await TestUtils.waitForCondition(
+        () => Services.focus.focusedWindow === browser.contentWindow,
+        "focus moves into the page's own window"
+      );
+      await nextFrames();
+      ok(!scheduler.suspended, "and the scheduler is still running");
+      const before = ticks;
+      await nextFrames();
+      Assert.greater(
+        ticks,
+        before,
+        "so its frame subscribers are still called"
+      );
+    });
+  }
+);
+
+add_task(
   async function test_workspace_cross_fade_is_a_waapi_opacity_animation() {
     // ADR-038. The space switch used to animate `--zen-background-opacity`, which
     // Gecko cannot run on the compositor, and which Motion cannot run on WAAPI at
