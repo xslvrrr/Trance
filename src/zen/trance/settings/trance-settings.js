@@ -71,6 +71,7 @@ Preferences.addAll([
   },
   { id: "trance.surface.newtab.logo.hover", type: "bool", default: true },
   { id: "trance.surface.newtab.logo.tilt", type: "bool", default: true },
+  { id: "trance.surface.newtab.logo.glow", type: "bool", default: true },
   { id: "trance.surface.internal-pages", type: "bool", default: true },
   { id: "trance.surface.internal.opacity", type: "int", default: 20 },
   { id: "trance.surface.internal.blur", type: "bool", default: true },

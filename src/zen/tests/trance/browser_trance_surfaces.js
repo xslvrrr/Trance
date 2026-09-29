@@ -359,6 +359,71 @@ add_task(async function test_the_empty_tab_mark_follows_the_selected_tab() {
   await SpecialPowers.popPrefEnv();
 });
 
+add_task(async function test_the_mark_leaves_when_a_native_page_arrives() {
+  // The report: from an empty window, Cmd+Shift+T brought back
+  // about:preferences and the mark stayed behind it. A browser-native page is
+  // in this process and takes focus into a window of its own, which is what
+  // stopped the frame loop the mark's navigation sync runs on (ADR-112). So
+  // the page is loaded into the empty tab and focused, the way a restore does.
+  const root = document.documentElement;
+  await BrowserTestUtils.withNewTab("about:blank", async browser => {
+    is(root.getAttribute("trance-surface-newtab"), "true", "the tab is empty");
+    const loaded = BrowserTestUtils.browserLoaded(
+      browser,
+      false,
+      "about:preferences"
+    );
+    BrowserTestUtils.startLoadingURIString(browser, "about:preferences");
+    await loaded;
+    browser.contentWindow.focus();
+    await TestUtils.waitForCondition(
+      () => !root.hasAttribute("trance-surface-newtab"),
+      "the mark goes once the page is there, with focus inside it"
+    );
+  });
+});
+
+add_task(async function test_the_mark_glows_with_a_blurred_copy_of_itself() {
+  // ADR-111. The glow is a second copy behind the mark: the sheen in the
+  // mark's shape when holographic is on, blurred on the box around it because
+  // `filter` runs before `mask`. Off, no rule matches and nothing is drawn.
+  const root = document.documentElement;
+  await BrowserTestUtils.withNewTab("about:blank", async () => {
+    const glow = document.querySelector(
+      "#trance-newtab-logo > .trance-newtab-logo-glow"
+    );
+    ok(glow, "the mark carries its glow");
+    is(
+      root.getAttribute("trance-surface-newtab-glow"),
+      "true",
+      "on by default"
+    );
+    const style = getComputedStyle(glow);
+    is(style.filter, "blur(24px)", "the copy is blurred");
+    is(style.zIndex, "-1", "and sits behind the mark");
+    const copy = getComputedStyle(glow, "::before");
+    ok(
+      copy.maskImage.includes("url("),
+      "with holographic on, the copy is the sheen cut to the mark's shape"
+    );
+    Assert.greater(
+      copy.backgroundImage.split("gradient(").length,
+      2,
+      "and painted with the sheen's own two layers"
+    );
+
+    await SpecialPowers.pushPrefEnv({
+      set: [["trance.surface.newtab.logo.glow", false]],
+    });
+    ok(
+      !root.hasAttribute("trance-surface-newtab-glow"),
+      "the switch clears it"
+    );
+    is(getComputedStyle(glow).filter, "none", "and nothing is blurred");
+    await SpecialPowers.popPrefEnv();
+  });
+});
+
 add_task(
   async function test_the_mark_reacts_to_the_pointer_and_stops_when_it_should() {
     const root = document.documentElement;

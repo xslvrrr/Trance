@@ -55,6 +55,7 @@ const PREF_NEWTAB_LOGO = "trance.surface.newtab.logo";
 const PREF_NEWTAB_HOLOGRAPHIC = "trance.surface.newtab.logo.holographic";
 const PREF_NEWTAB_HOVER = "trance.surface.newtab.logo.hover";
 const PREF_NEWTAB_TILT = "trance.surface.newtab.logo.tilt";
+const PREF_NEWTAB_GLOW = "trance.surface.newtab.logo.glow";
 const PREF_INTERNAL = "trance.surface.internal-pages";
 const PREF_INTERNAL_OPACITY = "trance.surface.internal.opacity";
 const PREF_INTERNAL_BLUR = "trance.surface.internal.blur";
@@ -84,9 +85,17 @@ const ATTR_INTERNAL_PAGE = "trance-internal-page";
 const ATTR_NEWTAB = "trance-surface-newtab";
 const ATTR_NEWTAB_HOLOGRAPHIC = "trance-surface-newtab-holographic";
 const ATTR_NEWTAB_TILT = "trance-surface-newtab-tilt";
+const ATTR_NEWTAB_GLOW = "trance-surface-newtab-glow";
 
 /** The chrome element the empty-tab mark is painted into. */
 const NEWTAB_LOGO_ID = "trance-newtab-logo";
+
+/**
+ * The mark's glow: a second copy of it, blurred, behind the first (ADR-111).
+ * A child of the mark rather than a third pseudo-element, which it cannot
+ * have, and rather than a sibling, so it tilts with the mark it lights.
+ */
+const NEWTAB_GLOW_CLASS = "trance-newtab-logo-glow";
 
 /**
  * Where the pointer is inside the mark's box, as two numbers in −1..1.
@@ -266,6 +275,7 @@ export class TranceSurfaces extends TranceFeature {
       ATTR_NEWTAB,
       ATTR_NEWTAB_HOLOGRAPHIC,
       ATTR_NEWTAB_TILT,
+      ATTR_NEWTAB_GLOW,
     ]) {
       root.removeAttribute(attribute);
     }
@@ -425,6 +435,7 @@ export class TranceSurfaces extends TranceFeature {
       PREF_NEWTAB_HOLOGRAPHIC,
       PREF_NEWTAB_HOVER,
       PREF_NEWTAB_TILT,
+      PREF_NEWTAB_GLOW,
     ]) {
       const observer = { observe: () => this.#applyNewtabLogo() };
       Services.prefs.addObserver(pref, observer);
@@ -696,6 +707,7 @@ export class TranceSurfaces extends TranceFeature {
     for (const [pref, attribute] of [
       [PREF_NEWTAB_HOLOGRAPHIC, ATTR_NEWTAB_HOLOGRAPHIC],
       [PREF_NEWTAB_TILT, ATTR_NEWTAB_TILT],
+      [PREF_NEWTAB_GLOW, ATTR_NEWTAB_GLOW],
     ]) {
       if (Services.prefs.getBoolPref(pref, true)) {
         root.setAttribute(attribute, "true");
@@ -722,6 +734,9 @@ export class TranceSurfaces extends TranceFeature {
     const logo = doc.createElement("div");
     logo.id = NEWTAB_LOGO_ID;
     logo.setAttribute("aria-hidden", "true");
+    const glow = doc.createElement("div");
+    glow.className = NEWTAB_GLOW_CLASS;
+    logo.appendChild(glow);
     host.appendChild(logo);
     this.#newtabLogo = logo;
   }
@@ -1058,6 +1073,7 @@ export class TranceSurfaces extends TranceFeature {
     root.removeAttribute(ATTR_NEWTAB);
     root.removeAttribute(ATTR_NEWTAB_HOLOGRAPHIC);
     root.removeAttribute(ATTR_NEWTAB_TILT);
+    root.removeAttribute(ATTR_NEWTAB_GLOW);
     this.#cancelPointerFrame();
     this.#syncPressTracking(false);
     if (this.#pointerListening) {

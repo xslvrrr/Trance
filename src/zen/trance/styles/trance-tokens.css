@@ -475,6 +475,16 @@
    * pseudo-element now (see trance-surfaces.css) and this stands on its own. */
   --trance-newtab-logo-sheen-alpha: 0.7;
 
+  /* The glow behind the mark: a blurred copy of it (ADR-111). The radius is a
+   * tenth of the default mark, which spreads the light about a quarter of the
+   * mark beyond its edge. The strength is a fraction of whatever the glow is a
+   * copy of — the sheen's alpha, or the artwork's without the sheen — so the
+   * glow follows those settings and never outshines the thing that casts it.
+   * Fixed, like the tilt: they are the shape of one effect, and the switch is
+   * the setting. */
+  --trance-newtab-logo-glow-blur: 24px;
+  --trance-newtab-logo-glow-alpha: 0.8;
+
   /* The tab-close burst. Travel distance is computed from the closing tab's
    * measured size rather than declared here: a burst that ignores the size of
    * the thing that burst reads as unrelated to it.

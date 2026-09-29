@@ -241,11 +241,12 @@
  * URL and sets the attribute when the tab is empty, so a browser with the mark
  * switched off has neither — no element, no rule matching, nothing to composite.
  *
- * `contain: strict` rather than the default, because this box's size, position
- * and paint are all fixed by the tokens above it: nothing inside it can change
- * the layout around it, and telling the style system so is what keeps a
- * full-window absolutely-positioned element off the reflow path when a tab is
- * opened next to it.
+ * `contain: size layout style` rather than the default, because this box's
+ * size, position and layout are all fixed by the tokens above it: nothing
+ * inside it can change the layout around it, and telling the style system so
+ * is what keeps a full-window absolutely-positioned element off the reflow
+ * path when a tab is opened next to it. Not `strict`, which adds paint
+ * containment: the glow is a blur and has to spill past the box to be one.
  *
  * The mark is over the page rather than behind it, which is the honest way
  * round: the pages this appears on are transparent today, and would put the
@@ -267,7 +268,7 @@
   height: var(--trance-newtab-logo-size);
   transform: translate(-50%, -50%);
   pointer-events: none;
-  contain: strict;
+  contain: size layout style;
 
   /* The easing back to level, and the only motion this element has. It is a
    * `transition` rather than an animation, so at motion level 0 the duration
@@ -433,7 +434,11 @@
    * opposite direction, so it crosses the ramp rather than riding along with
    * it. */
   background-size: 300% 300%, 500% 500%;
-  background-position: center center, center center;
+  background-position: var(
+    --trance-newtab-logo-sheen-position,
+    center center,
+    center center
+  );
   /* `screen` between the two layers, so the band *adds* light to the ramp
    * instead of covering it — a white band drawn over an oil slick is a white
    * band, and the point is the colour it brightens. Layer blending is a
@@ -451,14 +456,17 @@
 
 /* The parallax, and the only part of the sheen that reads the pointer. */
 
-/* trance-specificity: the element's own ID plus four attributes — three feature
-   gates on the root and the pointer state on the element. The sheen can travel
-   independently of tilt, so a holographic mark remains reactive when rotation
-   is disabled. Nothing here is winning a fight; the rule above is Trance's own
-   and this is the same author overriding one property of it. */
-:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-holographic="true"]
-  #trance-newtab-logo[trance-newtab-logo-hover="true"]::after {
-  background-position:
+/* Where the sheen sits while the pointer is over the mark. A custom property
+ * rather than `background-position` on `::after`, so that the glow's copy of
+ * the sheen (below) reads the same position and the glow is the colour of the
+ * light on the mark at every moment of the slide.
+ *
+ * No feature gates of its own, like the held press below: it declares nothing
+ * that paints, and the two rules that read it — the sheen and the glow's copy
+ * of it — carry the holographic gate themselves. The sheen travels without the
+ * tilt, so a holographic mark stays reactive with rotation switched off. */
+#trance-newtab-logo[trance-newtab-logo-hover="true"] {
+  --trance-newtab-logo-sheen-position:
     calc(
         50% + var(--trance-newtab-logo-px, 0) *
           var(--trance-newtab-logo-parallax) * -1
@@ -473,6 +481,72 @@
     calc(
       50% + var(--trance-newtab-logo-py, 0) * var(--trance-newtab-logo-parallax) * -0.75
     );
+}
+
+/* ── The glow ──────────────────────────────────────────────────────────────
+ *
+ * A second copy of the mark behind it, blurred (ADR-111). It is the accurate
+ * glow for an iridescent mark where a `drop-shadow()` is not: a shadow is one
+ * colour, and the light an oil-slick sheen gives off is every colour on it, in
+ * the places they are. So the copy is the sheen itself, in the mark's shape,
+ * at the sheen's own position — or the artwork, with the sheen switched off.
+ *
+ * Two boxes because the order of operations says so: an element's `filter`
+ * runs before its `mask`, so a masked, blurred element is a blur cut back to
+ * the sharp shape it started from. The shape is masked on `::before` and the
+ * blur is on the box around it.
+ *
+ * `z-index: -1` inside the mark's own stacking context (its `transform` makes
+ * one) puts it behind the artwork and the sheen, and being a child of the mark
+ * means it leans with it. The blur is of one element drawn only while an empty
+ * tab is selected; WebRender keeps its result while nothing under it moves, so
+ * it is redrawn while the sheen slides under a pointer and at no other time. */
+
+/* trance-specificity: an ID, a class and three root gates, each one a
+   condition of the declaration: the mark is shown and the glow is on. */
+:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-glow="true"]
+  #trance-newtab-logo > .trance-newtab-logo-glow {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  filter: blur(var(--trance-newtab-logo-glow-blur));
+  opacity: calc(var(--trance-newtab-logo-glow-alpha) * var(--trance-newtab-logo-alpha));
+  pointer-events: none;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--trance-newtab-logo);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+  }
+}
+
+/* trance-specificity: the rule above plus the holographic gate, which is what
+   turns the copy from the artwork into the sheen. The layers, sizes and blend
+   are the sheen's own, and so is the position it reads. */
+:root[trance="true"][trance-surface-newtab="true"][trance-surface-newtab-glow="true"][trance-surface-newtab-holographic="true"]
+  #trance-newtab-logo > .trance-newtab-logo-glow {
+  opacity: calc(var(--trance-newtab-logo-glow-alpha) * var(--trance-newtab-logo-sheen-alpha));
+
+  &::before {
+    background-image: var(--trance-newtab-logo-streak),
+      var(--trance-newtab-logo-sheen);
+    background-size: 300% 300%, 500% 500%;
+    background-position: var(
+      --trance-newtab-logo-sheen-position,
+      center center,
+      center center
+    );
+    background-blend-mode: screen;
+    mask-image: var(--trance-newtab-logo);
+    mask-position: center;
+    mask-repeat: no-repeat;
+    mask-size: contain;
+    transition: background-position var(--trance-dur-base) var(--trance-ease-standard);
+  }
 }
 
 /* ── Edgeless ───────────────────────────────────────────────────────────────

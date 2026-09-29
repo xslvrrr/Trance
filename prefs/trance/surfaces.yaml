@@ -235,6 +235,16 @@
 - name: trance.surface.newtab.logo.tilt
   value: true
 
+# Glow: a second copy of the mark behind it, blurred. With holographic on the
+# copy is the iridescent sheen in the mark's shape, sliding with it, so the
+# glow is the colour of the light actually on the mark at that moment; with
+# holographic off it is the artwork. A blur of a copy rather than a
+# `drop-shadow()`, because a shadow is one colour and an iridescent mark's
+# glow is not. The blur is of one element that is drawn only while an empty
+# tab is selected, and is not redrawn while nothing on it moves (ADR-111).
+- name: trance.surface.newtab.logo.glow
+  value: true
+
 # === Mark: Page background — removed ===
 #
 # `trance.surface.region.content` and `trance.surface.content.opacity` are gone
